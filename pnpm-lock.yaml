@@ -58,10 +58,13 @@ importers:
         version: 4.1.1
       axios:
         specifier: ^1.7.9
-        version: 1.20.0
+        version: 1.20.0(debug@4.4.3)
       barcode-detector:
         specifier: ^3.2.1
         version: 3.2.2(@types/emscripten@1.41.5)
+      bcryptjs:
+        specifier: ^3.0.3
+        version: 3.0.3
       cropperjs:
         specifier: ^1.6.2
         version: 1.6.3
@@ -86,6 +89,9 @@ importers:
       html5-qrcode:
         specifier: ^2.3.8
         version: 2.3.8
+      jsonwebtoken:
+        specifier: ^9.0.3
+        version: 9.0.3
       lodash-es:
         specifier: ^4.17.21
         version: 4.18.1
@@ -98,6 +104,9 @@ importers:
       nprogress:
         specifier: ^0.2.0
         version: 0.2.0
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       pinia:
         specifier: ^2.3.0
         version: 2.3.1(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3))
@@ -9265,7 +9274,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.20.0:
+  axios@1.20.0(debug@4.4.3):
     dependencies:
       follow-redirects: 1.16.0(debug@4.4.3)
       form-data: 4.0.6
