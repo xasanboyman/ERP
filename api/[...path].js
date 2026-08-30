@@ -588,6 +588,272 @@ export default async function handler(req, res) {
       });
     }
 
+    // GET /api/sales/debtors
+    if (path === 'sales/debtors') {
+      const search = (req.query?.search || urlSearchParams.get('search') || '').toLowerCase().trim();
+      const statusFilter = req.query?.status || urlSearchParams.get('status');
+
+      const [debtSales, payments] = await Promise.all([
+        sql`SELECT * FROM sales WHERE payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0) ORDER BY created_at DESC`,
+        sql`SELECT * FROM debt_payments ORDER BY created_at DESC`
+      ]);
+
+      const debtorMap = {};
+
+      for (const s of debtSales) {
+        const name = s.customer_name?.trim() || ('Qarzdor (' + (s.receipt_number || '').slice(-4) + ')');
+        if (!debtorMap[name]) {
+          debtorMap[name] = {
+            name: name,
+            phone: s.customer_phone || '',
+            total_initial_debt: 0,
+            total_repaid: 0,
+            total_debt: 0,
+            status: 'active',
+            deals_count: 0,
+            last_sale_date: s.created_at || ''
+          };
+        }
+        const debtVal = parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0);
+        debtorMap[name].total_initial_debt += debtVal;
+        debtorMap[name].deals_count += 1;
+        if (!debtorMap[name].phone && s.customer_phone) {
+          debtorMap[name].phone = s.customer_phone;
+        }
+        if (s.created_at && (!debtorMap[name].last_sale_date || s.created_at > debtorMap[name].last_sale_date)) {
+          debtorMap[name].last_sale_date = s.created_at;
+        }
+      }
+
+      for (const p of payments) {
+        const name = p.customer_name?.trim();
+        if (name && debtorMap[name]) {
+          debtorMap[name].total_repaid += parseFloat(p.amount || 0);
+        }
+      }
+
+      let list = Object.values(debtorMap).map(d => {
+        const currentDebt = Math.max(0, d.total_initial_debt - d.total_repaid);
+        return {
+          name: d.name,
+          phone: d.phone,
+          total_initial_debt: d.total_initial_debt,
+          total_repaid: d.total_repaid,
+          total_debt: currentDebt,
+          current_balance: currentDebt,
+          status: currentDebt <= 0 ? 'settled' : 'active',
+          sales_count: d.deals_count,
+          deals_count: d.deals_count,
+          last_sale_date: d.last_sale_date
+        };
+      });
+
+      if (search) {
+        list = list.filter(d => d.name.toLowerCase().includes(search) || (d.phone && d.phone.includes(search)));
+      }
+
+      if (statusFilter && statusFilter !== 'all') {
+        list = list.filter(d => d.status === statusFilter);
+      }
+
+      const total_debt = list.reduce((acc, d) => acc + d.total_debt, 0);
+      const total_repaid = list.reduce((acc, d) => acc + d.total_repaid, 0);
+      const active_debtors_count = list.filter(d => d.total_debt > 0).length;
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          list,
+          total_debt,
+          total_repaid,
+          active_debtors_count,
+          total: list.length
+        }
+      });
+    }
+
+    // GET /api/sales/debtor-detail
+    if (path === 'sales/debtor-detail') {
+      const name = req.query?.name || urlSearchParams.get('name');
+      if (!name) {
+        return res.status(200).json({ code: 0, data: null });
+      }
+
+      const [debtSales, payments] = await Promise.all([
+        sql`
+          SELECT * FROM sales 
+          WHERE (customer_name = ${name} OR receipt_number LIKE ${'%' + name + '%'}) 
+            AND (payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0))
+          ORDER BY created_at DESC
+        `,
+        sql`
+          SELECT * FROM debt_payments 
+          WHERE customer_name = ${name}
+          ORDER BY created_at DESC
+        `
+      ]);
+
+      const phone = debtSales[0]?.customer_phone || payments[0]?.customer_phone || '';
+      const total_debt = debtSales.reduce((acc, s) => acc + parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0), 0);
+      const total_repaid = payments.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0);
+      const current_balance = Math.max(0, total_debt - total_repaid);
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          customer_name: name,
+          phone: phone,
+          total_debt: current_balance,
+          total_repaid: total_repaid,
+          initial_debt: total_debt,
+          status: current_balance <= 0 ? 'settled' : 'active',
+          sales: debtSales,
+          payments: payments
+        }
+      });
+    }
+
+    // POST /api/sales/repay-debt
+    if (path === 'sales/repay-debt' && req.method === 'POST') {
+      const { customer_name, customer_phone, amount, payment_method, cashier_name, remark } = req.body || {};
+      const numAmount = parseFloat(amount) || 0;
+      const receipt_number = 'PAY-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
+      const paymentId = 'PMT-' + Date.now().toString(36);
+      const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+      await sql`
+        INSERT INTO debt_payments (id, receipt_number, customer_name, customer_phone, amount, payment_method, cashier_name, remark, created_at)
+        VALUES (${paymentId}, ${receipt_number}, ${customer_name}, ${customer_phone || null}, ${numAmount}, ${payment_method || 'naqd'}, ${cashier_name || 'admin'}, ${remark || null}, ${nowStr})
+      `;
+
+      const debtSales = await sql`
+        SELECT * FROM sales 
+        WHERE (customer_name = ${customer_name}) 
+          AND (payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0))
+      `;
+      const allPayments = await sql`SELECT * FROM debt_payments WHERE customer_name = ${customer_name}`;
+      const totalInitial = debtSales.reduce((acc, s) => acc + parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0), 0);
+      const totalPaid = allPayments.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0);
+      const remaining_debt = Math.max(0, totalInitial - totalPaid);
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          id: paymentId,
+          receipt_number: receipt_number,
+          customer_name: customer_name,
+          customer_phone: customer_phone,
+          amount: numAmount,
+          payment_method: payment_method || 'naqd',
+          cashier_name: cashier_name || 'admin',
+          remark: remark,
+          created_at: nowStr,
+          remaining_debt: remaining_debt
+        },
+        message: "Qarz to'lovi muvaffaqiyatli qabul qilindi"
+      });
+    }
+
+    // POST /api/sales/checkout
+    if (path === 'sales/checkout' && req.method === 'POST') {
+      const {
+        receipt_number,
+        cashier_name,
+        customer_name,
+        customer_phone,
+        payment_method,
+        total_amount,
+        paid_amount,
+        debt_amount,
+        total_items,
+        discount,
+        remark,
+        items
+      } = req.body || {};
+
+      const saleId = 'SALE-' + Date.now().toString(36) + '-' + Math.floor(100 + Math.random() * 900);
+      const recNo = receipt_number || ('CHK-' + Date.now().toString(36).toUpperCase());
+      const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+      const tAmount = parseFloat(total_amount) || 0;
+      const pAmount = parseFloat(paid_amount) || 0;
+      const dAmount = parseFloat(debt_amount) || (payment_method === 'nasiya' ? Math.max(0, tAmount - pAmount) : 0);
+
+      await sql`
+        INSERT INTO sales (
+          id, receipt_number, cashier_name, customer_name, customer_phone,
+          payment_method, total_amount, paid_amount, debt_amount, total_items,
+          discount, remark, created_at
+        ) VALUES (
+          ${saleId}, ${recNo}, ${cashier_name || 'admin'}, ${customer_name || null}, ${customer_phone || null},
+          ${payment_method || 'naqd'}, ${tAmount}, ${pAmount}, ${dAmount}, ${parseInt(total_items || 1, 10)},
+          ${parseFloat(discount) || 0}, ${remark || null}, ${nowStr}
+        )
+      `;
+
+      if (Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          const itemId = 'SITEM-' + Date.now().toString(36) + '-' + Math.floor(1000 + Math.random() * 9000);
+          await sql`
+            INSERT INTO sale_items (
+              id, sale_id, product_id, product_name, shtrix_code,
+              price, cost, quantity, unit_name, total
+            ) VALUES (
+              ${itemId}, ${saleId}, ${item.product_id || item.id}, ${item.product_name || item.productName}, ${item.shtrix_code || item.SKU || null},
+              ${parseFloat(item.price) || 0}, ${parseFloat(item.cost) || 0}, ${parseInt(item.quantity || 1, 10)}, ${item.unit_name || item.unit || 'dona'}, ${parseFloat(item.total || item.price * (item.quantity || 1)) || 0}
+            )
+          `;
+          if (item.product_id || item.id) {
+            await sql`
+              UPDATE products 
+              SET "quantityInStock" = GREATEST(0, "quantityInStock" - ${parseInt(item.quantity || 1, 10)})
+              WHERE id = ${item.product_id || item.id}
+            `;
+          }
+        }
+      }
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          id: saleId,
+          receipt_number: recNo,
+          total_amount: tAmount,
+          debt_amount: dAmount,
+          created_at: nowStr
+        },
+        message: 'Sotuv muvaffaqiyatli amalga oshirildi'
+      });
+    }
+
+    // GET /api/sales/receipt/:no
+    if (path.startsWith('sales/receipt/')) {
+      const receiptNo = path.replace('sales/receipt/', '');
+      const salesRows = await sql`SELECT * FROM sales WHERE receipt_number = ${receiptNo} OR id = ${receiptNo}`;
+      const sale = salesRows[0];
+      if (!sale) {
+        return res.status(200).json({ code: 0, data: null });
+      }
+      const items = await sql`SELECT * FROM sale_items WHERE sale_id = ${sale.id}`;
+      return res.status(200).json({
+        code: 0,
+        data: {
+          ...sale,
+          items: items || []
+        }
+      });
+    }
+
+    // GET /api/sales/payment-receipt/:no
+    if (path.startsWith('sales/payment-receipt/')) {
+      const receiptNo = path.replace('sales/payment-receipt/', '');
+      const payRows = await sql`SELECT * FROM debt_payments WHERE receipt_number = ${receiptNo} OR id = ${receiptNo}`;
+      return res.status(200).json({
+        code: 0,
+        data: payRows[0] || null
+      });
+    }
+
     // 14. GET /api/device/list
     if (path === 'device/list') {
       const rows = await sql`SELECT * FROM device_tokens ORDER BY id DESC`;
