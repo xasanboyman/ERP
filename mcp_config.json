@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "erp-system": {
+      "command": "/home/xasanboy/ERP/Back/venv/bin/python3",
+      "args": [
+        "/home/xasanboy/ERP/Back/mcp_server.py",
+        "stdio"
+      ],
+      "env": {
+        "PYTHONPATH": "/home/xasanboy/ERP/Back"
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 1056 >>
+stream
+BT /F1 14 Tf 50 720 Td 18 TL
+(FINANCIAL & REVENUE DISCLOSURE STATEMENT) Tj T*
+(=====================================================) Tj T*
+() Tj T*
+(Project Name: QUANTUM 3D AI \(Riko\)) Tj T*
+(Developer: Hasanboy Abdulkhaev) Tj T*
+(Stage: Early-Stage Hackathon Prototype / Pre-Revenue) Tj T*
+(Date: August 2026) Tj T*
+() Tj T*
+(PROFIT & LOSS \(P&L\) SUMMARY:) Tj T*
+(-----------------------------------------------------) Tj T*
+(Gross Revenue / Sales: bash.00 USD) Tj T*
+(Payment Gateway \(Stripe / Bank Inflows\): bash.00 USD) Tj T*
+(Total Operating Income: bash.00 USD) Tj T*
+() Tj T*
+(OPERATING EXPENSES:) Tj T*
+(Hosting & Serverless Compute: bash.00 USD \(Vercel Free Tier\)) Tj T*
+(3D Engine & Asset Licenses: bash.00 USD \(Open-Source Three.js / VRM\)) Tj T*
+(Net Profit / Loss: bash.00 USD) Tj T*
+() Tj T*
+(-----------------------------------------------------) Tj T*
+(CERTIFICATION:) Tj T*
+(This project is currently in the pre-revenue prototyping phase.) Tj T*
+(All development is open-source and bootstrapped on developer free tiers.) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000001292 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1418
+%%EOF

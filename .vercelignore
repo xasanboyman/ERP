@@ -1,0 +1,14 @@
+.git
+node_modules
+Front/node_modules
+Back/venv
+Back/re
+Back/sys
+Back/knit_erp.db
+ffmpeg.whl
+rclone
+rclone_tmp
+whl_tmp
+*.log
+*.whl
+tests/

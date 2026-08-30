@@ -1,0 +1,212 @@
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
+from .database import engine, Base
+from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, cutting, qr, staff_hr, ai, classifier, sales, device, ws, crm
+
+import datetime
+import os
+
+Base.metadata.create_all(bind=engine)
+
+# Auto-migrate optional columns into SQLite tables if missing
+try:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE products ADD COLUMN expiration_date VARCHAR"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE sale_items ADD COLUMN unit_name VARCHAR"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE sale_items ADD COLUMN conversion_factor FLOAT DEFAULT 1.0"))
+        except Exception:
+            pass
+        conn.commit()
+except Exception:
+    pass
+
+
+def seed_initial_roles_and_users():
+    from .database import SessionLocal
+    from . import models, crud
+    db = SessionLocal()
+    try:
+        # 1. Ensure Cashier Role exists
+        cashier_role = db.query(models.Role).filter(
+            (models.Role.id == '7972a496-a501-48f4-b2f8-5774dc2bd9c4') |
+            (models.Role.roleName.ilike('Cashier'))
+        ).first()
+        cashier_perms = ['/dashboard', 'workplace:view', 'workplace', 'product:view', 'product:create', 'product:edit', 'product:delete', '/product', 'list', 'pos:sell', 'pos:nasiya', 'pos:history', '/sales', 'pos']
+        if not cashier_role:
+            cashier_role = models.Role(
+                id='7972a496-a501-48f4-b2f8-5774dc2bd9c4',
+                roleName='Cashier',
+                status=1,
+                remark='Kassir roli',
+                permissions=cashier_perms
+            )
+            db.add(cashier_role)
+            db.commit()
+            db.refresh(cashier_role)
+
+        # 2. Ensure Super Administrator Role exists
+        admin_role = db.query(models.Role).filter(models.Role.id == '1').first()
+        if not admin_role:
+            admin_role = models.Role(
+                id='1',
+                roleName='Super Administrator',
+                status=1,
+                remark='Super administrator',
+                permissions=['*.*.*']
+            )
+            db.add(admin_role)
+            db.commit()
+
+        # 3. Synchronize Cashier Users
+        cashier_id = cashier_role.id
+        for username in ['dilshodk', 'jasura', 'kassir', 'emp_test_200_123']:
+            u = db.query(models.User).filter(models.User.username == username).first()
+            if u:
+                u.role = 'Cashier'
+                u.roleId = cashier_id
+                u.permissions = cashier_role.permissions or cashier_perms
+
+            w = db.query(models.Worker).filter(models.Worker.account == username).first()
+            if w:
+                w.role = 'Cashier'
+
+        # 4. Synchronize Super Admin Users
+        for username in ['admin', 'anvars']:
+            u = db.query(models.User).filter(models.User.username == username).first()
+            if u:
+                u.role = 'Super Administrator'
+                u.roleId = '1'
+                u.permissions = ['*.*.*']
+
+        db.commit()
+    except Exception as e:
+        print('Seed warning:', e)
+    finally:
+        db.close()
+
+seed_initial_roles_and_users()
+
+app = FastAPI(title="ERP System Backend", version="1.0.0")
+
+# Serve uploaded product images
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+uploads_dir = os.path.join(base_dir, "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    return JSONResponse(
+        status_code=400,
+        content={"code": 400, "message": "Database integrity constraint violation: " + str(exc)}
+    )
+
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# Setup CORS to allow request redirects from frontend port
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def token_expiration_middleware(request: Request, call_next):
+    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+    if auth_header and request.url.path not in ["/user/login", "/user/loginOut", "/v1/status", "/docs", "/openapi.json"]:
+        payload = auth.decode_access_token(auth_header)
+        if isinstance(payload, dict) and "error" in payload:
+            return JSONResponse(
+                status_code=401,
+                content={"code": 401, "message": "Sessiya muddati tugadi (12 soat). Iltimos, qayta tizimga kiring."}
+            )
+    return await call_next(request)
+
+# Register routes
+app.include_router(auth.router, tags=["Authentication"])
+app.include_router(role.router, tags=["Role & Routing"])
+app.include_router(department.router, tags=["Department Management"])
+app.include_router(branch.router, tags=["Branch Management"])
+app.include_router(product.router, tags=["Product & Inventory"])
+app.include_router(worker.router, tags=["Worker Management"])
+app.include_router(salary.router, tags=["Salary & Payroll"])
+app.include_router(analytics.router, tags=["Analytics & Dashboard"])
+app.include_router(activity.router, tags=["Activity Log"])
+app.include_router(cutting.router, tags=["Cutting Management"])
+app.include_router(qr.router, tags=["QR Code Management"])
+app.include_router(staff_hr.router, tags=["Staff HR Extensions"])
+app.include_router(ai.router, tags=["AI Voice Assistant"])
+app.include_router(classifier.router, tags=["Classifier Management"])
+app.include_router(sales.router, tags=["Sales & POS Terminal"])
+app.include_router(device.router, tags=["Device Management"])
+app.include_router(crm.router, tags=["CRM & Education"])
+app.include_router(ws.router, tags=["Real-Time WebSockets"])
+
+@app.on_event("startup")
+async def on_startup():
+    from .websocket_manager import manager
+    import asyncio
+    try:
+        manager.set_loop(asyncio.get_running_loop())
+    except Exception as e:
+        print("WS loop bind notice:", e)
+
+# Mount MCP (Model Context Protocol) endpoint for AI agents
+try:
+    import mcp_server
+    app.mount("/mcp", mcp_server.mcp.http_app())
+except Exception as mcp_err:
+    print(f"Warning: Could not mount /mcp: {mcp_err}")
+
+
+
+
+@app.get("/")
+def read_root():
+    return {"message": "ERP API is running and healthy", "status": "ok"}
+
+@app.get("/v1/status")
+def get_v1_status():
+    return {
+        "status": "online",
+        "version": "1.0.0",
+        "app": app.title,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+    }
+
+@app.post("/v1/qr/scan")
+async def post_v1_qr_scan(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    
+    qr_code = body.get("qr_code")
+    
+    return JSONResponse(
+        status_code=501,
+        content={
+            "success": False,
+            "message": "QR scan endpoint is not enabled yet.",
+            "next_step": "Configure device authentication before enabling external scan requests.",
+            "data": {
+                "received_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "qr_code": qr_code
+            }
+        }
+    )
+

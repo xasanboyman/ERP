@@ -1,0 +1,10 @@
+services:
+  erp-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "4000:4000"
+    volumes:
+      - /app/node_modules
+      - .:/app
