@@ -1,7 +1,27 @@
-import { getPool } from '../_db.js';
+import pg from 'pg';
+const { Pool } = pg;
 import jwt from 'jsonwebtoken';
 
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_OgGezc9umYl0@ep-hidden-mountain-a5l36vpb-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require';
 const SECRET_KEY = process.env.SECRET_KEY || 'super-secret-key-that-is-hard-to-guess';
+
+let pool;
+function getPool() {
+  if (!pool) {
+    let connStr = DATABASE_URL;
+    if (connStr.startsWith('postgres://')) {
+      connStr = connStr.replace('postgres://', 'postgresql://');
+    }
+    connStr = connStr.replace('&channel_binding=require', '').replace('?channel_binding=require', '');
+    pool = new Pool({
+      connectionString: connStr,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
+  }
+  return pool;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -13,19 +33,15 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ code: 405, message: 'Method Not Allowed' });
-  }
-
   try {
     const { username, password } = req.body || {};
-    const pool = getPool();
+    const p = getPool();
 
-    const userRes = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const userRes = await p.query('SELECT * FROM users WHERE username = $1', [username]);
     let user = userRes.rows[0];
 
     if (!user) {
-      const workerRes = await pool.query(
+      const workerRes = await p.query(
         'SELECT * FROM workers WHERE account = $1 OR employee_code = $1 OR name = $1 LIMIT 1',
         [username]
       );
@@ -45,7 +61,7 @@ export default async function handler(req, res) {
 
     if (!user) {
       if (username === 'admin') {
-        const ins = await pool.query(
+        const ins = await p.query(
           `INSERT INTO users (username, full_name, role, "roleId", permissions) 
            VALUES ($1, $2, $3, $4, $5) RETURNING *`,
           ['admin', 'Administrator', 'Super Administrator', '1', JSON.stringify(['*.*.*'])]
@@ -84,7 +100,11 @@ export default async function handler(req, res) {
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
-    return res.status(200).json({ code: 500, message: 'Server xatoligi: ' + err.message });
+    console.error('Login Error:', err);
+    return res.status(500).json({
+      error: 'Login Execution Error',
+      message: err.message,
+      stack: err.stack
+    });
   }
 }
