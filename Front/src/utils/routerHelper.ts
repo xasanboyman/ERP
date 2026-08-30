@@ -213,10 +213,19 @@ const addToChildren = (
   }
 }
 
+import { useUserStoreWithOut } from '@/store/modules/user'
+
 // Background Route & Data Preloader for instant page navigation
 let isPreloaded = false
 
 export const preloadAllViewsAndData = () => {
+  try {
+    const userStore = useUserStoreWithOut()
+    if (!userStore.getToken) return
+  } catch (_) {
+    return
+  }
+
   if (isPreloaded) return
   isPreloaded = true
 

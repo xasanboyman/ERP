@@ -17,6 +17,203 @@ function getSql() {
   return sqlClient;
 }
 
+const defaultAdminRoutes = [
+  {
+    path: '/dashboard',
+    component: '#',
+    redirect: '/dashboard/workplace',
+    name: 'Dashboard',
+    meta: {
+      title: 'router.dashboard',
+      icon: 'vi-ant-design:dashboard-filled',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'analysis',
+        component: 'views/Dashboard/Analysis',
+        name: 'Analysis',
+        meta: {
+          title: 'router.analysis',
+          noCache: true
+        }
+      },
+      {
+        path: 'workplace',
+        component: 'views/Dashboard/Workplace',
+        name: 'Workplace',
+        meta: {
+          title: 'router.workplace',
+          noCache: true,
+          affix: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/product',
+    component: '#',
+    redirect: '/product/list',
+    name: 'ProductRoot',
+    meta: {
+      title: 'Omborxona',
+      icon: 'vi-ep:goods',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'list',
+        component: 'views/Product/Product',
+        name: 'ProductManagement',
+        meta: {
+          title: 'Ombor Mahsulotlari',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/sales',
+    component: '#',
+    redirect: '/sales/pos',
+    name: 'SalesRoot',
+    meta: {
+      title: 'Sotuvlar (POS)',
+      icon: 'vi-ep:shopping-cart-full',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'pos',
+        component: 'views/Sales/Pos',
+        name: 'SalesPos',
+        meta: {
+          title: 'Sotuvlar (POS)',
+          noCache: true
+        }
+      },
+      {
+        path: 'debtors',
+        component: 'views/Sales/Debtors',
+        name: 'SalesDebtors',
+        meta: {
+          title: 'Nasiyalar (Qarzlar)',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/hr',
+    component: '#',
+    redirect: '/hr/workers',
+    name: 'HRRoot',
+    meta: {
+      title: 'Xodimlar (HR)',
+      icon: 'vi-ep:avatar',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'workers',
+        component: 'views/Worker/Worker',
+        name: 'WorkerManagement',
+        meta: {
+          title: 'Xodimlar Ro\'yxati',
+          noCache: true
+        }
+      },
+      {
+        path: 'timesheets',
+        component: 'views/Worker/Timesheets',
+        name: 'WorkerTimesheets',
+        meta: {
+          title: 'Ish Vaqti (Davomat)',
+          noCache: true
+        }
+      },
+      {
+        path: 'outputs',
+        component: 'views/Worker/Outputs',
+        name: 'WorkerOutputs',
+        meta: {
+          title: 'Kunlik Ishbay Ishlab Chiqarish',
+          noCache: true
+        }
+      },
+      {
+        path: 'adjustments',
+        component: 'views/Worker/Adjustments',
+        name: 'WorkerAdjustments',
+        meta: {
+          title: 'Mukofot va Jarimalar',
+          noCache: true
+        }
+      },
+      {
+        path: 'salary',
+        component: 'views/Salary/Salary',
+        name: 'SalaryManagement',
+        meta: {
+          title: 'Oylik Maoshlar',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/authorization',
+    component: '#',
+    redirect: '/authorization/role',
+    name: 'Authorization',
+    meta: {
+      title: 'Huquqlar & Sozlamalar',
+      icon: 'vi-eos-icons:role-binding',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'department',
+        component: 'views/Authorization/Department/Department',
+        name: 'Department',
+        meta: {
+          title: 'Bo\'limlar',
+          noCache: true
+        }
+      },
+      {
+        path: 'role',
+        component: 'views/Authorization/Role/Role',
+        name: 'Role',
+        meta: {
+          title: 'Rollar',
+          noCache: true
+        }
+      }
+    ]
+  }
+];
+
+const defaultRoleKeys = [
+  '/dashboard',
+  '/dashboard/analysis',
+  '/dashboard/workplace',
+  '/product',
+  '/product/list',
+  '/sales',
+  '/sales/pos',
+  '/sales/debtors',
+  '/hr',
+  '/hr/workers',
+  '/hr/timesheets',
+  '/hr/outputs',
+  '/hr/adjustments',
+  '/hr/salary',
+  '/authorization',
+  '/authorization/department',
+  '/authorization/role'
+];
+
 function authenticate(req, res) {
   const authHeader = req?.headers?.authorization || req?.headers?.Authorization;
   if (!authHeader) {
@@ -66,8 +263,9 @@ export default async function handler(req, res) {
   if (rawUrl.startsWith('/api')) {
     rawUrl = rawUrl.substring(4);
   }
-  const [pathname] = rawUrl.split('?');
+  const [pathname, search] = rawUrl.split('?');
   const path = pathname.replace(/^\/+|\/+$/g, '');
+  const urlSearchParams = new URLSearchParams(search || '');
   const sql = getSql();
 
   try {
@@ -195,8 +393,8 @@ export default async function handler(req, res) {
 
     // 8. GET /api/product/list
     if (path === 'product/list') {
-      const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
-      const pageSize = parseInt(req.query?.pageSize || 20, 10);
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
       const offset = (pageIndex - 1) * pageSize;
       const [countRes, rows] = await Promise.all([
         sql`SELECT count(*) FROM products`,
@@ -213,8 +411,8 @@ export default async function handler(req, res) {
 
     // 9. GET /api/worker/list
     if (path === 'worker/list') {
-      const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
-      const pageSize = parseInt(req.query?.pageSize || 20, 10);
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
       const offset = (pageIndex - 1) * pageSize;
       const [countRes, rows] = await Promise.all([
         sql`SELECT count(*) FROM workers`,
@@ -231,6 +429,21 @@ export default async function handler(req, res) {
 
     // 10. GET /api/role/list
     if (path === 'role/list') {
+      const roleName = req.query?.roleName || urlSearchParams.get('roleName');
+      if (roleName) {
+        return res.status(200).json({ code: 0, data: defaultAdminRoutes });
+      }
+      const rows = await sql`SELECT * FROM roles ORDER BY id ASC`;
+      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+    }
+
+    // 10b. GET /api/role/list2
+    if (path === 'role/list2') {
+      return res.status(200).json({ code: 0, data: defaultRoleKeys });
+    }
+
+    // 10c. GET /api/role/table
+    if (path === 'role/table') {
       const rows = await sql`SELECT * FROM roles ORDER BY id ASC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
@@ -243,8 +456,8 @@ export default async function handler(req, res) {
 
     // 12. GET /api/salary/list
     if (path === 'salary/list') {
-      const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
-      const pageSize = parseInt(req.query?.pageSize || 500, 10);
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 500, 10);
       const offset = (pageIndex - 1) * pageSize;
       const [countRes, rows] = await Promise.all([
         sql`SELECT count(*) FROM salaries`,
@@ -261,8 +474,8 @@ export default async function handler(req, res) {
 
     // 13. GET /api/sales/list
     if (path === 'sales/list') {
-      const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
-      const pageSize = parseInt(req.query?.pageSize || 500, 10);
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 500, 10);
       const offset = (pageIndex - 1) * pageSize;
       const [countRes, rows] = await Promise.all([
         sql`SELECT count(*) FROM sales`,
@@ -285,8 +498,8 @@ export default async function handler(req, res) {
 
     // 15. GET /api/activity/list
     if (path === 'activity/list') {
-      const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
-      const pageSize = parseInt(req.query?.pageSize || 20, 10);
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
       const offset = (pageIndex - 1) * pageSize;
       const [countRes, rows] = await Promise.all([
         sql`SELECT count(*) FROM activity_logs`,
