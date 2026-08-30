@@ -5,7 +5,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const user = authenticate(req, res);
@@ -13,7 +12,7 @@ export default async function handler(req, res) {
 
   try {
     const sql = getSql();
-    const rows = await sql`SELECT * FROM departments ORDER BY id ASC`;
+    const rows = await sql`SELECT * FROM classifier_items ORDER BY id ASC`;
     return res.status(200).json({
       code: 0,
       data: {

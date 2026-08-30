@@ -1,4 +1,5 @@
 import { getSql } from '../_db.js';
+import { authenticate } from '../_auth.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -6,6 +7,9 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', '*');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const user = authenticate(req, res);
+  if (!user) return;
 
   try {
     const sql = getSql();

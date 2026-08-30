@@ -1,10 +1,14 @@
-import { getPool } from './_db.js';
+import { getSql } from './_db.js';
+import { authenticate } from './_auth.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
   res.setHeader('Access-Control-Allow-Headers', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const user = authenticate(req, res);
+  if (!user) return;
 
   return res.status(200).json({
     code: 0,

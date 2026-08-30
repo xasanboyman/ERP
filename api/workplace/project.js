@@ -5,7 +5,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const user = authenticate(req, res);
@@ -13,15 +12,12 @@ export default async function handler(req, res) {
 
   try {
     const sql = getSql();
-    const rows = await sql`SELECT * FROM departments ORDER BY id ASC`;
+    const rows = await sql`SELECT * FROM workplace_projects ORDER BY id ASC`;
     return res.status(200).json({
       code: 0,
-      data: {
-        total: rows.length,
-        list: rows
-      }
+      data: rows
     });
   } catch (err) {
-    return res.status(500).json({ code: 500, message: err.message });
+    return res.status(500).json({ error: 'Workplace Projects Error', message: err.message });
   }
 }

@@ -5,7 +5,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const user = authenticate(req, res);
@@ -13,15 +12,25 @@ export default async function handler(req, res) {
 
   try {
     const sql = getSql();
-    const rows = await sql`SELECT * FROM departments ORDER BY id ASC`;
+    const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
+    const pageSize = parseInt(req.query?.pageSize || 500, 10);
+    const offset = (pageIndex - 1) * pageSize;
+
+    const countRes = await sql`SELECT count(*) FROM salaries`;
+    const total = parseInt(countRes[0].count, 10);
+
+    const rows = await sql`
+      SELECT * FROM salaries ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}
+    `;
+
     return res.status(200).json({
       code: 0,
       data: {
-        total: rows.length,
+        total,
         list: rows
       }
     });
   } catch (err) {
-    return res.status(500).json({ code: 500, message: err.message });
+    return res.status(500).json({ error: 'Salary List Error', message: err.message });
   }
 }
