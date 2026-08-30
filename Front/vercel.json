@@ -1,12 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install --force",
+  "buildCommand": "NODE_OPTIONS='--max-old-space-size=4096' pnpm run build",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "http://127.0.0.1:8000/$1"
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "/api/index.py"
     },
     {
       "source": "/(.*)",

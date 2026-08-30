@@ -23,7 +23,7 @@
     "lint:format": "prettier --write --loglevel warn \"src/**/*.{js,ts,json,tsx,css,less,vue,html,md}\"",
     "lint:style": "stylelint --fix \"**/*.{vue,less,postcss,css,scss}\" --cache --cache-location node_modules/.cache/stylelint/",
     "lint:lint-staged": "lint-staged -c ./.husky/lintstagedrc.cjs",
-    "prepare": "husky install",
+    "prepare": "husky install || true",
     "p": "plop",
     "icon": "esno ./scripts/icon.ts"
   },
@@ -129,16 +129,9 @@
     "vite-plugin-url-copy": "^1.1.4",
     "vue-tsc": "^2.2.0"
   },
-  "resolutions": {
-    "qs": "6.11.2"
-  },
   "overrides": {
     "qs": "6.11.2"
   },
   "packageManager": "pnpm@9.15.3",
-  "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.1.0"
-  },
   "license": "MIT"
 }

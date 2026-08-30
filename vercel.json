@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd Front && pnpm install && pnpm run build",
+  "installCommand": "cd Front && pnpm install --force",
+  "buildCommand": "cd Front && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build",
   "outputDirectory": "Front/dist",
   "framework": "vite",
   "rewrites": [
