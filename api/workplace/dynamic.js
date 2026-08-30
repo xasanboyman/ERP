@@ -7,10 +7,10 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const user = authenticate(req, res);
-  if (!user) return;
-
   try {
+    const user = authenticate(req, res);
+    if (!user) return;
+
     const sql = getSql();
     const rows = await sql`SELECT * FROM workplace_dynamics ORDER BY id DESC LIMIT 10`;
     const logs = rows.map(r => {
@@ -26,6 +26,6 @@ export default async function handler(req, res) {
       data: logs
     });
   } catch (err) {
-    return res.status(500).json({ error: 'Workplace Dynamic Error', message: err.message });
+    return res.status(500).json({ error: 'Workplace Dynamic Error', message: err.message, stack: err.stack });
   }
 }

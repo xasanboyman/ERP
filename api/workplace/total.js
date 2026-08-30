@@ -7,10 +7,10 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const user = authenticate(req, res);
-  if (!user) return;
-
   try {
+    const user = authenticate(req, res);
+    if (!user) return;
+
     const sql = getSql();
     const [pCount, wCount, tCount] = await Promise.all([
       sql`SELECT count(*) FROM products`,
@@ -31,6 +31,6 @@ export default async function handler(req, res) {
       }
     });
   } catch (err) {
-    return res.status(500).json({ error: 'Workplace Total Error', message: err.message });
+    return res.status(500).json({ error: 'Workplace Total Error', message: err.message, stack: err.stack });
   }
 }

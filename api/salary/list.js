@@ -7,10 +7,10 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const user = authenticate(req, res);
-  if (!user) return;
-
   try {
+    const user = authenticate(req, res);
+    if (!user) return;
+
     const sql = getSql();
     const pageIndex = parseInt(req.query?.pageIndex || 1, 10);
     const pageSize = parseInt(req.query?.pageSize || 500, 10);
@@ -31,6 +31,6 @@ export default async function handler(req, res) {
       }
     });
   } catch (err) {
-    return res.status(500).json({ error: 'Salary List Error', message: err.message });
+    return res.status(500).json({ error: 'Salary List Error', message: err.message, stack: err.stack });
   }
 }
