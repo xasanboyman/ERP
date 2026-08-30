@@ -427,7 +427,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 10. GET /api/role/list
+    // 10. Roles Endpoints
     if (path === 'role/list') {
       const roleName = req.query?.roleName || urlSearchParams.get('roleName');
       if (roleName) {
@@ -437,21 +437,92 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
-    // 10b. GET /api/role/list2
     if (path === 'role/list2') {
       return res.status(200).json({ code: 0, data: defaultRoleKeys });
     }
 
-    // 10c. GET /api/role/table
     if (path === 'role/table') {
       const rows = await sql`SELECT * FROM roles ORDER BY id ASC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
-    // 11. GET /api/department/list
-    if (path === 'department/list') {
+    if (path === 'role/save' && req.method === 'POST') {
+      const { id, roleName, status, remark, permissions } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE roles 
+          SET "roleName" = ${roleName}, status = ${status !== undefined ? status : 1}, remark = ${remark || null}, permissions = ${JSON.stringify(permissions || [])}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'role_' + Date.now().toString(36);
+        await sql`
+          INSERT INTO roles (id, "roleName", status, remark, permissions, "createTime")
+          VALUES (${newId}, ${roleName}, ${status !== undefined ? status : 1}, ${remark || null}, ${JSON.stringify(permissions || [])}, NOW())
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    if (path === 'role/delete' && req.method === 'POST') {
+      const { id } = req.body || {};
+      if (id) {
+        await sql`DELETE FROM roles WHERE id = ${id}`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
+    }
+
+    // 11. Departments Endpoints
+    if (path === 'department/table/list' || path === 'department/list') {
       const rows = await sql`SELECT * FROM departments ORDER BY id ASC`;
-      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+      return res.status(200).json({
+        code: 0,
+        data: {
+          total: rows.length,
+          list: rows
+        }
+      });
+    }
+
+    if (path === 'department/save' && req.method === 'POST') {
+      const { id, departmentName, parentId, status, remark } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE departments 
+          SET "departmentName" = ${departmentName}, "parentId" = ${parentId || null}, status = ${status !== undefined ? status : 1}, remark = ${remark || null}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'dept_' + Date.now().toString(36);
+        await sql`
+          INSERT INTO departments (id, "departmentName", "parentId", status, remark, "createTime")
+          VALUES (${newId}, ${departmentName}, ${parentId || null}, ${status !== undefined ? status : 1}, ${remark || null}, NOW())
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    if (path === 'department/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM departments WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
+    }
+
+    if (path === 'department/users') {
+      const deptId = req.query?.id || urlSearchParams.get('id');
+      const rows = await sql`SELECT * FROM workers WHERE department_id = ${deptId} OR department = ${deptId}`;
+      const userList = rows.map(w => ({
+        id: w.id,
+        username: w.name,
+        account: w.account || w.employee_code,
+        email: w.email || '',
+        createTime: w.createTime || '',
+        role: w.role || 'Staff',
+        department: { id: deptId, departmentName: '' }
+      }));
+      return res.status(200).json({ code: 0, data: { list: userList, total: userList.length } });
     }
 
     // 12. GET /api/salary/list
