@@ -6,7 +6,12 @@ from .config import settings
 from sqlalchemy.engine import Engine
 from sqlalchemy import event
 
+import ssl
+
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+db_url = settings.DATABASE_URL
+connect_args = {}
 
 if is_sqlite:
     @event.listens_for(Engine, "connect")
@@ -21,11 +26,23 @@ if is_sqlite:
             cursor.close()
         except Exception:
             pass
-
-connect_args = {"check_same_thread": False} if is_sqlite else {}
+    connect_args["check_same_thread"] = False
+else:
+    # Use pure Python pg8000 driver for 100% serverless compatibility
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+pg8000://", 1)
+    elif db_url.startswith("postgresql://") and "+pg8000" not in db_url and "+psycopg" not in db_url:
+        db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
+    
+    # Strip any parameters unsupported by pg8000 query string
+    if "?" in db_url:
+        base_part, query_part = db_url.split("?", 1)
+        db_url = base_part
+    ctx = ssl.create_default_context()
+    connect_args["ssl_context"] = ctx
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
     pool_pre_ping=True
 )

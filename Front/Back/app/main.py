@@ -18,20 +18,17 @@ except Exception as e:
 # Auto-migrate optional columns if missing
 try:
     from sqlalchemy import text
-    with engine.connect() as conn:
+    for alter_stmt in [
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS expiration_date VARCHAR",
+        "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS unit_name VARCHAR",
+        "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS conversion_factor FLOAT DEFAULT 1.0",
+    ]:
         try:
-            conn.execute(text("ALTER TABLE products ADD COLUMN expiration_date VARCHAR"))
+            with engine.connect() as conn:
+                conn.execute(text(alter_stmt))
+                conn.commit()
         except Exception:
             pass
-        try:
-            conn.execute(text("ALTER TABLE sale_items ADD COLUMN unit_name VARCHAR"))
-        except Exception:
-            pass
-        try:
-            conn.execute(text("ALTER TABLE sale_items ADD COLUMN conversion_factor FLOAT DEFAULT 1.0"))
-        except Exception:
-            pass
-        conn.commit()
 except Exception as e:
     print("Column migration notice:", e)
 
