@@ -5,7 +5,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 from .database import engine, Base
-from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, cutting, qr, staff_hr, ai, classifier, sales, device, ws, crm
+from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, cutting, qr, staff_hr, ai, classifier, sales, device, ws
 
 import datetime
 import os
@@ -153,7 +153,6 @@ app.include_router(ai.router, tags=["AI Voice Assistant"])
 app.include_router(classifier.router, tags=["Classifier Management"])
 app.include_router(sales.router, tags=["Sales & POS Terminal"])
 app.include_router(device.router, tags=["Device Management"])
-app.include_router(crm.router, tags=["CRM & Education"])
 app.include_router(ws.router, tags=["Real-Time WebSockets"])
 
 @app.on_event("startup")

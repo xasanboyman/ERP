@@ -158,60 +158,6 @@ const schema = reactive<FormSchema[]>([
         }
       }
     }
-  },
-  {
-    field: 'other',
-    component: 'Divider',
-    label: t('login.otherLogin'),
-    componentProps: {
-      contentPosition: 'center'
-    }
-  },
-  {
-    field: 'otherIcon',
-    colProps: {
-      span: 24
-    },
-    formItemProps: {
-      slots: {
-        default: () => {
-          return (
-            <>
-              <div class="flex justify-between w-[100%]">
-                <Icon
-                  icon="vi-ant-design:github-filled"
-                  size={iconSize}
-                  class="cursor-pointer ant-icon"
-                  color={iconColor}
-                  hoverColor={hoverColor}
-                />
-                <Icon
-                  icon="vi-ant-design:wechat-filled"
-                  size={iconSize}
-                  class="cursor-pointer ant-icon"
-                  color={iconColor}
-                  hoverColor={hoverColor}
-                />
-                <Icon
-                  icon="vi-ant-design:alipay-circle-filled"
-                  size={iconSize}
-                  color={iconColor}
-                  hoverColor={hoverColor}
-                  class="cursor-pointer ant-icon"
-                />
-                <Icon
-                  icon="vi-ant-design:weibo-circle-filled"
-                  size={iconSize}
-                  color={iconColor}
-                  hoverColor={hoverColor}
-                  class="cursor-pointer ant-icon"
-                />
-              </div>
-            </>
-          )
-        }
-      }
-    }
   }
 ])
 
@@ -295,9 +241,9 @@ const signIn = async () => {
               addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
             })
             const targetPath =
-              redirect.value && !redirect.value.startsWith('/crm') && redirect.value !== '/404'
+              redirect.value && redirect.value !== '/404' && redirect.value !== '/login'
                 ? redirect.value
-                : permissionStore.addRouters[0]?.path || '/dashboard/analysis'
+                : permissionStore.addRouters[0]?.path || '/dashboard/workplace'
             push({ path: targetPath })
           }
         }
@@ -355,8 +301,8 @@ const getRole = async () => {
     const firstAllowed = getFirstRoutePath(permissionStore.getAddRouters)
     const targetPath =
       redirect.value &&
-      !redirect.value.startsWith('/crm') &&
       redirect.value !== '/404' &&
+      redirect.value !== '/login' &&
       redirect.value !== '/'
         ? redirect.value
         : firstAllowed
