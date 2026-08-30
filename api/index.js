@@ -1117,6 +1117,37 @@ export default async function handler(req, res) {
       });
     }
 
+    // 22. GET /api/ai/config
+    if (path === 'ai/config') {
+      const username = req.query?.username || urlSearchParams.get('username') || authUser?.username;
+      const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+      return res.status(200).json({
+        code: 0,
+        data: {
+          gemini_api_key: geminiKey,
+          user: {
+            name: authUser?.full_name || username || 'Admin',
+            username: username || authUser?.username || 'admin',
+            role: authUser?.role || 'Super Administrator',
+            is_super: true
+          },
+          allowed_tools: [
+            'create_worker', 'update_worker', 'delete_worker', 'list_workers',
+            'create_product', 'add_product_stock', 'update_product', 'delete_product', 'list_products', 'search_product',
+            'create_department', 'list_departments',
+            'create_position', 'list_positions',
+            'create_timesheet', 'create_staff_output', 'list_staff_outputs', 'create_staff_adjustment', 'list_staff_adjustments',
+            'list_users', 'list_sales', 'get_sale_receipt', 'list_debtors', 'repay_debt',
+            'list_salaries', 'create_salary', 'salary_payout',
+            'list_roles', 'create_role', 'delete_role',
+            'list_branches', 'create_branch',
+            'create_cutting_order', 'delete_cutting_order', 'list_cutting_orders', 'start_production', 'list_cutting_tasks', 'update_task_status',
+            'generate_qr_code', 'list_qr_codes', 'delete_qr_code'
+          ]
+        }
+      });
+    }
+
     // Fallback for any other API route
     return res.status(200).json({
       code: 0,
