@@ -160,9 +160,8 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from '@/hooks/web/useI18n'
-const { t } = useI18n()
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from '@/hooks/web/useI18n'
 import { ContentWrap } from '@/components/ContentWrap'
 import {
   ElMessage,
@@ -185,6 +184,8 @@ import { getAdjustmentListApi, saveAdjustmentApi, deleteAdjustmentApi } from '@/
 import { getWorkerListApi } from '@/api/worker'
 import { formatMoney, moneyFormatter, moneyParser } from '@/utils'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const tableData = ref<any[]>([])

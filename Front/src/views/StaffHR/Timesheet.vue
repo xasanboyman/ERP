@@ -124,9 +124,8 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from '@/hooks/web/useI18n'
-const { t } = useI18n()
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from '@/hooks/web/useI18n'
 import { ContentWrap } from '@/components/ContentWrap'
 import {
   ElMessage,
@@ -150,6 +149,8 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { getTimesheetListApi, saveTimesheetApi, deleteTimesheetApi } from '@/api/staff_hr'
 import { getWorkerListApi } from '@/api/worker'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const tableData = ref<any[]>([])

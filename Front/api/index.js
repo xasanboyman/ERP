@@ -591,9 +591,62 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
+    if (path === 'hr/position/save' && req.method === 'POST') {
+      const { id, name, department_id, base_salary, status, description } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE positions 
+          SET name = ${name}, department_id = ${department_id || null}, base_salary = ${parseFloat(base_salary) || 0}, status = ${status !== undefined ? status : 1}, description = ${description || null}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'pos_' + Date.now().toString(36);
+        await sql`
+          INSERT INTO positions (id, name, department_id, base_salary, status, description, "createTime")
+          VALUES (${newId}, ${name}, ${department_id || null}, ${parseFloat(base_salary) || 0}, ${status !== undefined ? status : 1}, ${description || null}, NOW())
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    if (path === 'hr/position/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM positions WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
+    }
+
     if (path === 'hr/timesheet/list') {
       const rows = await sql`SELECT * FROM staff_timesheets ORDER BY id DESC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+    }
+
+    if (path === 'hr/timesheet/save' && req.method === 'POST') {
+      const { id, date, status, records } = req.body || {};
+      const recordsJson = typeof records === 'string' ? records : JSON.stringify(records || []);
+      if (id) {
+        await sql`
+          UPDATE staff_timesheets 
+          SET date = ${date}, status = ${status || 'active'}, records = ${recordsJson}::jsonb
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'TS' + Math.floor(100000 + Math.random() * 900000);
+        await sql`
+          INSERT INTO staff_timesheets (id, date, status, records, "createTime")
+          VALUES (${newId}, ${date}, ${status || 'active'}, ${recordsJson}::jsonb, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    if (path === 'hr/timesheet/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM staff_timesheets WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
     }
 
     if (path === 'hr/output/list') {
@@ -601,9 +654,61 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
+    if (path === 'hr/output/save' && req.method === 'POST') {
+      const { id, workerId, workerName, name, amount, period_month, comment } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE staff_outputs 
+          SET "workerId" = ${workerId}, "workerName" = ${workerName}, name = ${name}, amount = ${parseFloat(amount) || 0}, period_month = ${period_month}, comment = ${comment}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'OUT' + Math.floor(100000 + Math.random() * 900000);
+        await sql`
+          INSERT INTO staff_outputs (id, "workerId", "workerName", name, amount, period_month, comment, "createTime")
+          VALUES (${newId}, ${workerId}, ${workerName}, ${name}, ${parseFloat(amount) || 0}, ${period_month}, ${comment}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    if (path === 'hr/output/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM staff_outputs WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
+    }
+
     if (path === 'hr/adjustment/list') {
       const rows = await sql`SELECT * FROM staff_adjustments ORDER BY id DESC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+    }
+
+    if (path === 'hr/adjustment/save' && req.method === 'POST') {
+      const { id, workerId, document_type, amount, period_month, description } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE staff_adjustments 
+          SET "workerId" = ${workerId}, document_type = ${document_type}, amount = ${parseFloat(amount) || 0}, period_month = ${period_month}, description = ${description}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'ADJ' + Math.floor(100000 + Math.random() * 900000);
+        await sql`
+          INSERT INTO staff_adjustments (id, "workerId", document_type, amount, period_month, description, "createTime")
+          VALUES (${newId}, ${workerId}, ${document_type}, ${parseFloat(amount) || 0}, ${period_month}, ${description}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    if (path === 'hr/adjustment/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM staff_adjustments WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
     }
 
     // 17. GET /api/analysis/snapshot/list
