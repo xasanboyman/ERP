@@ -1400,7 +1400,7 @@ const debtorOptionsList = computed(() => {
     total_debt: d.total_debt,
     label:
       d.total_debt > 0
-        ? `${d.name} ({{ t('erp.oldDebtColon') }} $${formatMoney(d.total_debt)})`
+        ? `${d.name} (${t('erp.oldDebtColon')} $${formatMoney(d.total_debt)})`
         : d.name
   }))
 })
