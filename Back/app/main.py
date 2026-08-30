@@ -142,24 +142,30 @@ async def token_expiration_middleware(request: Request, call_next):
             )
     return await call_next(request)
 
-# Register routes
-app.include_router(auth.router, tags=["Authentication"])
-app.include_router(role.router, tags=["Role & Routing"])
-app.include_router(department.router, tags=["Department Management"])
-app.include_router(branch.router, tags=["Branch Management"])
-app.include_router(product.router, tags=["Product & Inventory"])
-app.include_router(worker.router, tags=["Worker Management"])
-app.include_router(salary.router, tags=["Salary & Payroll"])
-app.include_router(analytics.router, tags=["Analytics & Dashboard"])
-app.include_router(activity.router, tags=["Activity Log"])
-app.include_router(cutting.router, tags=["Cutting Management"])
-app.include_router(qr.router, tags=["QR Code Management"])
-app.include_router(staff_hr.router, tags=["Staff HR Extensions"])
-app.include_router(ai.router, tags=["AI Voice Assistant"])
-app.include_router(classifier.router, tags=["Classifier Management"])
-app.include_router(sales.router, tags=["Sales & POS Terminal"])
-app.include_router(device.router, tags=["Device Management"])
-app.include_router(ws.router, tags=["Real-Time WebSockets"])
+# Register routes (both directly and with /api prefix for serverless compatibility)
+all_routers = [
+    (auth.router, ["Authentication"]),
+    (role.router, ["Role & Routing"]),
+    (department.router, ["Department Management"]),
+    (branch.router, ["Branch Management"]),
+    (product.router, ["Product & Inventory"]),
+    (worker.router, ["Worker Management"]),
+    (salary.router, ["Salary & Payroll"]),
+    (analytics.router, ["Analytics & Dashboard"]),
+    (activity.router, ["Activity Log"]),
+    (cutting.router, ["Cutting Management"]),
+    (qr.router, ["QR Code Management"]),
+    (staff_hr.router, ["Staff HR Extensions"]),
+    (ai.router, ["AI Voice Assistant"]),
+    (classifier.router, ["Classifier Management"]),
+    (sales.router, ["Sales & POS Terminal"]),
+    (device.router, ["Device Management"]),
+    (ws.router, ["Real-Time WebSockets"]),
+]
+
+for router_obj, router_tags in all_routers:
+    app.include_router(router_obj, tags=router_tags)
+    app.include_router(router_obj, prefix="/api", tags=router_tags)
 
 @app.on_event("startup")
 async def on_startup():
