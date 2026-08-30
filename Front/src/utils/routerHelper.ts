@@ -158,18 +158,21 @@ export const generateRoutesByServer = (routes: AppCustomRouteRecordRaw[]): AppRo
   return res
 }
 
-export const pathResolve = (parentPath: string, path: string) => {
-  if (isUrl(path)) return path
-  const childPath = path.startsWith('/') || !path ? path : `/${path}`
-  return `${parentPath}${childPath}`.replace(/\/\//g, '/').trim()
+export const pathResolve = (parentPath: string = '', path: string = '') => {
+  const p = (path || '').trim()
+  const parent = (parentPath || '').trim()
+  if (isUrl(p)) return p
+  const childPath = p.startsWith('/') || !p ? p : `/${p}`
+  return `${parent}${childPath}`.replace(/\/\//g, '/').trim()
 }
 
 // 路由降级
 export const flatMultiLevelRoutes = (routes: AppRouteRecordRaw[]) => {
+  if (!routes || !Array.isArray(routes)) return []
   const modules: AppRouteRecordRaw[] = cloneDeep(routes)
   for (let index = 0; index < modules.length; index++) {
     const route = modules[index]
-    if (!isMultipleRoute(route)) {
+    if (!route || !isMultipleRoute(route)) {
       continue
     }
     promoteRouteLevel(route)

@@ -38,50 +38,50 @@ const prefetchRouteComponent = (targetPath: string) => {
   }
 }
 
-export const useRenderMenuItem = (menuMode) =>
-  // allRouters: AppRouteRecordRaw[] = [],
-  {
-    const renderMenuItem = (routers: AppRouteRecordRaw[], parentPath = '/') => {
-      return routers
-        .filter((v) => !v.meta?.hidden)
-        .map((v) => {
-          const meta = v.meta ?? {}
-          const { oneShowingChild, onlyOneChild } = hasOneShowingChild(v.children, v)
-          const fullPath = isUrl(v.path) ? v.path : pathResolve(parentPath, v.path) // getAllParentPath<AppRouteRecordRaw>(allRouters, v.path).join('/')
+export const useRenderMenuItem = (menuMode) => {
+  const renderMenuItem = (routers: AppRouteRecordRaw[], parentPath = '/') => {
+    if (!routers || !Array.isArray(routers)) return null
+    return routers
+      .filter((v) => v && !v.meta?.hidden)
+      .map((v) => {
+        if (!v) return null
+        const meta = v.meta ?? {}
+        const { oneShowingChild, onlyOneChild } = hasOneShowingChild(v.children || [], v)
+        const fullPath = isUrl(v.path || '') ? v.path : pathResolve(parentPath, v.path || '')
 
-          if (
-            oneShowingChild &&
-            (!onlyOneChild?.children || onlyOneChild?.noShowingChildren) &&
-            !meta?.alwaysShow
-          ) {
-            const itemIndex = onlyOneChild ? pathResolve(fullPath, onlyOneChild.path) : fullPath
-            return (
-              <div onMouseenter={() => prefetchRouteComponent(itemIndex)}>
-                <ElMenuItem index={itemIndex}>
-                  {{
-                    default: () => renderMenuTitle(onlyOneChild ? onlyOneChild?.meta : meta)
-                  }}
-                </ElMenuItem>
-              </div>
-            )
-          } else {
-            return (
-              <ElSubMenu
-                index={fullPath}
-                teleported
-                popperClass={unref(menuMode) === 'vertical' ? `${prefixCls}-popper--vertical` : ''}
-              >
+        if (
+          oneShowingChild &&
+          (!onlyOneChild?.children || onlyOneChild?.noShowingChildren) &&
+          !meta?.alwaysShow
+        ) {
+          const itemIndex = onlyOneChild ? pathResolve(fullPath, onlyOneChild.path || '') : fullPath
+          return (
+            <div onMouseenter={() => prefetchRouteComponent(itemIndex)}>
+              <ElMenuItem index={itemIndex}>
                 {{
-                  title: () => renderMenuTitle(meta),
-                  default: () => renderMenuItem(v.children!, fullPath)
+                  default: () => renderMenuTitle(onlyOneChild ? onlyOneChild?.meta : meta)
                 }}
-              </ElSubMenu>
-            )
-          }
-        })
-    }
-
-    return {
-      renderMenuItem
-    }
+              </ElMenuItem>
+            </div>
+          )
+        } else {
+          return (
+            <ElSubMenu
+              index={fullPath}
+              teleported
+              popperClass={unref(menuMode) === 'vertical' ? `${prefixCls}-popper--vertical` : ''}
+            >
+              {{
+                title: () => renderMenuTitle(meta),
+                default: () => renderMenuItem(v.children || [], fullPath)
+              }}
+            </ElSubMenu>
+          )
+        }
+      })
   }
+
+  return {
+    renderMenuItem
+  }
+}

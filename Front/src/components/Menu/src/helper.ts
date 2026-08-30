@@ -9,8 +9,9 @@ interface HasOneShowingChild {
 }
 
 export const getAllParentPath = <T = Recordable>(treeData: T[], path: string) => {
-  const menuList = findPath(treeData, (n) => n.path === path) as AppRouteRecordRaw[]
-  return (menuList || []).map((item) => item.path)
+  if (!treeData || !Array.isArray(treeData) || !path) return []
+  const menuList = findPath(treeData, (n) => n && n.path === path) as AppRouteRecordRaw[]
+  return (menuList || []).map((item) => item?.path).filter(Boolean) as string[]
 }
 
 export const hasOneShowingChild = (
@@ -18,8 +19,10 @@ export const hasOneShowingChild = (
   parent: AppRouteRecordRaw
 ): HasOneShowingChild => {
   const onlyOneChild = ref<OnlyOneChildType>()
+  const safeChildren = Array.isArray(children) ? children : []
 
-  const showingChildren = children.filter((v) => {
+  const showingChildren = safeChildren.filter((v) => {
+    if (!v) return false
     const meta = v.meta ?? {}
     if (meta.hidden) {
       return false
@@ -40,7 +43,7 @@ export const hasOneShowingChild = (
 
   // Show parent if there are no child router to display
   if (!showingChildren.length) {
-    onlyOneChild.value = { ...parent, path: '', noShowingChildren: true }
+    onlyOneChild.value = { ...(parent || {}), path: '', noShowingChildren: true } as any
     return {
       oneShowingChild: true,
       onlyOneChild: unref(onlyOneChild)

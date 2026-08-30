@@ -132,7 +132,7 @@ export default defineComponent({
     // 设置高亮
     const isActive = (currentPath: string) => {
       const { path } = unref(currentRoute)
-      if (tabPathMap[currentPath].includes(path)) {
+      if (tabPathMap[currentPath] && Array.isArray(tabPathMap[currentPath]) && tabPathMap[currentPath].includes(path)) {
         return true
       }
       return false
