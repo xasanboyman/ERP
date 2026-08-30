@@ -5,6 +5,10 @@
   "outputDirectory": "Front/dist",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/[...path].js"
+    },
+    {
       "source": "/((?!api|uploads).*)",
       "destination": "/index.html"
     }
