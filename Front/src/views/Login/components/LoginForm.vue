@@ -274,7 +274,14 @@ const getRole = async () => {
       ? await getAdminRoleApi(params)
       : await getTestRoleApi(params)
   if (res) {
-    const routers = res.data || []
+    let routers: any = res.data || []
+    if (!Array.isArray(routers)) {
+      if (routers && typeof routers === 'object' && Array.isArray(routers.list)) {
+        routers = routers.list
+      } else {
+        routers = []
+      }
+    }
     userStore.setRoleRouters(routers)
     appStore.getDynamicRouter && appStore.getServerDynamicRouter
       ? await permissionStore.generateRoutes('server', routers).catch(() => {})

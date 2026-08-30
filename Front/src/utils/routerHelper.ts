@@ -45,7 +45,18 @@ export const generateRoutesByFrontEnd = (
 ): AppRouteRecordRaw[] => {
   const res: AppRouteRecordRaw[] = []
 
-  for (const route of routes) {
+  let safeKeys: string[] = []
+  if (Array.isArray(keys)) {
+    safeKeys = keys
+  } else if (keys && typeof keys === 'object' && Array.isArray((keys as any).list)) {
+    safeKeys = (keys as any).list
+  } else if (typeof keys === 'string') {
+    safeKeys = [keys]
+  }
+
+  const safeRoutes = Array.isArray(routes) ? routes : []
+
+  for (const route of safeRoutes) {
     const meta = route.meta ?? {}
     // skip some route
     if (meta.hidden && !meta.canTo) {
@@ -64,7 +75,8 @@ export const generateRoutesByFrontEnd = (
     }
 
     // 开发者可以根据实际情况进行扩展
-    for (const item of keys) {
+    for (const item of safeKeys) {
+      if (!item || typeof item !== 'string') continue
       // 通过路径去匹配
       if (isUrl(item) && (onlyOneChild === item || route.path === item)) {
         data = Object.assign({}, route)
@@ -80,7 +92,7 @@ export const generateRoutesByFrontEnd = (
     if (route.children && data) {
       data.children = generateRoutesByFrontEnd(
         route.children,
-        keys,
+        safeKeys,
         pathResolve(basePath, data.path)
       )
     }
@@ -95,7 +107,15 @@ export const generateRoutesByFrontEnd = (
 export const generateRoutesByServer = (routes: AppCustomRouteRecordRaw[]): AppRouteRecordRaw[] => {
   const res: AppRouteRecordRaw[] = []
 
-  for (const route of routes) {
+  let safeRoutes: AppCustomRouteRecordRaw[] = []
+  if (Array.isArray(routes)) {
+    safeRoutes = routes
+  } else if (routes && typeof routes === 'object' && Array.isArray((routes as any).list)) {
+    safeRoutes = (routes as any).list
+  }
+
+  for (const route of safeRoutes) {
+    if (!route || typeof route !== 'object') continue
     const data: AppRouteRecordRaw = {
       path: route.path,
       name: route.name,
@@ -130,7 +150,6 @@ export const generateRoutesByServer = (routes: AppCustomRouteRecordRaw[]): AppRo
     }
 
     // recursive child routes
-
     if (route.children) {
       data.children = generateRoutesByServer(route.children)
     }

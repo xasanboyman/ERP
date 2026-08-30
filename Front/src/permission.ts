@@ -83,9 +83,16 @@ router.beforeEach(async (to, from, next) => {
         return
       }
 
-      const roleRouters = userStore.getRoleRouters || []
+      let roleRouters: any = userStore.getRoleRouters
+      if (!Array.isArray(roleRouters)) {
+        if (roleRouters && typeof roleRouters === 'object' && Array.isArray(roleRouters.list)) {
+          roleRouters = roleRouters.list
+        } else {
+          roleRouters = []
+        }
+      }
 
-      if (appStore.getDynamicRouter) {
+      if (appStore.getDynamicRouter && roleRouters.length > 0) {
         appStore.serverDynamicRouter
           ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
           : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
