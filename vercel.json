@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "(if [ -d 'Front' ]; then cd Front; fi && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build)",
   "outputDirectory": "Front/dist",
   "rewrites": [
