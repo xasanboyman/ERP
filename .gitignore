@@ -5,7 +5,12 @@ Front/node_modules
 Front/dist
 Front/dist-pro
 Front/dist-dev
-Back/venv
+**/venv
+**/venv/**
+venv/
+**/vendor
+**/vendor/**
+vendor/
 Back/__pycache__
 Back/app/__pycache__
 Back/app/routers/__pycache__
@@ -28,4 +33,3 @@ __pycache__/
 .pytest_cache/
 *.sql
 *.sql.gz
-Back/vendor/
