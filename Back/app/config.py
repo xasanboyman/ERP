@@ -11,4 +11,11 @@ class Settings:
         _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
     DATABASE_URL: str = _raw_db_url
 
+    AWS_ENDPOINT_URL_S3: str = os.getenv("AWS_ENDPOINT_URL_S3", "")
+    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    AWS_REGION: str = os.getenv("AWS_REGION", "us-east-2")
+    AWS_S3_BUCKET: str = os.getenv("AWS_S3_BUCKET", "uploads")
+
 settings = Settings()
+

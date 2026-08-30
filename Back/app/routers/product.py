@@ -271,14 +271,9 @@ def upload_product_image(file: UploadFile = File(...)):
     if ext not in [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]:
         ext = ".png"
 
-    filename = f"prod_{uuid.uuid4().hex[:12]}{ext}"
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    upload_dir = os.path.join(base_dir, "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    filepath = os.path.join(upload_dir, filename)
+    from app.storage import upload_file_bytes
+    file_bytes = file.file.read()
+    content_type = file.content_type or "image/png"
+    url = upload_file_bytes(file_bytes, file.filename, content_type=content_type)
 
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    url = f"/uploads/{filename}"
     return {"code": 0, "message": "success", "data": {"url": url}}
