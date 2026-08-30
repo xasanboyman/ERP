@@ -249,11 +249,20 @@ const fetchSavedSnapshots = async () => {
   try {
     const res = await getFinancialSnapshotsApi()
     if (res && res.data) {
-      savedSnapshots.value = res.data || []
+      if (Array.isArray(res.data)) {
+        savedSnapshots.value = res.data
+      } else if (res.data && Array.isArray((res.data as any).list)) {
+        savedSnapshots.value = (res.data as any).list
+      } else {
+        savedSnapshots.value = []
+      }
       buildArchiveCharts()
+    } else {
+      savedSnapshots.value = []
     }
   } catch (err) {
     console.error('Failed to load snapshots:', err)
+    savedSnapshots.value = []
   } finally {
     snapshotsLoading.value = false
   }
@@ -261,10 +270,12 @@ const fetchSavedSnapshots = async () => {
 
 // Check if currently selected month in closing view is already closed
 const isSelectedMonthAlreadyClosed = computed(() => {
+  if (!Array.isArray(savedSnapshots.value)) return false
   return savedSnapshots.value.some((s) => s.period_month === closeMonthInput.value)
 })
 
 const existingSnapshotForSelectedMonth = computed(() => {
+  if (!Array.isArray(savedSnapshots.value)) return null
   return savedSnapshots.value.find((s) => s.period_month === closeMonthInput.value) || null
 })
 

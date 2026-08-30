@@ -125,8 +125,8 @@ const defaultAdminRoutes = [
       },
       {
         path: 'timesheets',
-        component: 'views/Worker/Timesheets',
-        name: 'WorkerTimesheets',
+        component: 'views/StaffHR/Timesheet',
+        name: 'TimesheetManagement',
         meta: {
           title: 'Ish Vaqti (Davomat)',
           noCache: true
@@ -134,8 +134,8 @@ const defaultAdminRoutes = [
       },
       {
         path: 'outputs',
-        component: 'views/Worker/Outputs',
-        name: 'WorkerOutputs',
+        component: 'views/StaffHR/Output',
+        name: 'OutputManagement',
         meta: {
           title: 'Kunlik Ishbay Ishlab Chiqarish',
           noCache: true
@@ -143,8 +143,8 @@ const defaultAdminRoutes = [
       },
       {
         path: 'adjustments',
-        component: 'views/Worker/Adjustments',
-        name: 'WorkerAdjustments',
+        component: 'views/StaffHR/Adjustment',
+        name: 'AdjustmentManagement',
         meta: {
           title: 'Mukofot va Jarimalar',
           noCache: true
@@ -514,25 +514,46 @@ export default async function handler(req, res) {
       });
     }
 
-    // 16. GET /api/hr/output/list
+    // 16. Staff HR Endpoints
+    if (path === 'hr/position/list') {
+      const rows = await sql`SELECT * FROM positions ORDER BY id ASC`;
+      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+    }
+
+    if (path === 'hr/timesheet/list') {
+      const rows = await sql`SELECT * FROM staff_timesheets ORDER BY id DESC`;
+      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+    }
+
     if (path === 'hr/output/list') {
       const rows = await sql`SELECT * FROM staff_outputs ORDER BY id DESC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
-    // 17. GET /api/branch/list
+    if (path === 'hr/adjustment/list') {
+      const rows = await sql`SELECT * FROM staff_adjustments ORDER BY id DESC`;
+      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+    }
+
+    // 17. GET /api/analysis/snapshot/list
+    if (path === 'analysis/snapshot/list') {
+      const rows = await sql`SELECT * FROM monthly_financial_snapshots ORDER BY period_month DESC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+
+    // 18. GET /api/branch/list
     if (path === 'branch/list') {
       const rows = await sql`SELECT * FROM branches ORDER BY id ASC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
-    // 18. GET /api/classifier/list
+    // 19. GET /api/classifier/list
     if (path === 'classifier/list') {
       const rows = await sql`SELECT * FROM classifier_items ORDER BY id ASC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
-    // 19. GET /api/analysis/financial-overview
+    // 20. GET /api/analysis/financial-overview
     if (path === 'analysis/financial-overview') {
       const [salesRows, products, workers, salariesPaid] = await Promise.all([
         sql`SELECT sum(total) as sales_total FROM sales`,
@@ -580,7 +601,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 20. GET /api/analysis/total
+    // 21. GET /api/analysis/total
     if (path === 'analysis/total') {
       const [pRes, wRes] = await Promise.all([
         sql`SELECT count(*) as count, sum(price * quantityInStock) as total_price FROM products`,
