@@ -343,6 +343,33 @@ export default async function handler(req, res) {
     const authUser = authenticate(req, res);
     if (!authUser) return;
 
+    // User Profile Save & Update
+    if (path === 'user/save' && req.method === 'POST') {
+      const { id, username, password, full_name, phone, email, avatar, role, roleId } = req.body || {};
+      if (password) {
+        await sql`
+          UPDATE users 
+          SET hashed_password = ${password}, full_name = ${full_name || username}, phone = ${phone || null}, email = ${email || null}, avatar = ${avatar || ''}
+          WHERE username = ${username} OR id = ${id}
+        `;
+      } else {
+        await sql`
+          UPDATE users 
+          SET full_name = ${full_name || username}, phone = ${phone || null}, email = ${email || null}, avatar = ${avatar || ''}
+          WHERE username = ${username} OR id = ${id}
+        `;
+      }
+      const userRows = await sql`SELECT * FROM users WHERE username = ${username} OR id = ${id}`;
+      return res.status(200).json({ code: 0, data: userRows[0] || req.body, message: 'Saqlandi' });
+    }
+
+    if (path === 'user/updateAvatar' && req.method === 'POST') {
+      const { username, avatar } = req.body || {};
+      await sql`UPDATE users SET avatar = ${avatar} WHERE username = ${username}`;
+      const userRows = await sql`SELECT * FROM users WHERE username = ${username}`;
+      return res.status(200).json({ code: 0, data: userRows[0] || { username, avatar }, message: 'Avatar saqlandi' });
+    }
+
     // 3. GET /api/workplace/total
     if (path === 'workplace/total') {
       const [pCount, wCount, tCount] = await Promise.all([
@@ -650,7 +677,12 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/output/list') {
-      const rows = await sql`SELECT * FROM staff_outputs ORDER BY id DESC`;
+      const rows = await sql`
+        SELECT o.*, COALESCE(o."workerName", w.name, o."workerId") as "workerName" 
+        FROM staff_outputs o 
+        LEFT JOIN workers w ON o."workerId" = w.id OR o."workerId" = w.employee_code
+        ORDER BY o.id DESC
+      `;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
@@ -681,7 +713,12 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/adjustment/list') {
-      const rows = await sql`SELECT * FROM staff_adjustments ORDER BY id DESC`;
+      const rows = await sql`
+        SELECT a.*, COALESCE(w.name, a."workerId") as "workerName" 
+        FROM staff_adjustments a 
+        LEFT JOIN workers w ON a."workerId" = w.id OR a."workerId" = w.employee_code
+        ORDER BY a.id DESC
+      `;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 

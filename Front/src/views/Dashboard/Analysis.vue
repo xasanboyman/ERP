@@ -36,6 +36,8 @@ import {
   closeMonthlyFinancialSnapshotApi,
   deleteFinancialSnapshotApi
 } from '@/api/dashboard/analysis'
+import { exportToExcel } from '@/utils/exportReport'
+import { formatMoney } from '@/utils'
 import { useI18n } from '@/hooks/web/useI18n'
 import { useLocaleStore } from '@/store/modules/locale'
 import type { EChartsOption } from 'echarts'
@@ -1497,6 +1499,38 @@ useRealtimeSync(
   800
 )
 
+const handleExportFinancialExcel = () => {
+  if (monthlyFinancialTable.value.length === 0 && savedSnapshots.value.length === 0) {
+    ElMessage.warning('Eksport qilish uchun moliyaviy hisobot maʼlumotlari mavjud emas')
+    return
+  }
+  const sourceList =
+    monthlyFinancialTable.value.length > 0 ? monthlyFinancialTable.value : savedSnapshots.value
+  const reportData = sourceList.map((item: any) => ({
+    month: item.month || item.period_month,
+    revenue: item.revenue || item.grossRevenue || 0,
+    cogs: item.cogs || 0,
+    payroll: item.payroll || item.totalPayroll || item.staffSalaries || 0,
+    expenses: item.expenses || item.totalExpenses || 0,
+    profit: item.profit || item.realNetProfit || 0,
+    margin: (item.margin || item.profitMargin || 0) + '%'
+  }))
+  exportToExcel(
+    'Oylik_Moliyaviy_Hisobotlar',
+    [
+      { key: 'month', title: 'Davr (Oy)' },
+      { key: 'revenue', title: 'Jami Savdo Tushumi ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'cogs', title: 'Tannarx Sarfi ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'payroll', title: 'Xodimlar Ish Haqi ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'expenses', title: 'Jami Xarajatlar ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'profit', title: 'Haqiqiy Sof Foyda ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'margin', title: 'Rentabellik (Marja)' }
+    ],
+    reportData
+  )
+  ElMessage.success('Moliyaviy hisobot Excel fayliga yuklab olindi!')
+}
+
 onMounted(() => {
   loadAnalyticsData()
   fetchSavedSnapshots()
@@ -1557,6 +1591,14 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-10px">
+        <ElButton
+          type="success"
+          plain
+          class="!font-bold shadow-sm"
+          @click="handleExportFinancialExcel"
+        >
+          <Icon icon="vi-ep:download" class="mr-6px" /> Excelga Hisobot
+        </ElButton>
         <ElTooltip :content="t('analysis.tipRefresh') || t('common.refresh')" placement="top">
           <ElButton type="primary" plain class="!font-bold shadow-sm" @click="loadAnalyticsData">
             <Icon icon="vi-ep:refresh" class="mr-6px" /> {{ t('common.refresh') }}

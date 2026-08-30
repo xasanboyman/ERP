@@ -1073,27 +1073,44 @@ useRealtimeSync('product', () => {
 
 import { exportToExcel } from '@/utils/exportReport'
 
-const handleExportExcel = () => {
-  if (tableData.value.length === 0) {
-    ElMessage.warning('Eksport qilish uchun mahsulotlar mavjud emas')
-    return
+const exportLoading = ref(false)
+const handleExportExcel = async () => {
+  try {
+    exportLoading.value = true
+    ElMessage.info('Barcha mahsulotlar maʼlumotlari yuklanmoqda...')
+    const res = await getProductListApi({
+      pageIndex: 1,
+      pageSize: 50000,
+      productName: searchQuery.productName || undefined,
+      category: searchQuery.category || undefined
+    })
+    const allProducts = res?.data?.list || tableData.value || []
+    if (allProducts.length === 0) {
+      ElMessage.warning('Eksport qilish uchun mahsulotlar mavjud emas')
+      return
+    }
+    exportToExcel(
+      'Barcha_Ombor_Mahsulotlari',
+      [
+        { key: 'id', title: 'ID / Kod' },
+        { key: 'productName', title: 'Mahsulot Nomi' },
+        { key: 'shtrix_code', title: 'Shtrix-Kod' },
+        { key: 'category', title: 'Kategoriya' },
+        { key: 'cost', title: 'Tannarx ($)', formatter: (v) => formatMoney(v || 0) },
+        { key: 'price', title: 'Sotuv Narxi ($)', formatter: (v) => formatMoney(v || 0) },
+        { key: 'quantityInStock', title: 'Qoldiq Miqdor' },
+        { key: 'unit', title: 'O‘lchov Birligi' },
+        { key: 'brand_name', title: 'Brend' }
+      ],
+      allProducts
+    )
+    ElMessage.success(`Barcha (${allProducts.length} ta) mahsulotlar Excel fayliga yuklab olindi!`)
+  } catch (err: any) {
+    console.error(err)
+    ElMessage.error(err.message || 'Excelga eksport qilishda xatolik yuz berdi')
+  } finally {
+    exportLoading.value = false
   }
-  exportToExcel(
-    'Ombor_Mahsulotlari',
-    [
-      { key: 'id', title: 'ID / Kod' },
-      { key: 'productName', title: 'Mahsulot Nomi' },
-      { key: 'shtrix_code', title: 'Shtrix-Kod' },
-      { key: 'category', title: 'Kategoriya' },
-      { key: 'cost', title: 'Tannarx ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'price', title: 'Sotuv Narxi ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'quantityInStock', title: 'Qoldiq Miqdor' },
-      { key: 'unit', title: 'O‘lchov Birligi' },
-      { key: 'brand_name', title: 'Brend' }
-    ],
-    tableData.value
-  )
-  ElMessage.success('Mahsulotlar ro‘yxati Excel fayliga yuklab olindi!')
 }
 
 const handleSearch = () => {

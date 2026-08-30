@@ -442,14 +442,15 @@
       :title="t('erp.newSaleRegister')"
       :init-width="posDialogInitWidth"
       :init-height="posDialogInitHeight"
-      :min-resize-width="700"
-      :min-resize-height="400"
+      :min-resize-width="850"
+      :min-resize-height="550"
+      :auto-height="false"
       class="pos-dialog-wrap"
     >
       <div class="pos-dialog-body flex flex-col h-full">
         <ElRow :gutter="16" class="flex-1 min-h-0">
           <!-- Left Panel: Barcode Scanner & Product Catalog Table -->
-          <ElCol :xs="24" :lg="15" class="flex flex-col h-full">
+          <ElCol :xs="24" :lg="16" class="flex flex-col h-full">
             <div class="pos-left-panel flex flex-col h-full">
               <!-- Scanner Bar with Batch Quantity Input -->
               <div class="mb-10px flex-shrink-0 flex gap-8px items-center">
@@ -621,7 +622,7 @@
           </ElCol>
 
           <!-- Right Panel: Cart & Checkout -->
-          <ElCol :xs="24" :lg="9" class="flex flex-col h-full">
+          <ElCol :xs="24" :lg="8" class="flex flex-col h-full">
             <div class="pos-cart-panel flex flex-col justify-between h-full">
               <!-- Cart Header -->
               <div

@@ -9,7 +9,6 @@ import UploadAvatar from './components/UploadAvatar.vue'
 import { Dialog } from '@/components/Dialog'
 import EditInfo from './components/EditInfo.vue'
 import EditPassword from './components/EditPassword.vue'
-import ConnectedDevices from './components/ConnectedDevices.vue'
 
 import { useUserStore } from '@/store/modules/user'
 import { updateUserAvatarApi } from '@/api/login'
@@ -26,7 +25,7 @@ const userInfo = computed(() => {
     phoneNumber: (u as any)?.phone || (u as any)?.phoneNumber || '',
     email: (u as any)?.email || '',
     avatarUrl: u?.avatar || '',
-    roleList: u?.role ? [u.role] : ['Foydalanuvchi']
+    roleList: u?.role ? [u.role] : ['Super Administrator']
   }
 })
 
@@ -61,64 +60,76 @@ const saveAvatar = async () => {
 </script>
 
 <template>
-  <div class="flex w-100% h-100%">
-    <ContentWrap title="Shaxsiy ma'lumotlar" class="w-400px">
-      <div class="flex justify-center items-center">
+  <div class="flex flex-col md:flex-row gap-20px w-full h-full">
+    <ContentWrap title="Shaxsiy ma'lumotlar" class="w-full md:w-360px flex-shrink-0">
+      <div class="flex flex-col justify-center items-center py-10px">
         <div
-          class="avatar w-[150px] h-[150px] relative cursor-pointer"
+          class="avatar w-[130px] h-[130px] relative cursor-pointer group rounded-full overflow-hidden shadow-md border-2 border-[var(--el-border-color)]"
           @click="dialogVisible = true"
         >
           <ElImage
-            class="w-[150px] h-[150px] rounded-full"
+            class="w-full h-full object-cover"
             :src="userInfo?.avatarUrl || defaultAvatar"
-            fit="fill"
+            fit="cover"
           />
+          <div
+            class="absolute inset-0 bg-black/40 text-white text-12px font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            O'zgartirish
+          </div>
         </div>
+        <div class="mt-12px text-16px font-bold text-[var(--el-text-color-primary)]">
+          {{ userInfo?.realName }}
+        </div>
+        <div class="text-13px text-[var(--el-text-color-secondary)]">@{{ userInfo?.username }}</div>
       </div>
-      <ElDivider />
-      <div class="flex justify-between items-center">
-        <div>Akkaunt:</div>
-        <div>{{ userInfo?.username }}</div>
+      <ElDivider class="!my-12px" />
+      <div class="flex justify-between items-center py-6px text-14px">
+        <div class="text-[var(--el-text-color-regular)]">Foydalanuvchi:</div>
+        <div class="font-mono font-medium">{{ userInfo?.username }}</div>
       </div>
-      <ElDivider />
-      <div class="flex justify-between items-center">
-        <div>Taxallus:</div>
-        <div>{{ userInfo?.realName }}</div>
+      <ElDivider class="!my-8px" />
+      <div class="flex justify-between items-center py-6px text-14px">
+        <div class="text-[var(--el-text-color-regular)]">To'liq ism:</div>
+        <div class="font-medium">{{ userInfo?.realName }}</div>
       </div>
-      <ElDivider />
-      <div class="flex justify-between items-center">
-        <div>Telefon raqami:</div>
-        <div>{{ userInfo?.phoneNumber ?? '-' }}</div>
+      <ElDivider class="!my-8px" />
+      <div class="flex justify-between items-center py-6px text-14px">
+        <div class="text-[var(--el-text-color-regular)]">Telefon raqami:</div>
+        <div class="font-mono font-medium">{{ userInfo?.phoneNumber || '—' }}</div>
       </div>
-      <ElDivider />
-      <div class="flex justify-between items-center">
-        <div>Elektron pochta:</div>
-        <div>{{ userInfo?.email ?? '-' }}</div>
+      <ElDivider class="!my-8px" />
+      <div class="flex justify-between items-center py-6px text-14px">
+        <div class="text-[var(--el-text-color-regular)]">Elektron pochta:</div>
+        <div class="font-medium">{{ userInfo?.email || '—' }}</div>
       </div>
-      <ElDivider />
-      <div class="flex justify-between items-center">
-        <div>Roli:</div>
+      <ElDivider class="!my-8px" />
+      <div class="flex justify-between items-center py-6px text-14px">
+        <div class="text-[var(--el-text-color-regular)]">Tizimdagi roli:</div>
         <div>
-          <template v-if="userInfo?.roleList?.length">
-            <ElTag v-for="item in userInfo?.roleList || []" :key="item" class="ml-2 mb-w"
-              >{{ item }}
-            </ElTag>
-          </template>
-          <template v-else>-</template>
+          <ElTag
+            v-for="item in userInfo?.roleList || []"
+            :key="item"
+            type="success"
+            effect="plain"
+            class="font-bold"
+          >
+            {{ item }}
+          </ElTag>
         </div>
       </div>
-      <ElDivider />
     </ContentWrap>
-    <ContentWrap title="Asosiy ma'lumotlar" class="flex-[3] ml-20px">
+    <ContentWrap title="Profilni tahrirlash" class="flex-1">
       <ElTabs v-model="activeName">
         <ElTabPane label="Asosiy ma'lumotlar" name="first">
-          <EditInfo :user-info="userInfo" />
+          <div class="py-10px max-w-600px">
+            <EditInfo :user-info="userInfo" />
+          </div>
         </ElTabPane>
         <ElTabPane label="Parolni o'zgartirish" name="second">
-          <EditPassword />
-        </ElTabPane>
-        <ElTabPane label="Ulangan qurilmalar" name="third">
-          <ConnectedDevices />
+          <div class="py-10px max-w-600px">
+            <EditPassword />
+          </div>
         </ElTabPane>
       </ElTabs>
     </ContentWrap>

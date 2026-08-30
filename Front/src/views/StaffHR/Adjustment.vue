@@ -31,9 +31,11 @@
             <span class="id-mono">{{ scope.row.id }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="workerName" label="Xodim (Usta)" width="180">
+        <el-table-column prop="workerName" label="Xodim (Usta)" min-width="180">
           <template #default="scope">
-            <span class="worker-name">{{ scope.row.workerName }}</span>
+            <span class="worker-name font-semibold text-[var(--el-text-color-primary)]">{{
+              getWorkerDisplayName(scope.row)
+            }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="document_type" label="Turi" width="160" align="center">
@@ -43,19 +45,14 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="amount" :label="t('erp.miqdoriDollar')" min-width="160">
+        <el-table-column prop="amount" label="Miqdori ($)" min-width="160">
           <template #default="scope">
             <span class="amount-value font-mono whitespace-nowrap">{{
               formatMoney(scope.row.amount)
             }}</span>
           </template>
         </el-table-column>
-        <el-table-column
-          prop="period_month"
-          :label="t('erp.reportMonth')"
-          width="130"
-          align="center"
-        >
+        <el-table-column prop="period_month" label="Hisobot oyi" width="130" align="center">
           <template #default="scope">
             <span class="period-mono">{{ scope.row.period_month }}</span>
           </template>
@@ -71,7 +68,7 @@
             <span class="date-mono">{{ scope.row.createTime }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('erp.amallar')" width="180" fixed="right">
+        <el-table-column label="Amallar" width="180" fixed="right">
           <template #default="scope">
             <el-button
               link
@@ -191,6 +188,15 @@ const loading = ref(false)
 const tableData = ref<any[]>([])
 const workers = ref<any[]>([])
 const selectedIds = ref<string[]>([])
+
+const getWorkerDisplayName = (row: any) => {
+  if (row.workerName && row.workerName !== row.workerId) return row.workerName
+  const w = workers.value.find(
+    (item) =>
+      item.id === row.workerId || item.employee_code === row.workerId || item.name === row.workerId
+  )
+  return w ? w.name : row.workerName || row.workerId || '—'
+}
 
 useRealtimeSync(['staff_hr', 'staff_adjustment', 'adjustment', 'worker'], () => {
   getList()
