@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pip install -r requirements.txt --target Back/vendor && pnpm install --force",
+  "installCommand": "(pip install -r requirements.txt --target Back/vendor || pip3 install -r requirements.txt --target Back/vendor || true) && pnpm install --force",
   "buildCommand": "NODE_OPTIONS='--max-old-space-size=4096' pnpm run build",
   "outputDirectory": "dist",
   "rewrites": [

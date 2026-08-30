@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pip install -r requirements.txt --target Back/vendor && cd Front && pnpm install --force",
-  "buildCommand": "cd Front && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build",
+  "installCommand": "(pip install -r requirements.txt --target Back/vendor || pip3 install -r requirements.txt --target Back/vendor || true) && (if [ -d 'Front' ]; then cd Front; fi && pnpm install --force)",
+  "buildCommand": "(if [ -d 'Front' ]; then cd Front; fi && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build)",
   "outputDirectory": "Front/dist",
   "rewrites": [
     {
