@@ -60,6 +60,15 @@ class RealtimeService {
 
   public connect(): void {
     if (typeof window === 'undefined') return
+    // Vercel serverless functions do not host persistent WebSockets
+    if (window.location.hostname.includes('vercel.app')) {
+      this.status.value = 'disconnected'
+      return
+    }
+    if (this.reconnectAttempts >= 3) {
+      this.status.value = 'disconnected'
+      return
+    }
     if (
       this.ws &&
       (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
@@ -101,20 +110,23 @@ class RealtimeService {
         }
       }
 
-      this.ws.onclose = (e) => {
+      this.ws.onclose = () => {
         this.status.value = 'disconnected'
         this.stopHeartbeat()
-        if (!this.isExplicitClose) {
+        if (!this.isExplicitClose && this.reconnectAttempts < 3) {
           this.scheduleReconnect()
         }
       }
 
-      this.ws.onerror = (err) => {
-        console.debug('[RealtimeSync] WebSocket error, attempting auto-reconnect...', err)
+      this.ws.onerror = () => {
+        // Silently handle error without uncaught exceptions
+        this.status.value = 'disconnected'
       }
     } catch (err) {
       this.status.value = 'disconnected'
-      this.scheduleReconnect()
+      if (this.reconnectAttempts < 3) {
+        this.scheduleReconnect()
+      }
     }
   }
 
@@ -149,12 +161,9 @@ class RealtimeService {
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer || this.isExplicitClose) return
+    if (this.reconnectTimer || this.isExplicitClose || this.reconnectAttempts >= 3) return
     this.reconnectAttempts++
     const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), this.maxReconnectDelay)
-    console.debug(
-      `[RealtimeSync] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`
-    )
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.connect()

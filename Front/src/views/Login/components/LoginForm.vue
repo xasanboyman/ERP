@@ -17,8 +17,6 @@ import { BaseButton } from '@/components/Button'
 
 const { required } = useValidator()
 
-const emit = defineEmits(['to-register'])
-
 const appStore = useAppStore()
 
 const userStore = useUserStore()
@@ -43,7 +41,11 @@ const schema = reactive<FormSchema[]>([
     formItemProps: {
       slots: {
         default: () => {
-          return <h2 class="text-2xl font-bold text-center w-[100%]">{t('login.login')}</h2>
+          return (
+            <h2 class="text-2xl font-bold text-center w-[100%] text-slate-800 dark:text-slate-100 mb-10px">
+              {t('login.login')}
+            </h2>
+          )
         }
       }
     }
@@ -51,19 +53,17 @@ const schema = reactive<FormSchema[]>([
   {
     field: 'username',
     label: t('login.username'),
-    // value: 'admin',
     component: 'Input',
     colProps: {
       span: 24
     },
     componentProps: {
-      placeholder: 'admin or test'
+      placeholder: t('login.usernamePlaceholder')
     }
   },
   {
     field: 'password',
     label: t('login.password'),
-    // value: 'admin',
     component: 'InputPassword',
     colProps: {
       span: 24
@@ -72,11 +72,10 @@ const schema = reactive<FormSchema[]>([
       style: {
         width: '100%'
       },
-      placeholder: 'admin or test',
-      // 按下enter键触发登录
+      placeholder: t('login.passwordPlaceholder'),
       onKeydown: (_e: any) => {
         if (_e.key === 'Enter') {
-          _e.stopPropagation() // 阻止事件冒泡
+          _e.stopPropagation()
           signIn()
         }
       }
@@ -137,23 +136,11 @@ const schema = reactive<FormSchema[]>([
       slots: {
         default: () => {
           return (
-            <>
-              <div class="w-[100%]">
-                <BaseButton
-                  loading={loading.value}
-                  type="primary"
-                  class="w-[100%]"
-                  onClick={signIn}
-                >
-                  {t('login.login')}
-                </BaseButton>
-              </div>
-              <div class="w-[100%] mt-15px">
-                <BaseButton class="w-[100%]" onClick={toRegister}>
-                  {t('login.register')}
-                </BaseButton>
-              </div>
-            </>
+            <div class="w-[100%]">
+              <BaseButton loading={loading.value} type="primary" class="w-[100%]" onClick={signIn}>
+                {t('login.login')}
+              </BaseButton>
+            </div>
           )
         }
       }
@@ -308,11 +295,6 @@ const getRole = async () => {
         : firstAllowed
     push({ path: targetPath })
   }
-}
-
-// 去注册页面
-const toRegister = () => {
-  emit('to-register')
 }
 </script>
 

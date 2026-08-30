@@ -10,9 +10,12 @@ from .routers import auth, role, department, branch, product, worker, salary, an
 import datetime
 import os
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print("Database init notice:", e)
 
-# Auto-migrate optional columns into SQLite tables if missing
+# Auto-migrate optional columns if missing
 try:
     from sqlalchemy import text
     with engine.connect() as conn:
@@ -29,8 +32,8 @@ try:
         except Exception:
             pass
         conn.commit()
-except Exception:
-    pass
+except Exception as e:
+    print("Column migration notice:", e)
 
 
 def seed_initial_roles_and_users():
@@ -96,15 +99,18 @@ def seed_initial_roles_and_users():
     finally:
         db.close()
 
-seed_initial_roles_and_users()
-
 app = FastAPI(title="ERP System Backend", version="1.0.0")
 
 # Serve uploaded product images
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 uploads_dir = os.path.join(base_dir, "uploads")
-os.makedirs(uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+try:
+    if not os.path.exists(uploads_dir):
+        os.makedirs(uploads_dir, exist_ok=True)
+    if os.path.exists(uploads_dir):
+        app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+except Exception as err:
+    print("Uploads mount notice:", err)
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
@@ -157,19 +163,17 @@ app.include_router(ws.router, tags=["Real-Time WebSockets"])
 
 @app.on_event("startup")
 async def on_startup():
+    try:
+        seed_initial_roles_and_users()
+    except Exception as e:
+        print("Startup seed notice:", e)
+
     from .websocket_manager import manager
     import asyncio
     try:
         manager.set_loop(asyncio.get_running_loop())
     except Exception as e:
         print("WS loop bind notice:", e)
-
-# Mount MCP (Model Context Protocol) endpoint for AI agents
-try:
-    import mcp_server
-    app.mount("/mcp", mcp_server.mcp.http_app())
-except Exception as mcp_err:
-    print(f"Warning: Could not mount /mcp: {mcp_err}")
 
 
 
