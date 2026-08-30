@@ -794,7 +794,15 @@ export default async function handler(req, res) {
       const recNo = receipt_number || ('CHK-' + Date.now().toString(36).toUpperCase());
       const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-      const tAmount = parseFloat(total_amount) || 0;
+      let tAmount = parseFloat(total_amount);
+      if (isNaN(tAmount) || tAmount <= 0) {
+        if (Array.isArray(items) && items.length > 0) {
+          tAmount = items.reduce((acc, it) => acc + (parseFloat(it.total) || (parseFloat(it.price) || 0) * (parseFloat(it.quantity) || 1)), 0);
+        } else {
+          tAmount = 0;
+        }
+      }
+
       const pAmount = parseFloat(paid_amount) || 0;
       const dAmount = parseFloat(debt_amount) || (payment_method === 'nasiya' ? Math.max(0, tAmount - pAmount) : 0);
 
@@ -805,7 +813,7 @@ export default async function handler(req, res) {
           discount, remark, created_at
         ) VALUES (
           ${saleId}, ${recNo}, ${cashier_name || 'admin'}, ${customer_name || null}, ${customer_phone || null},
-          ${payment_method || 'naqd'}, ${tAmount}, ${pAmount}, ${dAmount}, ${parseInt(total_items || 1, 10)},
+          ${payment_method || 'naqd'}, ${tAmount}, ${pAmount}, ${dAmount}, ${parseInt(total_items || (items ? items.length : 1), 10)},
           ${parseFloat(discount) || 0}, ${remark || null}, ${nowStr}
         )
       `;
@@ -819,7 +827,7 @@ export default async function handler(req, res) {
               price, cost, quantity, unit_name, total
             ) VALUES (
               ${itemId}, ${saleId}, ${item.product_id || item.id}, ${item.product_name || item.productName}, ${item.shtrix_code || item.SKU || null},
-              ${parseFloat(item.price) || 0}, ${parseFloat(item.cost) || 0}, ${parseInt(item.quantity || 1, 10)}, ${item.unit_name || item.unit || 'dona'}, ${parseFloat(item.total || item.price * (item.quantity || 1)) || 0}
+              ${parseFloat(item.price) || 0}, ${parseFloat(item.cost) || 0}, ${parseInt(item.quantity || 1, 10)}, ${item.unit_name || item.unit || 'dona'}, ${parseFloat(item.total || (item.price * (item.quantity || 1))) || 0}
             )
           `;
           if (item.product_id || item.id) {
@@ -838,7 +846,11 @@ export default async function handler(req, res) {
           id: saleId,
           receipt_number: recNo,
           total_amount: tAmount,
+          paid_amount: pAmount,
           debt_amount: dAmount,
+          payment_method: payment_method || 'naqd',
+          cashier_name: cashier_name || 'admin',
+          customer_name: customer_name,
           created_at: nowStr
         },
         message: 'Sotuv muvaffaqiyatli amalga oshirildi'
@@ -853,12 +865,360 @@ export default async function handler(req, res) {
       if (!sale) {
         return res.status(200).json({ code: 0, data: null });
       }
-      const items = await sql`SELECT * FROM sale_items WHERE sale_id = ${sale.id}`;
+      let items = await sql`SELECT * FROM sale_items WHERE sale_id = ${sale.id}`;
+
+      // Fallback for older seeded sales that don't have separate sale_items entries
+      if ((!items || items.length === 0) && parseFloat(sale.total_amount) > 0) {
+        items = [{
+          id: 'ITEM-' + sale.id,
+          sale_id: sale.id,
+          product_name: sale.remark || 'Ombor mahsulotlari to\'plami',
+          shtrix_code: 'ERP-CHK-' + (sale.receipt_number || '').slice(-4),
+          price: parseFloat(sale.total_amount) / (parseInt(sale.total_items) || 1),
+          cost: parseFloat(sale.total_amount) * 0.7 / (parseInt(sale.total_items) || 1),
+          quantity: parseInt(sale.total_items) || 1,
+          unit_name: 'dona',
+          total: parseFloat(sale.total_amount)
+        }];
+      }
+
+      let totalAmount = parseFloat(sale.total_amount) || 0;
+      if (totalAmount === 0 && items && items.length > 0) {
+        totalAmount = items.reduce((sum, it) => sum + (parseFloat(it.total) || (parseFloat(it.price) || 0) * (parseFloat(it.quantity) || 1)), 0);
+      }
+
       return res.status(200).json({
         code: 0,
         data: {
           ...sale,
+          total_amount: totalAmount,
           items: items || []
+        }
+      });
+    }
+
+    // GET /api/sales/top-selling
+    if (path === 'sales/top-selling') {
+      const topItems = await sql`
+        SELECT 
+          product_name, 
+          SUM(quantity) as total_qty, 
+          SUM(total) as total_revenue,
+          COUNT(DISTINCT sale_id) as orders_count
+        FROM sale_items 
+        GROUP BY product_name 
+        ORDER BY total_qty DESC 
+        LIMIT 10
+      `;
+      return res.status(200).json({
+        code: 0,
+        data: topItems.map(it => ({
+          name: it.product_name,
+          quantity: parseInt(it.total_qty || 0, 10),
+          revenue: parseFloat(it.total_revenue || 0),
+          orders_count: parseInt(it.orders_count || 0, 10)
+        }))
+      });
+    }
+
+    // GET /api/sales/analytics
+    if (path === 'sales/analytics') {
+      const [totalsRes, topRes, pmRes] = await Promise.all([
+        sql`SELECT COUNT(*) as count, SUM(total_amount) as total_revenue, SUM(paid_amount) as total_paid, SUM(debt_amount) as total_debt FROM sales`,
+        sql`SELECT product_name, SUM(quantity) as total_qty, SUM(total) as total_revenue FROM sale_items GROUP BY product_name ORDER BY total_qty DESC LIMIT 5`,
+        sql`SELECT payment_method, COUNT(*) as count, SUM(total_amount) as revenue FROM sales GROUP BY payment_method`
+      ]);
+      return res.status(200).json({
+        code: 0,
+        data: {
+          total_sales: parseInt(totalsRes[0]?.count || 0, 10),
+          total_revenue: parseFloat(totalsRes[0]?.total_revenue || 0),
+          total_paid: parseFloat(totalsRes[0]?.total_paid || 0),
+          total_debt: parseFloat(totalsRes[0]?.total_debt || 0),
+          top_products: topRes.map(it => ({
+            name: it.product_name,
+            quantity: parseInt(it.total_qty || 0, 10),
+            revenue: parseFloat(it.total_revenue || 0)
+          })),
+          payment_methods: pmRes.map(it => ({
+            method: it.payment_method,
+            count: parseInt(it.count || 0, 10),
+            revenue: parseFloat(it.revenue || 0)
+          }))
+        }
+      });
+    }
+
+    // GET /api/menu/list or /api/mock/menu/list
+    if (path === 'menu/list' || path === 'mock/menu/list' || path === 'menu/tree') {
+      const menuList = [
+        {
+          id: 1,
+          path: '/dashboard',
+          name: 'Dashboard',
+          title: 'Boshqaruv Paneli (Dashboard)',
+          meta: { title: 'Boshqaruv Paneli', icon: 'vi-ant-design:dashboard-filled' },
+          children: [
+            {
+              id: 2,
+              parentId: 1,
+              path: 'analysis',
+              name: 'Analysis',
+              title: 'Tahlil va Statistika',
+              meta: { title: 'Tahlil va Statistika', permission: ['dashboard:view', 'analysis:export'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'dashboard:view' },
+                { id: 2, label: 'Eksport (Excel)', value: 'analysis:export' }
+              ]
+            },
+            {
+              id: 3,
+              parentId: 1,
+              path: 'workplace',
+              name: 'Workplace',
+              title: 'Ish Joyi (Workplace)',
+              meta: { title: 'Ish Joyi', permission: ['workplace:view'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'workplace:view' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 4,
+          path: '/product',
+          name: 'ProductRoot',
+          title: 'Omborxona (Mahsulotlar)',
+          meta: { title: 'Omborxona', icon: 'vi-ep:goods' },
+          children: [
+            {
+              id: 5,
+              parentId: 4,
+              path: 'list',
+              name: 'ProductManagement',
+              title: 'Ombor Mahsulotlari',
+              meta: { title: 'Ombor Mahsulotlari', permission: ['product:view', 'product:create', 'product:edit', 'product:delete', 'product:export'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'product:view' },
+                { id: 2, label: 'Qo‘shish', value: 'product:create' },
+                { id: 3, label: 'Tahrirlash', value: 'product:edit' },
+                { id: 4, label: 'O‘chirish', value: 'product:delete' },
+                { id: 5, label: 'Eksport', value: 'product:export' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 6,
+          path: '/sales',
+          name: 'SalesRoot',
+          title: 'Sotuvlar & POS Kassa',
+          meta: { title: 'Sotuvlar (POS)', icon: 'vi-ep:shopping-cart-full' },
+          children: [
+            {
+              id: 7,
+              parentId: 6,
+              path: 'pos',
+              name: 'SalesPos',
+              title: 'Sotuvlar (POS)',
+              meta: { title: 'Sotuvlar (POS)', permission: ['pos:view', 'pos:sell', 'pos:nasiya', 'pos:discount', 'pos:receipt'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'pos:view' },
+                { id: 2, label: 'Sotuv amalga oshirish', value: 'pos:sell' },
+                { id: 3, label: 'Nasiyaga sotish', value: 'pos:nasiya' },
+                { id: 4, label: 'Chegirma berish', value: 'pos:discount' },
+                { id: 5, label: 'Chek chop etish', value: 'pos:receipt' }
+              ]
+            },
+            {
+              id: 8,
+              parentId: 6,
+              path: 'debtors',
+              name: 'SalesDebtors',
+              title: 'Nasiyalar (Qarzlar)',
+              meta: { title: 'Nasiyalar (Qarzlar)', permission: ['debtors:view', 'debtors:repay', 'debtors:history', 'debtors:export'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'debtors:view' },
+                { id: 2, label: 'Qarzni qaytarish', value: 'debtors:repay' },
+                { id: 3, label: 'Tarixni ko‘rish', value: 'debtors:history' },
+                { id: 4, label: 'Eksport', value: 'debtors:export' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 9,
+          path: '/hr',
+          name: 'HRRoot',
+          title: 'Xodimlar (HR)',
+          meta: { title: 'Xodimlar (HR)', icon: 'vi-ep:avatar' },
+          children: [
+            {
+              id: 10,
+              parentId: 9,
+              path: 'workers',
+              name: 'WorkerManagement',
+              title: 'Xodimlar Ro‘yxati',
+              meta: { title: 'Xodimlar Ro‘yxati', permission: ['workers:view', 'workers:create', 'workers:edit', 'workers:delete'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'workers:view' },
+                { id: 2, label: 'Qo‘shish', value: 'workers:create' },
+                { id: 3, label: 'Tahrirlash', value: 'workers:edit' },
+                { id: 4, label: 'O‘chirish', value: 'workers:delete' }
+              ]
+            },
+            {
+              id: 11,
+              parentId: 9,
+              path: 'timesheets',
+              name: 'TimesheetManagement',
+              title: 'Davomat (Ish Vaqti)',
+              meta: { title: 'Davomat', permission: ['timesheet:view', 'timesheet:edit'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'timesheet:view' },
+                { id: 2, label: 'Belgilash', value: 'timesheet:edit' }
+              ]
+            },
+            {
+              id: 12,
+              parentId: 9,
+              path: 'outputs',
+              name: 'OutputManagement',
+              title: 'Kunlik Ishbay Ishlab Chiqarish',
+              meta: { title: 'Ishbay Chiqarish', permission: ['output:view', 'output:create', 'output:delete'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'output:view' },
+                { id: 2, label: 'Qo‘shish', value: 'output:create' },
+                { id: 3, label: 'O‘chirish', value: 'output:delete' }
+              ]
+            },
+            {
+              id: 13,
+              parentId: 9,
+              path: 'adjustments',
+              name: 'AdjustmentManagement',
+              title: 'Mukofot va Jarimalar',
+              meta: { title: 'Korrektirovkalar', permission: ['adjustments:view', 'adjustments:create', 'adjustments:delete'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'adjustments:view' },
+                { id: 2, label: 'Qo‘shish', value: 'adjustments:create' },
+                { id: 3, label: 'O‘chirish', value: 'adjustments:delete' }
+              ]
+            },
+            {
+              id: 14,
+              parentId: 9,
+              path: 'salary',
+              name: 'SalaryManagement',
+              title: 'Oylik Maoshlar',
+              meta: { title: 'Oylik Maoshlar', permission: ['salary:view', 'salary:create', 'salary:payout'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'salary:view' },
+                { id: 2, label: 'Hisoblash', value: 'salary:create' },
+                { id: 3, label: 'To‘lash', value: 'salary:payout' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 15,
+          path: '/cutting',
+          name: 'CuttingRoot',
+          title: 'Ishlab Chiqarish & Raskroy',
+          meta: { title: 'Raskroy', icon: 'vi-ep:scissors' },
+          children: [
+            {
+              id: 16,
+              parentId: 15,
+              path: 'order',
+              name: 'CuttingOrder',
+              title: 'Raskroy Buyurtmalari',
+              meta: { title: 'Buyurtmalar', permission: ['cutting:view', 'cutting:create', 'cutting:delete'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'cutting:view' },
+                { id: 2, label: 'Yaratish', value: 'cutting:create' },
+                { id: 3, label: 'O‘chirish', value: 'cutting:delete' }
+              ]
+            },
+            {
+              id: 17,
+              parentId: 15,
+              path: 'task',
+              name: 'CuttingTask',
+              title: 'Ishlab Chiqarish Vazifalari',
+              meta: { title: 'Vazifalar', permission: ['cutting_task:view', 'cutting_task:update'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'cutting_task:view' },
+                { id: 2, label: 'Statusni yangilash', value: 'cutting_task:update' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 18,
+          path: '/qr_codes',
+          name: 'QRCodesRoot',
+          title: 'QR Kodlar',
+          meta: { title: 'QR Kodlar', icon: 'vi-ep:camera' },
+          children: [
+            {
+              id: 19,
+              parentId: 18,
+              path: 'print',
+              name: 'QRPrint',
+              title: 'QR Kod Chop Etish',
+              meta: { title: 'Chop Etish', permission: ['qr:view', 'qr:print'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'qr:view' },
+                { id: 2, label: 'Chop etish', value: 'qr:print' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 20,
+          path: '/authorization',
+          name: 'AuthorizationRoot',
+          title: 'Huquqlar & Sozlamalar',
+          meta: { title: 'Huquqlar & Sozlamalar', icon: 'vi-eos-icons:role-binding' },
+          children: [
+            {
+              id: 21,
+              parentId: 20,
+              path: 'department',
+              name: 'Department',
+              title: 'Bo‘limlar',
+              meta: { title: 'Bo‘limlar', permission: ['department:view', 'department:create', 'department:edit', 'department:delete'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'department:view' },
+                { id: 2, label: 'Qo‘shish', value: 'department:create' },
+                { id: 3, label: 'Tahrirlash', value: 'department:edit' },
+                { id: 4, label: 'O‘chirish', value: 'department:delete' }
+              ]
+            },
+            {
+              id: 22,
+              parentId: 20,
+              path: 'role',
+              name: 'Role',
+              title: 'Rollar & Huquqlar',
+              meta: { title: 'Rollar', permission: ['role:view', 'role:create', 'role:edit', 'role:delete'] },
+              permissionList: [
+                { id: 1, label: 'Ko‘rish', value: 'role:view' },
+                { id: 2, label: 'Qo‘shish', value: 'role:create' },
+                { id: 3, label: 'Tahrirlash', value: 'role:edit' },
+                { id: 4, label: 'O‘chirish', value: 'role:delete' }
+              ]
+            }
+          ]
+        }
+      ];
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          list: menuList,
+          total: menuList.length
         }
       });
     }

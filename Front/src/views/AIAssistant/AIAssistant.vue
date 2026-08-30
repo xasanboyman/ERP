@@ -246,6 +246,7 @@ import { dispatchAIFunction } from './aiDispatcher'
 import { getDebtorsApi, getSalesListApi } from '@/api/sales'
 import { getProductListApi } from '@/api/product'
 import { getWorkerListApi } from '@/api/worker'
+import request from '@/axios'
 import { ElButton, ElInput } from 'element-plus'
 
 const isOpen = ref(false)
@@ -257,6 +258,10 @@ const waveCanvas = ref<HTMLCanvasElement>()
 const logsContainer = ref<HTMLElement>()
 
 const quickChips = [
+  {
+    label: '🏆 Eng ko‘p sotilganlar',
+    prompt: 'Qaysi mahsulotlar eng ko‘p sotildi va eng ko‘p tushum keltirdi?'
+  },
   { label: '📊 Bugungi tushum', prompt: 'Bugungi tushum va savdolar qanday?' },
   { label: '👥 Nasiyalar (Qarzlar)', prompt: 'Qarzdorlar ro‘yxati va jami qarz qancha?' },
   { label: '📦 Ombor qoldiqlari', prompt: 'Ombordagi mahsulotlar qoldiqlari' },
@@ -334,6 +339,47 @@ const handleTextSubmit = async () => {
 
   try {
     const lowerQuery = query.toLowerCase()
+
+    // 0. Top Selling Products & What did we sell most
+    if (
+      lowerQuery.includes("ko'p sotil") ||
+      lowerQuery.includes('kop sotil') ||
+      lowerQuery.includes('nima sotdik') ||
+      lowerQuery.includes("eng ko'p") ||
+      lowerQuery.includes('eng kop') ||
+      lowerQuery.includes('top tovar') ||
+      lowerQuery.includes('top mahsulot') ||
+      lowerQuery.includes('top sotuv') ||
+      lowerQuery.includes('sell most') ||
+      lowerQuery.includes('best seller') ||
+      lowerQuery.includes('hafta')
+    ) {
+      try {
+        const topRes: any = await request.get({ url: '/sales/top-selling' })
+        const topList = topRes?.data || []
+        if (topList.length > 0) {
+          let text = `🏆 Eng Ko'p Sotilgan Mahsulotlar Reytingi (Top Tovarlar):\n\n`
+          topList.forEach((item: any, idx: number) => {
+            const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹'
+            text += `${medal} ${item.name}\n   Sotildi: ${item.quantity} dona | Jami tushum: $${Number(item.revenue || 0).toLocaleString()} (${item.orders_count} ta chekda)\n\n`
+          })
+          messages.value.push({ role: 'model', text: text.trim() })
+        } else {
+          messages.value.push({
+            role: 'model',
+            text: "Hozircha sotilgan tovarlar statistikasi mavjud emas."
+          })
+        }
+      } catch {
+        messages.value.push({
+          role: 'model',
+          text: "Eng ko'p sotilgan tovarlar ma'lumotlarini yuklashda xatolik yuz berdi."
+        })
+      }
+      isThinking.value = false
+      scrollToBottom()
+      return
+    }
 
     // 1. Debtors & Nasiya check
     if (

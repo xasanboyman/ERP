@@ -82,6 +82,7 @@ class AudioQueue {
   private nextPlayTime: number = 0
   private audioCtx: AudioContext
   private analyser: AnalyserNode
+  private activeSources: Set<AudioBufferSourceNode> = new Set()
 
   constructor(audioCtx: AudioContext, analyser: AnalyserNode) {
     this.audioCtx = audioCtx
@@ -106,10 +107,30 @@ class AudioQueue {
     }
     source.start(this.nextPlayTime)
     this.nextPlayTime += buffer.duration
+
+    this.activeSources.add(source)
+    source.onended = () => {
+      this.activeSources.delete(source)
+    }
+  }
+
+  stopAll() {
+    for (const s of this.activeSources) {
+      try {
+        s.stop()
+        s.disconnect()
+      } catch {}
+    }
+    this.activeSources.clear()
+    this.nextPlayTime = 0
+  }
+
+  isPlaying(): boolean {
+    return this.activeSources.size > 0 && this.nextPlayTime > this.audioCtx.currentTime
   }
 
   clear() {
-    this.nextPlayTime = 0
+    this.stopAll()
   }
 }
 
@@ -121,6 +142,7 @@ export class AIVoiceClient {
   private mediaStream: MediaStream | null = null
   private workletNode: AudioWorkletNode | null = null
   private mediaSourceNode: MediaStreamAudioSourceNode | null = null
+  private consecutiveVoiceFrames: number = 0
 
   public isConnected: boolean = false
   public isConnecting: boolean = false
@@ -689,6 +711,20 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
         }
       },
 
+      // --- ANALYTICS & REPORTS ---
+      {
+        name: 'get_top_selling_products',
+        description: "Eng ko'p sotilgan tovarlar va mahsulotlar reytingi (top selling products), har bir tovarning sotilgan dona soni va umumiy tushumi."
+      },
+      {
+        name: 'get_sales_analytics',
+        description: "Umumiy sotuvlar soni, kassa tushumi va to'lov usullari bo'yicha to'liq statistika."
+      },
+      {
+        name: 'get_debt_report',
+        description: "Mijozlarning jami qarzlari, faol qarzdorlar va nasiyalar hisoboti."
+      },
+
       // --- SALARY ---
       {
         name: 'list_salaries',
@@ -743,7 +779,7 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
       this.mediaSourceNode = this.audioContext.createMediaStreamSource(this.mediaStream)
       this.mediaSourceNode.connect(this.micAnalyser)
 
-      // Setup audio levels callback
+      // Setup audio levels callback & Speaking cancellation (Barge-in detection)
       const dataArray = new Uint8Array(this.micAnalyser.frequencyBinCount)
       const checkAudioLevel = () => {
         if (!this.isConnected) return
@@ -754,6 +790,18 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
         }
         const avg = sum / dataArray.length
         if (this.onAudioLevel) this.onAudioLevel(avg)
+
+        // BARGE-IN SPEAKING CANCELLATION:
+        // When user speaks (avg >= 28 for >= 2 consecutive frames) and AI is currently speaking
+        if (avg >= 28) {
+          this.consecutiveVoiceFrames++
+          if (this.consecutiveVoiceFrames >= 2 && this.audioQueue?.isPlaying()) {
+            this.audioQueue.stopAll()
+          }
+        } else {
+          this.consecutiveVoiceFrames = 0
+        }
+
         requestAnimationFrame(checkAudioLevel)
       }
       checkAudioLevel()
@@ -820,6 +868,11 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
   }
 
   private async handleServerMessage(msg: any) {
+    // 0. Server Interruption signal
+    if (msg.serverContent?.interrupted) {
+      this.audioQueue?.stopAll()
+    }
+
     // 1. Handle Audio output
     const parts = msg.serverContent?.modelTurn?.parts
     if (parts) {

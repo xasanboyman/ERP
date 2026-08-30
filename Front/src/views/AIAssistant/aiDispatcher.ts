@@ -20,6 +20,7 @@ import { getQrListApi, saveQrApi, deleteQrApi } from '@/api/qr'
 import { getSalaryListApi, saveSalaryApi, bulkSalaryPayoutApi } from '@/api/salary'
 import { getRoleListApi, saveRoleApi, deleteRoleApi } from '@/api/role'
 import { getBranchListApi, saveBranchApi } from '@/api/branch'
+import request from '@/axios'
 import { useEventBus } from '@/hooks/event/useEventBus'
 
 export const notifyDataUpdated = (action: string, params?: any) => {
@@ -1101,6 +1102,48 @@ async function _dispatchAIFunctionInternal(action: string, params: any): Promise
           code: 0,
           message: `QR kod o'chirildi.`,
           requests: [`POST /qr/delete [ID: ${params.qr_id}]`]
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════
+      // ANALYTICS & REPORTS
+      // ═══════════════════════════════════════════════════════
+      case 'get_top_selling_products': {
+        const res = await request.get({ url: '/sales/top-selling' })
+        const list = res.data || []
+        const summary = list
+          .map(
+            (it: any, idx: number) =>
+              `${idx + 1}. ${it.name}: ${it.quantity} dona ($${Number(it.revenue || 0).toLocaleString()})`
+          )
+          .join('\n')
+        return {
+          code: 0,
+          message: `🏆 Eng ko'p sotilgan tovarlar:\n${summary || "Hozircha sotuvlar ma'lumoti yo'q."}`,
+          data: list,
+          requests: ['GET /sales/top-selling']
+        }
+      }
+
+      case 'get_sales_analytics': {
+        const res = await request.get({ url: '/sales/analytics' })
+        const data = res.data || {}
+        return {
+          code: 0,
+          message: `📊 Savdo tahlili: Jami ${data.total_sales || 0} ta sotuv, $${Number(data.total_revenue || 0).toLocaleString()} umumiy aylanma.`,
+          data: data,
+          requests: ['GET /sales/analytics']
+        }
+      }
+
+      case 'get_debt_report': {
+        const res = await getDebtorsApi({})
+        const d = res.data || {}
+        return {
+          code: 0,
+          message: `📌 Nasiyalar: Jami qarz $${Number(d.total_debt || 0).toLocaleString()}, faol qarzdorlar: ${d.active_debtors_count || 0} ta.`,
+          data: d,
+          requests: ['GET /sales/debtors']
         }
       }
 

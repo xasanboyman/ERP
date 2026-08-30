@@ -1988,9 +1988,11 @@ const handleCheckout = async () => {
       customer_name:
         checkoutForm.payment_method === 'nasiya' ? checkoutForm.customer_name.trim() : undefined,
       payment_method: checkoutForm.payment_method,
+      total_amount: grandTotal.value,
       paid_amount: paidVal,
       debt_amount: calculatedDebt.value,
       discount: checkoutForm.discount || 0,
+      total_items: cart.value.reduce((sum, it) => sum + (parseFloat(String(it.quantity)) || 1), 0),
       items: cart.value
     })
 
