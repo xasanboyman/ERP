@@ -5,7 +5,35 @@
   "outputDirectory": "Front/dist",
   "rewrites": [
     {
-      "source": "/((?!api|uploads).*)",
+      "source": "/api/user/login",
+      "destination": "/api/user/login.js"
+    },
+    {
+      "source": "/api/user/employees",
+      "destination": "/api/user/employees.js"
+    },
+    {
+      "source": "/api/product/list",
+      "destination": "/api/product/list.js"
+    },
+    {
+      "source": "/api/worker/list",
+      "destination": "/api/worker/list.js"
+    },
+    {
+      "source": "/api/role/list",
+      "destination": "/api/role/list.js"
+    },
+    {
+      "source": "/api/department/list",
+      "destination": "/api/department/list.js"
+    },
+    {
+      "source": "/api/:match*",
+      "destination": "/api/[...path].js"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
