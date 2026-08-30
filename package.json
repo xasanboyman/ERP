@@ -6,5 +6,10 @@
     "build": "cd Front && pnpm install --no-frozen-lockfile && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build",
     "deploy:vercel": "vercel --prod",
     "db:migrate": "python3 migrate_to_postgres.py"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.0"
   }
 }
