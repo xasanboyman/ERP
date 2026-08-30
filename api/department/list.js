@@ -1,4 +1,4 @@
-import { getPool } from '../_db.js';
+import { getSql } from '../_db.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -7,16 +7,16 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const pool = getPool();
-    const rowsRes = await pool.query('SELECT * FROM departments ORDER BY id ASC');
+    const sql = getSql();
+    const rows = await sql`SELECT * FROM departments ORDER BY id ASC`;
     return res.status(200).json({
       code: 0,
       data: {
-        total: rowsRes.rows.length,
-        list: rowsRes.rows
+        total: rows.length,
+        list: rows
       }
     });
   } catch (err) {
-    return res.status(200).json({ code: 500, message: err.message });
+    return res.status(500).json({ code: 500, message: err.message });
   }
 }

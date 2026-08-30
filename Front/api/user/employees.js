@@ -1,4 +1,4 @@
-import { getPool } from '../_db.js';
+import { getSql } from '../_db.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -7,13 +7,13 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const pool = getPool();
-    const rowsRes = await pool.query('SELECT * FROM workers WHERE status = 1');
+    const sql = getSql();
+    const rows = await sql`SELECT * FROM workers WHERE status = 1`;
     return res.status(200).json({
       code: 0,
-      data: rowsRes.rows
+      data: rows
     });
   } catch (err) {
-    return res.status(200).json({ code: 500, message: err.message });
+    return res.status(500).json({ code: 500, message: err.message });
   }
 }
