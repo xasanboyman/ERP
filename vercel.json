@@ -4,27 +4,9 @@
   "buildCommand": "(if [ -d 'Front' ]; then cd Front; fi && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build)",
   "outputDirectory": "Front/dist",
   "rewrites": [
-    { "source": "/api/user/login", "destination": "/api/user/login.js" },
-    { "source": "/api/user/employees", "destination": "/api/user/employees.js" },
-    { "source": "/api/product/list", "destination": "/api/product/list.js" },
-    { "source": "/api/worker/list", "destination": "/api/worker/list.js" },
-    { "source": "/api/role/list", "destination": "/api/role/list.js" },
-    { "source": "/api/department/list", "destination": "/api/department/list.js" },
-    { "source": "/api/branch/list", "destination": "/api/branch/list.js" },
-    { "source": "/api/classifier/list", "destination": "/api/classifier/list.js" },
-    { "source": "/api/salary/list", "destination": "/api/salary/list.js" },
-    { "source": "/api/activity/list", "destination": "/api/activity/list.js" },
-    { "source": "/api/sales/list", "destination": "/api/sales/list.js" },
-    { "source": "/api/device/list", "destination": "/api/device/list.js" },
-    { "source": "/api/hr/output/list", "destination": "/api/hr/output/list.js" },
-    { "source": "/api/workplace/total", "destination": "/api/workplace/total.js" },
-    { "source": "/api/workplace/project", "destination": "/api/workplace/project.js" },
-    { "source": "/api/workplace/dynamic", "destination": "/api/workplace/dynamic.js" },
-    { "source": "/api/workplace/team", "destination": "/api/workplace/team.js" },
-    { "source": "/api/workplace/radar", "destination": "/api/workplace/radar.js" },
-    { "source": "/api/analysis/financial-overview", "destination": "/api/analysis/financial-overview.js" },
-    { "source": "/api/analysis/total", "destination": "/api/analysis/total.js" },
-    { "source": "/api/:match*", "destination": "/api/[...path].js" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api|uploads).*)",
+      "destination": "/index.html"
+    }
   ]
 }
