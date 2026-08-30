@@ -219,7 +219,7 @@ function authenticate(req, res) {
   if (!authHeader) {
     res.status(401).json({
       code: 401,
-      message: 'Avtorizatsiya talab qilinadi. Iltimos, tizimga kiring.'
+      message: 'Avtorizatsiya talab qilinadi. Yaroqli JWT token taqdim eting.'
     });
     return null;
   }
@@ -229,14 +229,29 @@ function authenticate(req, res) {
     token = token.slice(7).trim();
   }
 
+  if (!token) {
+    res.status(401).json({
+      code: 401,
+      message: 'Token topilmadi. Qaytadan tizimga kiring.'
+    });
+    return null;
+  }
+
   try {
     const payload = jwt.verify(token, SECRET_KEY);
+    if (!payload || (!payload.id && !payload.username)) {
+      res.status(401).json({
+        code: 401,
+        message: 'Yaroqsiz token strukturasi.'
+      });
+      return null;
+    }
     return payload;
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       res.status(401).json({
         code: 401,
-        message: 'Sessiya muddati tugadi. Iltimos qaytadan kiring.'
+        message: 'Sessiya muddati tugadi (Token Expired). Iltimos, qaytadan tizimga kiring.'
       });
     } else {
       res.status(401).json({
@@ -253,6 +268,10 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();

@@ -1,27 +1,60 @@
 <template>
   <div class="ai-assistant-wrapper">
     <!-- Floating Orb Trigger Button -->
-    <button
-      class="ai-trigger-orb"
-      :class="{ 'is-active': isOpen, 'is-listening': clientStatus === 'connected' }"
-      @click="togglePanel"
-    >
-      <div class="orb-pulse-glow"></div>
-      <div class="orb-content">
-        <!-- SVG Robot/AI Head Icon -->
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          width="22"
-          height="22"
-          fill="currentColor"
-        >
-          <path
-            d="M12 2a10 10 0 0 0-10 10c0 4.14 2.52 7.69 6.09 9.17A2 2 0 0 0 10 20v-2.09A7.98 7.98 0 0 1 4 12a8 8 0 0 1 14.62-4.38l1.41-1.41A9.95 9.95 0 0 0 12 2zm8 10c0 .92-.16 1.8-.44 2.62l1.52 1.52A9.97 9.97 0 0 0 22 12a10 10 0 0 0-2-6.09l-1.52 1.52c.28.82.44 1.7.44 2.62zm-6 2H10v-2h4v2zm-2 4h-2v-2h2v2zm6-4v2c0 2.21-1.79 4-4 4h-1v-2h1c1.1 0 2-.9 2-2v-2h2z"
-          />
-        </svg>
+    <div class="orb-container">
+      <button
+        class="ai-trigger-orb"
+        :class="{ 'is-active': isOpen, 'is-listening': clientStatus === 'connected' }"
+        @click="togglePanel"
+        :title="isOpen ? 'Yopish' : 'AI Yordamchi'"
+      >
+        <div class="orb-pulse-glow"></div>
+        <div class="orb-pulse-glow-secondary"></div>
+        <div class="orb-content">
+          <!-- Animated AI Brain/Spark Icon -->
+          <svg
+            v-if="!isOpen"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M12 2a8 8 0 0 0-8 8c0 3.32 2.02 6.17 4.9 7.37L9 22l3-1.5L15 22l.1-4.63A8.002 8.002 0 0 0 20 10a8 8 0 0 0-8-8z"
+            />
+            <circle cx="9" cy="10" r="1" fill="currentColor" />
+            <circle cx="15" cy="10" r="1" fill="currentColor" />
+            <path d="M9.5 14a3.5 3.5 0 0 0 5 0" />
+          </svg>
+          <svg
+            v-else
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="22"
+            height="22"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </div>
+      </button>
+
+      <!-- Mini Float Tag -->
+      <div v-if="!isOpen" class="ai-badge-label" @click="togglePanel">
+        <span class="ai-badge-dot"></span>
+        <span>AI Yordamchi</span>
       </div>
-    </button>
+    </div>
 
     <!-- Glassmorphic Dialog Panel -->
     <transition name="slide-up">
@@ -31,19 +64,44 @@
           <div class="header-title-box">
             <span class="pulse-indicator" :class="clientStatus"></span>
             <div>
-              <h2 class="header-title">Antigravity AI</h2>
+              <h2 class="header-title">Antigravity ERP AI</h2>
               <p class="header-status">
                 {{
                   clientStatus === 'connected'
-                    ? 'Listening...'
+                    ? "Ovozli rejimda (Tinglanmoqda...)"
                     : clientStatus === 'connecting'
-                      ? 'Connecting...'
-                      : 'Ready'
+                      ? "Bog'lanmoqda..."
+                      : 'Onlayn va buyruqlarga tayyor'
                 }}
               </p>
             </div>
           </div>
-          <button class="close-btn" @click="isOpen = false">&times;</button>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="messages.length > 0"
+              class="clear-chat-btn"
+              @click="clearMessages"
+              title="Tozalash"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path
+                  d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                ></path>
+              </svg>
+            </button>
+            <button class="close-btn" @click="isOpen = false">&times;</button>
+          </div>
         </div>
 
         <!-- Chat / Transcript Logs -->
@@ -52,9 +110,21 @@
             <div class="welcome-icon">✨</div>
             <h3>Qanday yordam bera olaman?</h3>
             <p>
-              Xodimlar, mahsulotlar hamda ombor inventarizatsiyasini ovozli yoki matnli buyruqlar
-              bilan boshqaring.
+              ERP tizimi, mahsulotlar, qarzlar, kassa va xodimlarni boshqarish bo'yicha tezkor
+              savol yoki buyruq bering.
             </p>
+
+            <!-- Quick Suggestions -->
+            <div class="quick-chips">
+              <button
+                v-for="chip in quickChips"
+                :key="chip.label"
+                class="chip-btn"
+                @click="sendQuickChip(chip.prompt)"
+              >
+                {{ chip.label }}
+              </button>
+            </div>
           </div>
 
           <div v-else class="chat-flow">
@@ -81,9 +151,18 @@
               <!-- User or Model Chat Bubble -->
               <div v-else class="chat-bubble">
                 <span class="bubble-role-label">{{
-                  msg.role === 'user' ? 'Siz' : 'AI Assistant'
+                  msg.role === 'user' ? 'Siz' : 'AI Yordamchi'
                 }}</span>
-                <p class="bubble-text">{{ msg.text }}</p>
+                <p class="bubble-text whitespace-pre-wrap">{{ msg.text }}</p>
+              </div>
+            </div>
+
+            <!-- Loading indicator -->
+            <div v-if="isThinking" class="chat-bubble-wrapper model">
+              <div class="chat-bubble thinking-bubble">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
               </div>
             </div>
           </div>
@@ -107,8 +186,8 @@
                 v-if="clientStatus !== 'connected'"
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
-                width="24"
-                height="24"
+                width="20"
+                height="20"
                 fill="currentColor"
               >
                 <path
@@ -119,15 +198,15 @@
                 v-else
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
-                width="24"
-                height="24"
+                width="20"
+                height="20"
                 fill="currentColor"
               >
                 <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
               </svg>
             </span>
             <span class="btn-text">
-              {{ clientStatus === 'connected' ? "Ovozni o'chirish" : "Ovozli bog'lanish" }}
+              {{ clientStatus === 'connected' ? "Ovozni o'chirish" : 'Ovozli rejim' }}
             </span>
           </button>
 
@@ -135,12 +214,12 @@
           <div class="text-input-box">
             <el-input
               v-model="textCommand"
-              placeholder="Buyruq yozing (masalan: 250 ta Pepsi 1.5l olib keldik)..."
+              placeholder="Savol yoki buyruq yozing..."
               clearable
               @keyup.enter="handleTextSubmit"
             >
               <template #append>
-                <el-button @click="handleTextSubmit">
+                <el-button @click="handleTextSubmit" :disabled="isThinking">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
@@ -164,14 +243,25 @@
 import { ref, nextTick, onUnmounted } from 'vue'
 import { AIVoiceClient } from './AIVoiceClient'
 import { dispatchAIFunction } from './aiDispatcher'
+import { getDebtorsApi, getSalesListApi } from '@/api/sales'
+import { getProductListApi } from '@/api/product'
+import { getWorkerListApi } from '@/api/worker'
 import { ElButton, ElInput } from 'element-plus'
 
 const isOpen = ref(false)
 const clientStatus = ref<'disconnected' | 'connecting' | 'connected'>('disconnected')
 const textCommand = ref('')
+const isThinking = ref(false)
 const messages = ref<{ role: 'user' | 'model' | 'api'; text: string; requests?: string[] }[]>([])
 const waveCanvas = ref<HTMLCanvasElement>()
 const logsContainer = ref<HTMLElement>()
+
+const quickChips = [
+  { label: '📊 Bugungi tushum', prompt: 'Bugungi tushum va savdolar qanday?' },
+  { label: '👥 Nasiyalar (Qarzlar)', prompt: 'Qarzdorlar ro‘yxati va jami qarz qancha?' },
+  { label: '📦 Ombor qoldiqlari', prompt: 'Ombordagi mahsulotlar qoldiqlari' },
+  { label: '👔 Xodimlar ro‘yxati', prompt: 'Xodimlar ro‘yxatini ko‘rsat' }
+]
 
 const client = new AIVoiceClient()
 
@@ -224,56 +314,166 @@ const toggleVoiceConnection = async () => {
   }
 }
 
+const clearMessages = () => {
+  messages.value = []
+}
+
+const sendQuickChip = (promptText: string) => {
+  textCommand.value = promptText
+  handleTextSubmit()
+}
+
 const handleTextSubmit = async () => {
   const query = textCommand.value.trim()
   if (!query) return
 
   messages.value.push({ role: 'user', text: query })
   textCommand.value = ''
+  isThinking.value = true
   scrollToBottom()
 
   try {
+    const lowerQuery = query.toLowerCase()
+
+    // 1. Debtors & Nasiya check
+    if (
+      lowerQuery.includes('qarz') ||
+      lowerQuery.includes('nasiya') ||
+      lowerQuery.includes('qarzdor')
+    ) {
+      try {
+        const debtRes: any = await getDebtorsApi({})
+        if (debtRes?.data) {
+          const list = debtRes.data.list || []
+          const totalDebt = debtRes.data.total_debt || 0
+          const activeCount = debtRes.data.active_debtors_count || 0
+          let text = `📌 Nasiyalar Hisoboti:\n• Jami faol qarz: $${totalDebt.toLocaleString()}\n• Faol qarzdorlar soni: ${activeCount} ta\n`
+          if (list.length > 0) {
+            text += '\nAsosiy qarzdorlar:\n'
+            list.slice(0, 5).forEach((d: any) => {
+              text += `• ${d.name}: $${d.total_debt.toLocaleString()} (Oxirgi bitim: ${d.last_sale_date || '—'})\n`
+            })
+          }
+          messages.value.push({ role: 'model', text })
+        } else {
+          messages.value.push({
+            role: 'model',
+            text: "Qarzdorlar bo'yicha ma'lumot topilmadi yoki qarzlar mavjud emas."
+          })
+        }
+      } catch {
+        messages.value.push({
+          role: 'model',
+          text: "Qarzdorlik ma'lumotlarini yuklashda xatolik yuz berdi."
+        })
+      }
+      isThinking.value = false
+      scrollToBottom()
+      return
+    }
+
+    // 2. Today's sales & revenue check
+    if (
+      lowerQuery.includes('tushum') ||
+      lowerQuery.includes('savdo') ||
+      lowerQuery.includes('sotuv') ||
+      lowerQuery.includes('kassa')
+    ) {
+      try {
+        const salesRes: any = await getSalesListApi({ pageIndex: 1, pageSize: 100 })
+        if (salesRes?.data) {
+          const list = salesRes.data.list || []
+          const totalRevenue = list.reduce(
+            (sum: number, s: any) => sum + Number(s.total_amount || 0),
+            0
+          )
+          const totalItems = list.reduce((sum: number, s: any) => sum + Number(s.total_items || 1), 0)
+          const text = `📊 Savdo va Kassa Ma'lumotlari:\n• Jami qayd etilgan sotuvlar: ${list.length} ta chek\n• Sotilgan tovarlar soni: ${totalItems} dona\n• Umumiy tushum aylanmasi: $${totalRevenue.toLocaleString()}`
+          messages.value.push({ role: 'model', text })
+        }
+      } catch {
+        messages.value.push({
+          role: 'model',
+          text: "Sotuvlar hisobotini yuklashda xatolik yuz berdi."
+        })
+      }
+      isThinking.value = false
+      scrollToBottom()
+      return
+    }
+
+    // 3. Products / Stock queries
+    if (
+      lowerQuery.includes('mahsulot') ||
+      lowerQuery.includes('ombor') ||
+      lowerQuery.includes('qoldiq') ||
+      lowerQuery.includes('tovar')
+    ) {
+      try {
+        const prodRes: any = await getProductListApi({ pageIndex: 1, pageSize: 20 })
+        if (prodRes?.data) {
+          const list = (prodRes.data as any).list || prodRes.data || []
+          let text = `📦 Ombordagi Mahsulotlar (Jami: ${list.length} ta ko'rsatilmoqda):\n`
+          list.slice(0, 8).forEach((p: any) => {
+            text += `• ${p.productName || p.name}: ${p.quantityInStock || 0} ${p.unit || 'dona'} ($${p.price || 0})\n`
+          })
+          messages.value.push({ role: 'model', text })
+        }
+      } catch {
+        messages.value.push({
+          role: 'model',
+          text: "Ombor ma'lumotlarini olishda xatolik yuz berdi."
+        })
+      }
+      isThinking.value = false
+      scrollToBottom()
+      return
+    }
+
+    // 4. Workers queries
+    if (lowerQuery.includes('xodim') || lowerQuery.includes('ishchi')) {
+      try {
+        const workerRes: any = await getWorkerListApi({ pageIndex: 1, pageSize: 50 })
+        if (workerRes?.data) {
+          const list = workerRes.data.list || workerRes.data || []
+          let text = `👔 Xodimlar Ro'yxati (Jami: ${list.length} nafar):\n`
+          list.slice(0, 8).forEach((w: any) => {
+            text += `• ${w.name || w.first_name + ' ' + w.last_name} — ${w.role || w.position || 'Xodim'}\n`
+          })
+          messages.value.push({ role: 'model', text })
+        }
+      } catch {
+        messages.value.push({
+          role: 'model',
+          text: "Xodimlar ro'yxatini yuklashda xatolik yuz berdi."
+        })
+      }
+      isThinking.value = false
+      scrollToBottom()
+      return
+    }
+
+    // 5. Stock addition pattern (e.g. 250 ta Pepsi 1.5l olib keldik)
     let action = ''
     let params: any = {}
 
-    // Check for stock addition pattern (e.g. 250 ta Pepsi PET 1,5 l olib keldik)
-    const lowerQuery = query.toLowerCase()
     if (
-      lowerQuery.includes('xodim') &&
-      (lowerQuery.includes("qo'sh") || lowerQuery.includes('qosh') || lowerQuery.includes('yarat'))
-    ) {
-      action = 'create_worker'
-      const phoneMatch = query.match(/\+?\d[\d\s-]{8,12}\d/)
-      params = {
-        first_name: 'Anvar',
-        last_name: 'Karimov',
-        phone: phoneMatch ? phoneMatch[0] : '+998901234567',
-        position: 'Tikuvchi',
-        department: "Tikuv bo'limi"
-      }
-    } else if (
       lowerQuery.includes('olib keldik') ||
       lowerQuery.includes('keltirildi') ||
       lowerQuery.includes('keldi') ||
-      lowerQuery.includes('kirdik') ||
-      lowerQuery.includes("qo'sh") ||
-      lowerQuery.includes('qosh')
+      lowerQuery.includes('kirdik')
     ) {
       const numMatch = query.match(/\d+/)
       const qty = numMatch ? parseInt(numMatch[0]) : 0
       const productName = query
         .replace(/\d+/g, '')
-        .replace(/ta|olib|keldik|keltirildi|keldi|kirdik|biz|qo'sh|qosh|omborga|dona/gi, '')
+        .replace(/ta|olib|keldik|keltirildi|keldi|kirdik|biz|omborga|dona/gi, '')
         .trim()
 
       if (qty > 0 && productName) {
         action = 'add_product_stock'
         params = { name: productName, added_quantity: qty }
       }
-    } else if (lowerQuery.includes('mahsulot') && lowerQuery.includes("ro'yxat")) {
-      action = 'list_products'
-    } else if (lowerQuery.includes('xodim') && lowerQuery.includes("ro'yxat")) {
-      action = 'list_workers'
     }
 
     if (action) {
@@ -286,17 +486,7 @@ const handleTextSubmit = async () => {
         })
       }
       if (res && res.code === 0) {
-        let aiMsg = res.message || 'Bajarildi.'
-        if (action === 'list_products' && Array.isArray(res.data)) {
-          const listStr = res.data
-            .map((p: any) => `- ${p.name} ($${p.price}) [Ombor: ${p.quantity}]`)
-            .join('\n')
-          aiMsg = `Mahsulotlar ro'yxati:\n${listStr}`
-        } else if (action === 'list_workers' && Array.isArray(res.data)) {
-          const listStr = res.data.map((w: any) => `- ${w.name} (${w.role})`).join('\n')
-          aiMsg = `Xodimlar ro'yxati:\n${listStr}`
-        }
-        messages.value.push({ role: 'model', text: aiMsg })
+        messages.value.push({ role: 'model', text: res.message || 'Bajarildi.' })
       } else {
         messages.value.push({
           role: 'model',
@@ -306,11 +496,13 @@ const handleTextSubmit = async () => {
     } else {
       messages.value.push({
         role: 'model',
-        text: "Tushunmadim. Iltimos '250 ta Pepsi 1.5l olib keldik', xodim qo'shish yoki mahsulotlar ro'yxati kabi buyruq bering."
+        text: `Savolingiz qabul qilindi. Siz quyidagi buyruqlarni berishingiz mumkin:\n• "Bugungi tushum qancha?"\n• "Qarzdorlar ro'yxati"\n• "Ombordagi mahsulot qoldiqlari"\n• "250 ta Pepsi 1.5l olib keldik"`
       })
     }
   } catch (err) {
     messages.value.push({ role: 'model', text: 'Xatolik yuz berdi.' })
+  } finally {
+    isThinking.value = false
   }
   scrollToBottom()
 }
@@ -346,7 +538,7 @@ const drawWave = () => {
   const gap = 4
   const startX = (width - bars * (barWidth + gap)) / 2
 
-  canvasCtx.fillStyle = 'rgba(64, 158, 255, 0.8)'
+  canvasCtx.fillStyle = 'rgba(99, 102, 241, 0.8)'
   for (let i = 0; i < bars; i++) {
     const scale = Math.sin(Date.now() / 200 + i) * 0.4 + 0.6
     const level = (audioLevel / 255) * height * 1.5 * scale
@@ -371,45 +563,122 @@ onUnmounted(() => {
 <style scoped>
 .ai-assistant-wrapper {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-  font-family: 'Outfit', 'Inter', sans-serif;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  user-select: none;
+}
+
+.orb-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+/* Float Label Tag */
+.ai-badge-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 20px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: floatBadge 3s ease-in-out infinite;
+}
+
+.ai-badge-label:hover {
+  transform: translateY(-2px);
+  border-color: rgba(139, 92, 246, 0.6);
+  background: rgba(30, 41, 59, 0.95);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
+}
+
+.ai-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+@keyframes floatBadge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 /* Orb Trigger Button */
 .ai-trigger-orb {
-  width: 46px;
-  height: 46px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
   border: none;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.4);
+  box-shadow:
+    0 8px 24px rgba(99, 102, 241, 0.45),
+    inset 0 1px 2px rgba(255, 255, 255, 0.35);
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
-  opacity: 0.88;
-  transition: all 0.25s ease;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .ai-trigger-orb:hover {
-  opacity: 1;
-  transform: scale(1.08);
-  box-shadow: 0 10px 25px rgba(168, 85, 247, 0.6);
+  transform: scale(1.1) rotate(5deg);
+  box-shadow:
+    0 12px 30px rgba(99, 102, 241, 0.6),
+    0 0 20px rgba(236, 72, 153, 0.4);
+}
+
+.ai-trigger-orb:active {
+  transform: scale(0.95);
+}
+
+.ai-trigger-orb.is-active {
+  background: linear-gradient(135deg, #475569, #334155);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
 .orb-pulse-glow {
   position: absolute;
-  top: -5px;
-  left: -5px;
-  right: -5px;
-  bottom: -5px;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
   border-radius: 50%;
-  border: 2px solid rgba(168, 85, 247, 0.3);
-  animation: pulse 2s infinite;
+  border: 2px solid rgba(99, 102, 241, 0.5);
+  animation: pulse 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  pointer-events: none;
+}
+
+.orb-pulse-glow-secondary {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(236, 72, 153, 0.3);
+  animation: pulse 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite 0.7s;
+  pointer-events: none;
 }
 
 @keyframes pulse {
@@ -418,29 +687,33 @@ onUnmounted(() => {
     opacity: 0.8;
   }
   100% {
-    transform: scale(1.2);
+    transform: scale(1.35);
     opacity: 0;
   }
 }
 
 .ai-trigger-orb.is-listening {
-  background: linear-gradient(135deg, #10b981, #3b82f6);
-  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.5);
+  background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.6);
 }
 
 /* Glassmorphic Panel styling */
 .ai-glass-panel {
   position: absolute;
-  bottom: 80px;
+  bottom: 70px;
   right: 0;
-  width: 400px;
-  height: 540px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  height: 580px;
+  max-height: calc(100vh - 100px);
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  border-radius: 24px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.65),
+    0 0 1px 1px rgba(255, 255, 255, 0.1) inset;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -448,17 +721,18 @@ onUnmounted(() => {
 }
 
 .panel-header {
-  padding: 15px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: rgba(30, 41, 59, 0.4);
 }
 
 .header-title-box {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .pulse-indicator {
@@ -467,17 +741,18 @@ onUnmounted(() => {
   border-radius: 50%;
   background: #64748b;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 .pulse-indicator.connected {
   background: #10b981;
-  box-shadow: 0 0 10px #10b981;
+  box-shadow: 0 0 12px #10b981;
   animation: indicator-pulse 1.5s infinite;
 }
 
 .pulse-indicator.connecting {
   background: #eab308;
-  box-shadow: 0 0 10px #eab308;
+  box-shadow: 0 0 12px #eab308;
 }
 
 @keyframes indicator-pulse {
@@ -485,7 +760,7 @@ onUnmounted(() => {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.3);
+    transform: scale(1.35);
   }
   100% {
     transform: scale(1);
@@ -493,9 +768,12 @@ onUnmounted(() => {
 }
 
 .header-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   margin: 0;
+  background: linear-gradient(135deg, #fff 0%, #c7d2fe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .header-status {
@@ -504,42 +782,120 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.close-btn {
-  background: none;
-  border: none;
+.clear-chat-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
   color: #94a3b8;
-  font-size: 24px;
+  padding: 6px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.clear-chat-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.close-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #94a3b8;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 /* Chat logs panel */
 .panel-body {
   flex: 1;
-  padding: 16px;
+  padding: 16px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .welcome-card {
   text-align: center;
   margin: auto;
   color: #94a3b8;
+  padding: 10px;
 }
 
 .welcome-icon {
-  font-size: 40px;
-  margin-bottom: 10px;
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.welcome-card h3 {
+  font-size: 16px;
+  color: #f1f5f9;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.welcome-card p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+  margin-bottom: 16px;
+}
+
+.quick-chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chip-btn {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  color: #c7d2fe;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chip-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #fff;
+  transform: translateY(-1px);
 }
 
 .chat-bubble-wrapper {
   display: flex;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .chat-bubble-wrapper.user {
   justify-content: flex-end;
+}
+
+.chat-bubble-wrapper.model {
+  justify-content: flex-start;
 }
 
 .chat-bubble-wrapper.api {
@@ -547,44 +903,84 @@ onUnmounted(() => {
 }
 
 .chat-bubble {
-  max-width: 82%;
+  max-width: 86%;
   padding: 10px 14px;
-  border-radius: 14px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.05);
 }
 
 .chat-bubble-wrapper.user .chat-bubble {
-  background: #6366f1;
-  border-bottom-right-radius: 2px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border-bottom-right-radius: 4px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .chat-bubble-wrapper.model .chat-bubble {
-  background: rgba(168, 85, 247, 0.15);
-  border-bottom-left-radius: 2px;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: rgba(30, 41, 59, 0.8);
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
 }
 
 .bubble-role-label {
-  font-size: 9px;
-  color: #cbd5e1;
+  font-size: 10px;
+  color: #94a3b8;
   display: block;
   margin-bottom: 4px;
+  font-weight: 600;
 }
 
 .bubble-text {
   font-size: 13px;
   margin: 0;
-  line-height: 1.4;
-  white-space: pre-line;
+  line-height: 1.5;
+}
+
+/* Thinking Indicator */
+.thinking-bubble {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 12px 18px !important;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #818cf8;
+  animation: typingBounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
 }
 
 /* API Request Log Badge */
 .api-log-card {
   width: 95%;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 10px;
-  padding: 10px 12px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 12px;
+  padding: 10px 14px;
   color: #a7f3d0;
   display: flex;
   flex-direction: column;
@@ -602,7 +998,7 @@ onUnmounted(() => {
   height: 6px;
   border-radius: 50%;
   background: #34d399;
-  box-shadow: 0 0 6px #34d399;
+  box-shadow: 0 0 8px #34d399;
 }
 
 .api-tag-title {
@@ -626,9 +1022,9 @@ onUnmounted(() => {
   font-family: 'Fira Code', 'Courier New', monospace;
   font-size: 11px;
   color: #6ee7b7;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.4);
   padding: 4px 8px;
-  border-radius: 5px;
+  border-radius: 6px;
   word-break: break-all;
   border: 1px solid rgba(52, 211, 153, 0.2);
 }
@@ -654,18 +1050,19 @@ onUnmounted(() => {
 
 /* Controls */
 .panel-controls {
-  padding: 15px 20px;
+  padding: 14px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: rgba(30, 41, 59, 0.35);
 }
 
 .action-voice-btn {
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border: none;
   color: white;
   font-weight: 600;
@@ -675,36 +1072,51 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
-  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  transition: all 0.25s;
+}
+
+.action-voice-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 
 .action-voice-btn.is-active {
   background: linear-gradient(135deg, #ef4444, #f43f5e);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
 }
 
 .text-input-box :deep(.el-input-group__append) {
-  background-color: #6366f1;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: white;
   border: none;
+  padding: 0 14px;
+}
+
+.text-input-box :deep(.el-input__wrapper) {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset !important;
+  border-radius: 10px 0 0 10px;
 }
 
 .text-input-box :deep(.el-input__inner) {
-  background-color: rgba(255, 255, 255, 0.04);
-  color: white;
-  border-color: rgba(255, 255, 255, 0.1);
+  color: #fff !important;
+  font-size: 13px;
+}
+
+.text-input-box :deep(.el-input__inner::placeholder) {
+  color: #64748b !important;
 }
 
 /* Transition Animations */
 .slide-up-enter-active,
 .slide-up-leave-active {
-  transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+  transition: all 0.35s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .slide-up-enter-from,
 .slide-up-leave-to {
-  transform: translateY(30px) scale(0.95);
+  transform: translateY(20px) scale(0.96);
   opacity: 0;
 }
 </style>
