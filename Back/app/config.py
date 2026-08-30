@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_NEON_DB = "postgresql://neondb_owner:npg_OgGezc9umYl0@ep-hidden-mountain-a5l36vpb-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+DEFAULT_NEON_DB = "postgresql://neondb_owner:npg_OgGezc9umYl0@ep-hidden-mountain-a5l36vpb-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
 class Settings:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "erp-super-secret-key-123456")
@@ -11,6 +11,8 @@ class Settings:
     _raw_db_url = os.getenv("DATABASE_URL", DEFAULT_NEON_DB)
     if _raw_db_url.startswith("postgres://"):
         _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
+    if "channel_binding=require" in _raw_db_url:
+        _raw_db_url = _raw_db_url.replace("&channel_binding=require", "").replace("channel_binding=require", "")
     DATABASE_URL: str = _raw_db_url
 
     AWS_ENDPOINT_URL_S3: str = os.getenv("AWS_ENDPOINT_URL_S3", "https://br-snowy-king-a5r6m9o9.storage.c-1.us-east-2.aws.neon.tech")

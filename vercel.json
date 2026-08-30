@@ -4,6 +4,12 @@
   "buildCommand": "cd Front && NODE_OPTIONS='--max-old-space-size=4096' pnpm run build",
   "outputDirectory": "Front/dist",
   "framework": "vite",
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12",
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
