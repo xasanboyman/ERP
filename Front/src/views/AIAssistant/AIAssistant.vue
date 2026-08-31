@@ -168,8 +168,29 @@
           </div>
         </div>
 
-        <!-- Voice Level Wave Visualizer -->
+        <!-- Voice Level & Harmonic Frequency Wave Visualizer -->
         <div class="visualizer-container" v-show="clientStatus === 'connected'">
+          <div class="visualizer-header">
+            <div class="tone-indicator">
+              <span
+                class="live-pulse-dot"
+                :class="{ 'is-active': currentFreqData.level > 6 }"
+              ></span>
+              <span class="tone-badge">{{ activeToneLabel }}</span>
+            </div>
+            <div class="pitch-indicator">
+              <span class="pitch-tag" :class="{ 'is-high': currentFreqData.high > 25 }">
+                {{
+                  currentFreqData.high > 25
+                    ? '⚡ Yuqori Pitch'
+                    : currentFreqData.bass > 30
+                      ? '🔊 Bas'
+                      : '🎙️ Normal'
+                }}
+              </span>
+              <span class="db-meter">{{ Math.round(currentFreqData.level) }} dB</span>
+            </div>
+          </div>
           <canvas ref="waveCanvas" class="wave-canvas"></canvas>
         </div>
 
@@ -240,7 +261,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { AIVoiceClient } from './AIVoiceClient'
 import { dispatchAIFunction } from './aiDispatcher'
 import { getDebtorsApi, getSalesListApi } from '@/api/sales'
@@ -256,6 +277,36 @@ const isThinking = ref(false)
 const messages = ref<{ role: 'user' | 'model' | 'api'; text: string; requests?: string[] }[]>([])
 const waveCanvas = ref<HTMLCanvasElement>()
 const logsContainer = ref<HTMLElement>()
+
+const currentFreqData = ref<{
+  raw: Uint8Array
+  bass: number
+  mid: number
+  high: number
+  level: number
+  source: 'playback' | 'mic' | 'idle'
+}>({
+  raw: new Uint8Array(64),
+  bass: 0,
+  mid: 0,
+  high: 0,
+  level: 0,
+  source: 'idle'
+})
+
+const activeToneLabel = computed(() => {
+  if (currentFreqData.value.source === 'playback') {
+    if (currentFreqData.value.high > 28) return 'AI Javobi (Yuqori Pitch / Ton)'
+    if (currentFreqData.value.bass > 35) return 'AI Javobi (Chuqur Tembr)'
+    return 'AI So‘zlamoqda (Ovozli)'
+  }
+  if (currentFreqData.value.source === 'mic') {
+    if (currentFreqData.value.high > 30) return 'Sizning ovozingiz (Yuqori Pitch)'
+    if (currentFreqData.value.bass > 32) return 'Sizning ovozingiz (Bas Tembr)'
+    return 'Sizning ovozingiz (Vokal)'
+  }
+  return 'Tinglanmoqda (Jonli rejim)'
+})
 
 const quickChips = [
   {
@@ -290,6 +341,10 @@ client.onTranscription = (role, text, isFinal) => {
 
 client.onAudioLevel = (level) => {
   audioLevel = level
+}
+
+client.onFrequencyData = (data) => {
+  currentFreqData.value = data
 }
 
 client.onToolExecution = (info) => {
@@ -561,8 +616,31 @@ const scrollToBottom = () => {
   })
 }
 
-// Visualizer Wave Drawing
+// Visualizer Wave & Realistic High-Pitch Harmonic Drawing
 let animFrameId: number
+let phase = 0
+let smoothBass = 0
+let smoothMid = 0
+let smoothHigh = 0
+let smoothLevel = 0
+
+// Equalizer peak caps tracking
+const numBars = 26
+const barPeaks = new Array(numBars).fill(0)
+const smoothBars = new Array(numBars).fill(0)
+
+// High-pitch spark particles
+interface SparkParticle {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  size: number
+  alpha: number
+  color: string
+}
+const sparks: SparkParticle[] = []
+
 const initCanvas = () => {
   nextTick(() => {
     if (!waveCanvas.value) return
@@ -574,27 +652,193 @@ const initCanvas = () => {
 const drawWave = () => {
   if (!waveCanvas.value || !canvasCtx) return
 
-  const width = (waveCanvas.value.width = waveCanvas.value.offsetWidth)
-  const height = (waveCanvas.value.height = waveCanvas.value.offsetHeight)
+  const dpr = window.devicePixelRatio || 1
+  const rect = waveCanvas.value.getBoundingClientRect()
+  const width = (waveCanvas.value.width = rect.width * dpr)
+  const height = (waveCanvas.value.height = rect.height * dpr)
+  canvasCtx.scale(dpr, dpr)
 
-  canvasCtx.clearRect(0, 0, width, height)
+  const displayWidth = rect.width
+  const displayHeight = rect.height
+  const centerY = displayHeight / 2
 
-  const bars = 20
-  const barWidth = 6
-  const gap = 4
-  const startX = (width - bars * (barWidth + gap)) / 2
+  canvasCtx.clearRect(0, 0, displayWidth, displayHeight)
 
-  canvasCtx.fillStyle = 'rgba(99, 102, 241, 0.8)'
-  for (let i = 0; i < bars; i++) {
-    const scale = Math.sin(Date.now() / 200 + i) * 0.4 + 0.6
-    const level = (audioLevel / 255) * height * 1.5 * scale
-    const barHeight = Math.max(4, level)
+  // 1. Smooth interpolation for silky 60fps animations
+  const cur = currentFreqData.value
+  smoothBass += (cur.bass - smoothBass) * 0.25
+  smoothMid += (cur.mid - smoothMid) * 0.25
+  smoothHigh += (cur.high - smoothHigh) * 0.3
+  smoothLevel += (cur.level - smoothLevel) * 0.25
+
+  // Phase advance accelerates smoothly with higher pitches
+  phase += 0.04 + (smoothHigh / 255) * 0.08 + (smoothMid / 255) * 0.03
+
+  // 2. Center Ambient Glow Aura (color shifts with pitch)
+  const auraRadius = Math.max(15, (smoothLevel / 255) * (displayWidth * 0.45) + 20)
+  const auraGrad = canvasCtx.createRadialGradient(
+    displayWidth / 2,
+    centerY,
+    2,
+    displayWidth / 2,
+    centerY,
+    auraRadius
+  )
+  if (smoothHigh > 25) {
+    // High pitch active: vibrant electric cyan & magenta flare
+    auraGrad.addColorStop(0, 'rgba(236, 72, 153, 0.25)')
+    auraGrad.addColorStop(0.5, 'rgba(6, 182, 212, 0.15)')
+    auraGrad.addColorStop(1, 'rgba(15, 23, 42, 0)')
+  } else if (smoothBass > 30) {
+    // Bass active: deep indigo & purple glow
+    auraGrad.addColorStop(0, 'rgba(99, 102, 241, 0.25)')
+    auraGrad.addColorStop(0.5, 'rgba(139, 92, 246, 0.12)')
+    auraGrad.addColorStop(1, 'rgba(15, 23, 42, 0)')
+  } else {
+    auraGrad.addColorStop(0, 'rgba(99, 102, 241, 0.15)')
+    auraGrad.addColorStop(1, 'rgba(15, 23, 42, 0)')
+  }
+  canvasCtx.fillStyle = auraGrad
+  canvasCtx.beginPath()
+  canvasCtx.arc(displayWidth / 2, centerY, auraRadius, 0, Math.PI * 2)
+  canvasCtx.fill()
+
+  // 3. Multi-Band Equalizer Spectrum Bars (Symmetrical from center)
+  const barWidth = 4
+  const gap = 3
+  const totalBarsWidth = numBars * (barWidth + gap) - gap
+  const startX = (displayWidth - totalBarsWidth) / 2
+  const rawArray = cur.raw
+
+  for (let i = 0; i < numBars; i++) {
+    // Map symmetrical indices to low -> high frequencies
+    const freqIdx = Math.floor(Math.abs(i - numBars / 2) * (rawArray.length / (numBars / 2)))
+    const rawVal = rawArray[Math.min(freqIdx, rawArray.length - 1)] || 0
+
+    // Smooth bar height
+    smoothBars[i] += (rawVal - smoothBars[i]) * 0.3
+    const barVal = smoothBars[i]
+    const normalizedHeight = (barVal / 255) * (displayHeight * 0.85)
+    const barHeight = Math.max(3, normalizedHeight)
+
+    // Falling peak cap physics
+    if (barHeight >= barPeaks[i]) {
+      barPeaks[i] = barHeight
+    } else {
+      barPeaks[i] = Math.max(3, barPeaks[i] - 0.7)
+    }
+
     const x = startX + i * (barWidth + gap)
-    const y = (height - barHeight) / 2
+    const y = (displayHeight - barHeight) / 2
 
+    // Dynamic Gradient based on pitch position
+    const isHighPitch = Math.abs(i - numBars / 2) > numBars * 0.3
+    const barGrad = canvasCtx.createLinearGradient(x, y, x, y + barHeight)
+    if (isHighPitch && smoothHigh > 18) {
+      barGrad.addColorStop(0, '#06b6d4')
+      barGrad.addColorStop(0.5, '#ec4899')
+      barGrad.addColorStop(1, '#8b5cf6')
+    } else {
+      barGrad.addColorStop(0, '#818cf8')
+      barGrad.addColorStop(0.6, '#6366f1')
+      barGrad.addColorStop(1, '#4338ca')
+    }
+
+    canvasCtx.fillStyle = barGrad
     canvasCtx.beginPath()
-    canvasCtx.roundRect(x, y, barWidth, barHeight, 3)
+    canvasCtx.roundRect(x, y, barWidth, barHeight, 2)
     canvasCtx.fill()
+
+    // Peak Cap Dot
+    if (barPeaks[i] > 6) {
+      const peakY = (displayHeight - barPeaks[i]) / 2 - 2
+      canvasCtx.fillStyle = isHighPitch ? '#38bdf8' : '#a5b4fc'
+      canvasCtx.beginPath()
+      canvasCtx.arc(x + barWidth / 2, Math.max(2, peakY), 1.2, 0, Math.PI * 2)
+      canvasCtx.fill()
+    }
+  }
+
+  // 4. Harmonic Glowing Sine Ribbon Waves (Siri / Gemini Live Style)
+  const drawHarmonicWave = (
+    freqMult: number,
+    phaseOffset: number,
+    ampFactor: number,
+    strokeStyle: string,
+    lineWidth: number
+  ) => {
+    canvasCtx.save()
+    canvasCtx.beginPath()
+    canvasCtx.strokeStyle = strokeStyle
+    canvasCtx.lineWidth = lineWidth
+    canvasCtx.shadowBlur = 8
+    canvasCtx.shadowColor = strokeStyle
+
+    const amp = Math.max(2, (smoothLevel / 255) * (displayHeight * 0.42) * ampFactor)
+
+    for (let x = 0; x <= displayWidth; x += 4) {
+      // Gaussian window attenuation so waves pinch at left and right edges
+      const normX = x / displayWidth
+      const envelope = Math.sin(normX * Math.PI)
+
+      // Harmonic sine formula reacting to pitch and vocal components
+      const waveVal =
+        Math.sin(normX * Math.PI * 3 * freqMult + phase + phaseOffset) * 0.7 +
+        Math.sin(normX * Math.PI * 6 * freqMult - phase * 1.3) * (smoothHigh / 255) * 0.5
+
+      const y = centerY + waveVal * amp * envelope
+
+      if (x === 0) canvasCtx.moveTo(x, y)
+      else canvasCtx.lineTo(x, y)
+    }
+    canvasCtx.stroke()
+    canvasCtx.restore()
+  }
+
+  // Wave 1: Primary Vocal Wave (Indigo-Cyan)
+  drawHarmonicWave(1.0, 0, 1.0, 'rgba(99, 102, 241, 0.85)', 2.2)
+
+  // Wave 2: High-Pitch Harmonic Wave (Magenta-Pink)
+  if (smoothHigh > 12) {
+    drawHarmonicWave(1.6, Math.PI * 0.4, 0.9, 'rgba(236, 72, 153, 0.8)', 1.8)
+  }
+
+  // Wave 3: Secondary Harmonic Ribbon (Electric Cyan)
+  drawHarmonicWave(0.7, Math.PI * 0.8, 0.6, 'rgba(6, 182, 212, 0.6)', 1.4)
+
+  // 5. High-Pitch Spark Particles (Dancing embers)
+  if (smoothHigh > 22 && Math.random() < 0.35) {
+    sparks.push({
+      x: displayWidth / 2 + (Math.random() - 0.5) * (displayWidth * 0.6),
+      y: centerY + (Math.random() - 0.5) * 10,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: -Math.random() * 2 - 0.8,
+      size: Math.random() * 2.2 + 1,
+      alpha: 1,
+      color: Math.random() > 0.5 ? '#38bdf8' : '#f472b6'
+    })
+  }
+
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i]
+    s.x += s.vx
+    s.y += s.vy
+    s.alpha -= 0.035
+
+    if (s.alpha <= 0) {
+      sparks.splice(i, 1)
+      continue
+    }
+
+    canvasCtx.save()
+    canvasCtx.globalAlpha = s.alpha
+    canvasCtx.fillStyle = s.color
+    canvasCtx.shadowBlur = 6
+    canvasCtx.shadowColor = s.color
+    canvasCtx.beginPath()
+    canvasCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2)
+    canvasCtx.fill()
+    canvasCtx.restore()
   }
 
   animFrameId = requestAnimationFrame(drawWave)
@@ -1081,17 +1325,92 @@ onUnmounted(() => {
   margin-top: 2px;
 }
 
-/* Visualizer Wave */
+/* Visualizer Wave & Tone Header */
 .visualizer-container {
-  height: 45px;
-  padding: 0 20px;
+  padding: 6px 18px 4px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.visualizer-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.tone-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.2s;
+}
+
+.live-pulse-dot.is-active {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+  animation: pulseDot 1s infinite alternate;
+}
+
+@keyframes pulseDot {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+}
+
+.tone-badge {
+  color: #cbd5e1;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.pitch-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pitch-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  transition: all 0.2s;
+}
+
+.pitch-tag.is-high {
+  background: rgba(236, 72, 153, 0.2);
+  color: #f472b6;
+  border-color: rgba(236, 72, 153, 0.45);
+  box-shadow: 0 0 6px rgba(236, 72, 153, 0.3);
+}
+
+.db-meter {
+  font-size: 10px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
 }
 
 .wave-canvas {
   width: 100%;
-  height: 100%;
+  height: 52px;
 }
 
 /* Controls */

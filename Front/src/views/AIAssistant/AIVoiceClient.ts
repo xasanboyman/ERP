@@ -164,6 +164,16 @@ export class AIVoiceClient {
   public onTranscription:
     ((role: 'user' | 'model', text: string, isFinal: boolean) => void) | null = null
   public onAudioLevel: ((level: number) => void) | null = null
+  public onFrequencyData:
+    | ((data: {
+        raw: Uint8Array
+        bass: number
+        mid: number
+        high: number
+        level: number
+        source: 'playback' | 'mic' | 'idle'
+      }) => void)
+    | null = null
   public onToolExecution:
     ((info: { action: string; requests: string[]; message: string; data?: any }) => void) | null =
     null
@@ -775,31 +785,122 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
       this.audioContext = new AudioContext({ sampleRate: 16000 })
       this.micAnalyser = this.audioContext.createAnalyser()
       this.micAnalyser.fftSize = 256
+      this.micAnalyser.smoothingTimeConstant = 0.8
 
       this.mediaSourceNode = this.audioContext.createMediaStreamSource(this.mediaStream)
       this.mediaSourceNode.connect(this.micAnalyser)
 
-      // Setup audio levels callback & Speaking cancellation (Barge-in detection)
-      const dataArray = new Uint8Array(this.micAnalyser.frequencyBinCount)
+      // Initialize playback context early
+      this.playbackAudioContext = new AudioContext({ sampleRate: 24000 })
+      this.playbackAnalyser = this.playbackAudioContext.createAnalyser()
+      this.playbackAnalyser.fftSize = 256
+      this.playbackAnalyser.smoothingTimeConstant = 0.85
+      this.audioQueue = new AudioQueue(this.playbackAudioContext, this.playbackAnalyser)
+
+      // Track sustained human speech for 1.0s - 1.5s barge-in
+      let speechStartTimestamp = 0
+      let silenceStartTimestamp = 0
+
+      // Multi-band frequency data buffers
+      const micDataArray = new Uint8Array(this.micAnalyser.frequencyBinCount)
+      const playbackDataArray = new Uint8Array(this.playbackAnalyser.frequencyBinCount)
+
       const checkAudioLevel = () => {
         if (!this.isConnected) return
-        this.micAnalyser?.getByteFrequencyData(dataArray)
-        let sum = 0
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i]
+
+        let activeSource: 'playback' | 'mic' | 'idle' = 'idle'
+        let targetData = micDataArray
+
+        const isModelPlaying = this.audioQueue?.isPlaying() || false
+
+        if (isModelPlaying && this.playbackAnalyser) {
+          this.playbackAnalyser.getByteFrequencyData(playbackDataArray)
+          targetData = playbackDataArray
+          activeSource = 'playback'
+        } else if (this.micAnalyser) {
+          this.micAnalyser.getByteFrequencyData(micDataArray)
+          targetData = micDataArray
+          activeSource = 'mic'
         }
-        const avg = sum / dataArray.length
+
+        // Multi-band frequency breakdown (Bass: 0-8, Mid/Voice: 8-45, High: 45-128)
+        let bassSum = 0,
+          midSum = 0,
+          highSum = 0,
+          totalSum = 0
+        const totalBins = targetData.length
+        const bassCount = Math.min(10, totalBins)
+        const midCount = Math.min(50, totalBins - bassCount)
+        const highCount = Math.max(1, totalBins - bassCount - midCount)
+
+        for (let i = 0; i < totalBins; i++) {
+          const val = targetData[i]
+          totalSum += val
+          if (i < bassCount) {
+            bassSum += val
+          } else if (i < bassCount + midCount) {
+            midSum += val
+          } else {
+            highSum += val
+          }
+        }
+
+        const avg = totalSum / totalBins
+        const bassLevel = bassSum / Math.max(1, bassCount)
+        const midLevel = midSum / Math.max(1, midCount)
+        const highLevel = highSum / Math.max(1, highCount)
+
         if (this.onAudioLevel) this.onAudioLevel(avg)
 
-        // BARGE-IN SPEAKING CANCELLATION:
-        // When user speaks (avg >= 28 for >= 2 consecutive frames) and AI is currently speaking
-        if (avg >= 28) {
-          this.consecutiveVoiceFrames++
-          if (this.consecutiveVoiceFrames >= 2 && this.audioQueue?.isPlaying()) {
-            this.audioQueue.stopAll()
+        if (this.onFrequencyData) {
+          this.onFrequencyData({
+            raw: targetData,
+            bass: bassLevel,
+            mid: midLevel,
+            high: highLevel,
+            level: avg,
+            source: avg > 6 ? activeSource : 'idle'
+          })
+        }
+
+        // BARGE-IN SPEAKING CANCELLATION (Continuous Human Speech for 1.0s - 1.5s):
+        // Focus specifically on the human speech vocal formant band (bins 8 to 45: ~250Hz - 3500Hz)
+        if (this.micAnalyser && isModelPlaying) {
+          this.micAnalyser.getByteFrequencyData(micDataArray)
+          let userVocalSum = 0
+          for (let i = 8; i < 48 && i < micDataArray.length; i++) {
+            userVocalSum += micDataArray[i]
+          }
+          const userVocalEnergy = userVocalSum / 40
+          const now = Date.now()
+
+          // Human speech vocal band threshold (ignores brief ambient clicks/taps)
+          if (userVocalEnergy >= 30) {
+            silenceStartTimestamp = 0
+            if (speechStartTimestamp === 0) {
+              speechStartTimestamp = now
+            } else {
+              const speechDuration = now - speechStartTimestamp
+              // Only cancel AI speech once user has been continuously speaking words for >= 1.2s (1s-1.5s)
+              if (speechDuration >= 1200) {
+                this.audioQueue?.stopAll()
+                speechStartTimestamp = 0
+              }
+            }
+          } else {
+            // Allow 350ms natural gap between words/syllables before resetting timer
+            if (speechStartTimestamp > 0) {
+              if (silenceStartTimestamp === 0) {
+                silenceStartTimestamp = now
+              } else if (now - silenceStartTimestamp > 350) {
+                speechStartTimestamp = 0
+                silenceStartTimestamp = 0
+              }
+            }
           }
         } else {
-          this.consecutiveVoiceFrames = 0
+          speechStartTimestamp = 0
+          silenceStartTimestamp = 0
         }
 
         requestAnimationFrame(checkAudioLevel)
@@ -818,11 +919,6 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
         const int16 = event.data
         this.sendAudioChunk(int16)
       }
-
-      // Initialize playback
-      this.playbackAudioContext = new AudioContext({ sampleRate: 24000 })
-      this.playbackAnalyser = this.playbackAudioContext.createAnalyser()
-      this.audioQueue = new AudioQueue(this.playbackAudioContext, this.playbackAnalyser)
     } catch (err) {
       console.error('Failed to access microphone or initialize AudioContext:', err)
     }
