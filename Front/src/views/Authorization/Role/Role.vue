@@ -79,20 +79,20 @@ const tableColumns = reactive<TableColumn[]>([
   {
     field: 'action',
     label: t('userDemo.action'),
-    minWidth: 360,
-    width: 360,
+    minWidth: 200,
+    width: 200,
     slots: {
       default: (data: any) => {
         const row = data.row
         return (
-          <div class="flex items-center gap-8px flex-nowrap">
-            <BaseButton type="primary" onClick={() => action(row, 'edit')}>
+          <div class="flex items-center gap-6px flex-nowrap whitespace-nowrap">
+            <BaseButton type="primary" size="small" onClick={() => action(row, 'edit')}>
               {t('exampleDemo.edit')}
             </BaseButton>
-            <BaseButton type="success" onClick={() => action(row, 'detail')}>
+            <BaseButton type="success" size="small" onClick={() => action(row, 'detail')}>
               {t('exampleDemo.detail')}
             </BaseButton>
-            <BaseButton type="danger" onClick={() => deleteRow(row)}>
+            <BaseButton type="danger" size="small" onClick={() => deleteRow(row)}>
               {t('exampleDemo.del')}
             </BaseButton>
           </div>

@@ -116,16 +116,25 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.action')" width="180" fixed="right">
+      <el-table-column :label="t('common.action')" width="160" fixed="right" align="center">
         <template #default="scope">
-          <span v-if="scope?.row" class="flex gap-10px">
-            <el-button link type="primary" class="!font-bold" @click="openEditDialog(scope.row)">{{
-              t('common.edit')
-            }}</el-button>
-            <el-button link type="danger" class="!font-bold" @click="handleDelete(scope.row)">{{
-              t('erp.dismiss')
-            }}</el-button>
-          </span>
+          <div v-if="scope?.row" class="flex items-center justify-center gap-8px flex-nowrap whitespace-nowrap">
+            <el-button link type="primary" size="small" class="!font-bold !text-13px" @click="openEditDialog(scope.row)">
+              {{ t('common.edit') }}
+            </el-button>
+            <el-dropdown trigger="click">
+              <el-button link type="info" size="small" class="!font-bold !text-13px">
+                •••
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="handleDelete(scope.row)">
+                    <span class="text-red-500 font-semibold">{{ t('erp.dismiss') }}</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

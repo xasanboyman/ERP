@@ -237,8 +237,8 @@ const crudSchemas = reactive<CrudSchema[]>([
   },
   {
     field: 'action',
-    minWidth: '360px',
-    width: '360px',
+    minWidth: '200px',
+    width: '200px',
     label: t('tableDemo.action'),
     search: {
       hidden: true
@@ -253,14 +253,14 @@ const crudSchemas = reactive<CrudSchema[]>([
       slots: {
         default: (data: any) => {
           return (
-            <div class="flex items-center gap-8px flex-nowrap">
-              <BaseButton type="primary" onClick={() => action(data.row, 'edit')}>
+            <div class="flex items-center gap-6px flex-nowrap whitespace-nowrap">
+              <BaseButton type="primary" size="small" onClick={() => action(data.row, 'edit')}>
                 {t('exampleDemo.edit')}
               </BaseButton>
-              <BaseButton type="success" onClick={() => action(data.row, 'detail')}>
+              <BaseButton type="success" size="small" onClick={() => action(data.row, 'detail')}>
                 {t('exampleDemo.detail')}
               </BaseButton>
-              <BaseButton type="danger" onClick={() => delData(data.row)}>
+              <BaseButton type="danger" size="small" onClick={() => delData(data.row)}>
                 {t('exampleDemo.del')}
               </BaseButton>
             </div>

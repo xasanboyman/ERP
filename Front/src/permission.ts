@@ -8,6 +8,7 @@ import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { preloadAllViewsAndData } from '@/utils/routerHelper'
+import { getAdminRoleApi, getTestRoleApi } from '@/api/login'
 
 const { start, done } = useNProgress()
 
@@ -65,6 +66,32 @@ router.beforeEach(async (to, from, next) => {
       next({ path: '/' })
     } else {
       if (permissionStore.getIsAddRouters) {
+        const user = userStore.getUserInfo
+        const role = (user?.role || '').toLowerCase()
+        const isSuper = role.includes('admin') || role.includes('super')
+
+        // If not super admin, check if path is authorized
+        if (!isSuper) {
+          const allowedPaths = permissionStore.getAddRouters.map((r: any) => r.path)
+          const targetPath = to.path.toLowerCase()
+          const isAllowed = allowedPaths.some((p: string) => {
+            const lp = p.toLowerCase()
+            return lp === targetPath || targetPath.startsWith(lp + '/') || lp.endsWith(targetPath)
+          })
+
+          if (
+            !isAllowed &&
+            targetPath !== '/404' &&
+            targetPath !== '/login' &&
+            targetPath !== '/redirect' &&
+            targetPath !== '/'
+          ) {
+            const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
+            next({ path: firstPath, replace: true })
+            return
+          }
+        }
+
         // If navigating to root '/' or an unpermitted route that has no match:
         const matched = router.resolve(to.path).matched
         if (
@@ -84,6 +111,22 @@ router.beforeEach(async (to, from, next) => {
       }
 
       let roleRouters: any = userStore.getRoleRouters
+      if (!roleRouters || (Array.isArray(roleRouters) && roleRouters.length === 0)) {
+        try {
+          const user = userStore.getUserInfo
+          const roleName = user?.username || user?.role || 'admin'
+          const res = appStore.serverDynamicRouter
+            ? await getAdminRoleApi({ roleName })
+            : await getTestRoleApi({ roleName })
+          if (res && res.data) {
+            roleRouters = Array.isArray(res.data) ? res.data : (res.data as any).list || []
+            userStore.setRoleRouters(roleRouters)
+          }
+        } catch (e) {
+          console.warn('Failed to fetch role routers on reload:', e)
+        }
+      }
+
       if (!Array.isArray(roleRouters)) {
         if (roleRouters && typeof roleRouters === 'object' && Array.isArray(roleRouters.list)) {
           roleRouters = roleRouters.list
@@ -92,12 +135,25 @@ router.beforeEach(async (to, from, next) => {
         }
       }
 
+      const isSuper =
+        (userStore.getUserInfo?.role || '').toLowerCase().includes('admin') ||
+        (userStore.getUserInfo?.role || '').toLowerCase().includes('super')
+
       if (appStore.getDynamicRouter && roleRouters.length > 0) {
         appStore.serverDynamicRouter
           ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
           : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
-      } else {
+      } else if (isSuper) {
         await permissionStore.generateRoutes('static')
+      } else {
+        await permissionStore.generateRoutes('frontEnd', [
+          '/dashboard',
+          '/dashboard/workplace',
+          '/product',
+          '/product/list',
+          '/sales',
+          '/sales/pos'
+        ])
       }
 
       permissionStore.getAddRouters.forEach((route) => {

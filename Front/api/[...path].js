@@ -214,6 +214,77 @@ const defaultRoleKeys = [
   '/authorization/role'
 ];
 
+function filterRoutesByRole(permissions) {
+  if (!Array.isArray(permissions) || permissions.includes('*.*.*') || permissions.includes('*') || permissions.includes('all')) {
+    return defaultAdminRoutes;
+  }
+
+  const pSet = new Set(permissions.map((p) => String(p).toLowerCase().trim()));
+
+  const filtered = [];
+  for (const parent of defaultAdminRoutes) {
+    const parentPath = parent.path.toLowerCase();
+    const parentName = (parent.name || '').toLowerCase();
+
+    // Check children
+    const validChildren = [];
+    if (parent.children && parent.children.length > 0) {
+      for (const child of parent.children) {
+        const childPath = child.path.toLowerCase();
+        const fullPath = `${parentPath}/${childPath}`.replace(/\/+/g, '/').toLowerCase();
+        const childName = (child.name || '').toLowerCase();
+
+        const hasMatch =
+          pSet.has(fullPath) ||
+          pSet.has(childPath) ||
+          pSet.has(childName) ||
+          pSet.has(parentPath) ||
+          Array.from(pSet).some(
+            (p) => p.includes(childPath) || (childPath.length > 2 && p.endsWith(childPath))
+          );
+
+        if (hasMatch) {
+          validChildren.push(child);
+        }
+      }
+    }
+
+    if (validChildren.length > 0) {
+      filtered.push({
+        ...parent,
+        children: validChildren
+      });
+    } else if (pSet.has(parentPath) || pSet.has(parentName)) {
+      filtered.push({
+        ...parent,
+        children: []
+      });
+    }
+  }
+
+  return filtered.length > 0 ? filtered : defaultAdminRoutes;
+}
+
+function filterRoleKeysByRole(permissions) {
+  if (!Array.isArray(permissions) || permissions.includes('*.*.*') || permissions.includes('*') || permissions.includes('all')) {
+    return defaultRoleKeys;
+  }
+
+  const pSet = new Set(permissions.map((p) => String(p).toLowerCase().trim()));
+  const keys = defaultRoleKeys.filter((k) => {
+    const lk = k.toLowerCase();
+    const parts = lk.split('/').filter(Boolean);
+    const lastPart = parts[parts.length - 1];
+    return (
+      pSet.has(lk) ||
+      pSet.has(lastPart) ||
+      Array.from(pSet).some((p) => p.includes(lastPart) || lk.includes(p))
+    );
+  });
+
+  return keys.length > 0 ? keys : ['/dashboard', '/dashboard/workplace'];
+}
+
 function authenticate(req, res) {
   const authHeader = req?.headers?.authorization || req?.headers?.Authorization;
   if (!authHeader) {
@@ -475,16 +546,63 @@ export default async function handler(req, res) {
 
     // 10. Roles Endpoints
     if (path === 'role/list') {
-      const roleName = req.query?.roleName || urlSearchParams.get('roleName');
+      const roleName = req.query?.roleName || urlSearchParams.get('roleName') || authUser?.role || authUser?.sub;
       if (roleName) {
-        return res.status(200).json({ code: 0, data: defaultAdminRoutes });
+        let permissions = ['*.*.*'];
+        if (roleName !== 'Super Administrator' && roleName !== 'admin') {
+          const rRows = await sql`SELECT * FROM roles WHERE "roleName" = ${roleName} OR id = ${roleName} LIMIT 1`;
+          if (rRows[0] && rRows[0].permissions) {
+            permissions = typeof rRows[0].permissions === 'string' ? JSON.parse(rRows[0].permissions) : rRows[0].permissions;
+          } else {
+            const uRows = await sql`SELECT u.*, r.permissions as role_perms FROM users u LEFT JOIN roles r ON u."roleId" = r.id WHERE u.username = ${roleName} LIMIT 1`;
+            if (uRows[0]) {
+              permissions = uRows[0].role_perms || uRows[0].permissions || [];
+              if (typeof permissions === 'string') {
+                try { permissions = JSON.parse(permissions); } catch (e) {}
+              }
+            } else {
+              const wRows = await sql`SELECT w.*, r.permissions as role_perms FROM workers w LEFT JOIN roles r ON w.role = r."roleName" WHERE w.account = ${roleName} LIMIT 1`;
+              if (wRows[0]) {
+                permissions = wRows[0].role_perms || [];
+                if (typeof permissions === 'string') {
+                  try { permissions = JSON.parse(permissions); } catch (e) {}
+                }
+              }
+            }
+          }
+        }
+        return res.status(200).json({ code: 0, data: filterRoutesByRole(permissions) });
       }
       const rows = await sql`SELECT * FROM roles ORDER BY id ASC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
     if (path === 'role/list2') {
-      return res.status(200).json({ code: 0, data: defaultRoleKeys });
+      const roleName = req.query?.roleName || urlSearchParams.get('roleName') || authUser?.role || authUser?.sub;
+      let permissions = ['*.*.*'];
+      if (roleName && roleName !== 'Super Administrator' && roleName !== 'admin') {
+        const rRows = await sql`SELECT * FROM roles WHERE "roleName" = ${roleName} OR id = ${roleName} LIMIT 1`;
+        if (rRows[0] && rRows[0].permissions) {
+          permissions = typeof rRows[0].permissions === 'string' ? JSON.parse(rRows[0].permissions) : rRows[0].permissions;
+        } else {
+          const uRows = await sql`SELECT u.*, r.permissions as role_perms FROM users u LEFT JOIN roles r ON u."roleId" = r.id WHERE u.username = ${roleName} LIMIT 1`;
+          if (uRows[0]) {
+            permissions = uRows[0].role_perms || uRows[0].permissions || [];
+            if (typeof permissions === 'string') {
+              try { permissions = JSON.parse(permissions); } catch (e) {}
+            }
+          } else {
+            const wRows = await sql`SELECT w.*, r.permissions as role_perms FROM workers w LEFT JOIN roles r ON w.role = r."roleName" WHERE w.account = ${roleName} LIMIT 1`;
+            if (wRows[0]) {
+              permissions = wRows[0].role_perms || [];
+              if (typeof permissions === 'string') {
+                try { permissions = JSON.parse(permissions); } catch (e) {}
+              }
+            }
+          }
+        }
+      }
+      return res.status(200).json({ code: 0, data: filterRoleKeysByRole(permissions) });
     }
 
     if (path === 'role/table') {
@@ -493,6 +611,10 @@ export default async function handler(req, res) {
     }
 
     if (path === 'role/save' && req.method === 'POST') {
+      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
+      if (!isSuper) {
+        return res.status(403).json({ code: 403, message: 'Kechirasiz, rollarni tahrirlash uchun Administrator huquqi talab qilinadi.' });
+      }
       const { id, roleName, status, remark, permissions } = req.body || {};
       if (id) {
         await sql`
@@ -511,6 +633,10 @@ export default async function handler(req, res) {
     }
 
     if (path === 'role/delete' && req.method === 'POST') {
+      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
+      if (!isSuper) {
+        return res.status(403).json({ code: 403, message: "Kechirasiz, rollarni o'chirish uchun Administrator huquqi talab qilinadi." });
+      }
       const { id } = req.body || {};
       if (id) {
         await sql`DELETE FROM roles WHERE id = ${id}`;
@@ -531,6 +657,10 @@ export default async function handler(req, res) {
     }
 
     if (path === 'department/save' && req.method === 'POST') {
+      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
+      if (!isSuper) {
+        return res.status(403).json({ code: 403, message: "Kechirasiz, bo'limlarni boshqarish uchun Administrator huquqi talab qilinadi." });
+      }
       const { id, departmentName, parentId, status, remark } = req.body || {};
       if (id) {
         await sql`
@@ -1479,31 +1609,67 @@ export default async function handler(req, res) {
 
     // 22. GET /api/ai/config
     if (path === 'ai/config') {
-      const username = req.query?.username || urlSearchParams.get('username') || authUser?.username;
+      const username = req.query?.username || urlSearchParams.get('username') || authUser?.username || authUser?.sub || 'admin';
       const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+
+      let dbUser = null;
+      const userRows = await sql`
+        SELECT u.*, r."roleName" as role_title, r.permissions as role_perms 
+        FROM users u LEFT JOIN roles r ON u."roleId" = r.id 
+        WHERE u.username = ${username} LIMIT 1
+      `;
+      if (userRows[0]) {
+        dbUser = userRows[0];
+      } else {
+        const workerRows = await sql`
+          SELECT w.*, r."roleName" as role_title, r.permissions as role_perms 
+          FROM workers w LEFT JOIN roles r ON w.role = r."roleName" 
+          WHERE w.account = ${username} OR w.employee_code = ${username} LIMIT 1
+        `;
+        if (workerRows[0]) {
+          dbUser = workerRows[0];
+        }
+      }
+
+      const userRole = dbUser?.role_title || dbUser?.role || (username === 'admin' ? 'Super Administrator' : 'Cashier');
+      const isSuper = userRole === 'Super Administrator' || userRole === 'Administrator' || username === 'admin';
+
+      let allowedTools = [];
+      if (isSuper) {
+        allowedTools = [
+          'create_worker', 'update_worker', 'delete_worker', 'list_workers',
+          'create_product', 'add_product_stock', 'update_product', 'delete_product', 'list_products', 'search_product',
+          'create_department', 'list_departments',
+          'create_position', 'list_positions',
+          'create_timesheet', 'create_staff_output', 'list_staff_outputs', 'create_staff_adjustment', 'list_staff_adjustments',
+          'list_users', 'list_sales', 'get_sale_receipt', 'list_debtors', 'repay_debt',
+          'list_salaries', 'create_salary', 'salary_payout',
+          'list_roles', 'create_role', 'delete_role',
+          'list_branches', 'create_branch',
+          'create_cutting_order', 'delete_cutting_order', 'list_cutting_orders', 'start_production', 'list_cutting_tasks', 'update_task_status',
+          'generate_qr_code', 'list_qr_codes', 'delete_qr_code',
+          'get_top_selling_products', 'get_sales_analytics', 'get_debt_report'
+        ];
+      } else {
+        // Restricted to Cashier / Sales tools only (NO HR, NO Salary, NO Role editing)
+        allowedTools = [
+          'list_products', 'search_product', 'add_product_stock',
+          'list_sales', 'get_sale_receipt', 'list_debtors', 'repay_debt',
+          'get_top_selling_products', 'get_sales_analytics'
+        ];
+      }
+
       return res.status(200).json({
         code: 0,
         data: {
           gemini_api_key: geminiKey,
           user: {
-            name: authUser?.full_name || username || 'Admin',
-            username: username || authUser?.username || 'admin',
-            role: authUser?.role || 'Super Administrator',
-            is_super: true
+            name: dbUser?.full_name || dbUser?.name || username,
+            username: username,
+            role: userRole,
+            is_super: isSuper
           },
-          allowed_tools: [
-            'create_worker', 'update_worker', 'delete_worker', 'list_workers',
-            'create_product', 'add_product_stock', 'update_product', 'delete_product', 'list_products', 'search_product',
-            'create_department', 'list_departments',
-            'create_position', 'list_positions',
-            'create_timesheet', 'create_staff_output', 'list_staff_outputs', 'create_staff_adjustment', 'list_staff_adjustments',
-            'list_users', 'list_sales', 'get_sale_receipt', 'list_debtors', 'repay_debt',
-            'list_salaries', 'create_salary', 'salary_payout',
-            'list_roles', 'create_role', 'delete_role',
-            'list_branches', 'create_branch',
-            'create_cutting_order', 'delete_cutting_order', 'list_cutting_orders', 'start_production', 'list_cutting_tasks', 'update_task_status',
-            'generate_qr_code', 'list_qr_codes', 'delete_qr_code'
-          ]
+          allowed_tools: allowedTools
         }
       });
     }
