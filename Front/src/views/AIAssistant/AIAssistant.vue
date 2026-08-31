@@ -617,29 +617,19 @@ const scrollToBottom = () => {
 }
 
 // Visualizer Wave & Realistic High-Pitch Harmonic Drawing
+// Visualizer Wave & Realistic Dual-Mode Drawing (AI Radial Starburst vs User Symmetrical Wave)
 let animFrameId: number
 let phase = 0
+let rotationAngle = 0
+let modeMorph = 1.0 // 1.0 = AI Radial Starburst (Image 0), 0.0 = User Waveform (Image 1)
 let smoothBass = 0
 let smoothMid = 0
 let smoothHigh = 0
 let smoothLevel = 0
 
-// Equalizer peak caps tracking
-const numBars = 26
-const barPeaks = new Array(numBars).fill(0)
-const smoothBars = new Array(numBars).fill(0)
-
-// High-pitch spark particles
-interface SparkParticle {
-  x: number
-  y: number
-  vx: number
-  vy: number
-  size: number
-  alpha: number
-  color: string
-}
-const sparks: SparkParticle[] = []
+// Track smoothed array for waveform bars
+const numWaveBars = 48
+const smoothWaveBars = new Array(numWaveBars).fill(4)
 
 const initCanvas = () => {
   nextTick(() => {
@@ -660,184 +650,177 @@ const drawWave = () => {
 
   const displayWidth = rect.width
   const displayHeight = rect.height
+  const centerX = displayWidth / 2
   const centerY = displayHeight / 2
 
   canvasCtx.clearRect(0, 0, displayWidth, displayHeight)
 
-  // 1. Smooth interpolation for silky 60fps animations
+  // 1. Smooth interpolation for energy & pitch
   const cur = currentFreqData.value
-  smoothBass += (cur.bass - smoothBass) * 0.25
+  smoothBass += (cur.bass - smoothBass) * 0.22
   smoothMid += (cur.mid - smoothMid) * 0.25
-  smoothHigh += (cur.high - smoothHigh) * 0.3
-  smoothLevel += (cur.level - smoothLevel) * 0.25
+  smoothHigh += (cur.high - smoothHigh) * 0.28
+  smoothLevel += (cur.level - smoothLevel) * 0.22
 
-  // Phase advance accelerates smoothly with higher pitches
-  phase += 0.04 + (smoothHigh / 255) * 0.08 + (smoothMid / 255) * 0.03
-
-  // 2. Center Ambient Glow Aura (color shifts with pitch)
-  const auraRadius = Math.max(15, (smoothLevel / 255) * (displayWidth * 0.45) + 20)
-  const auraGrad = canvasCtx.createRadialGradient(
-    displayWidth / 2,
-    centerY,
-    2,
-    displayWidth / 2,
-    centerY,
-    auraRadius
-  )
-  if (smoothHigh > 25) {
-    // High pitch active: vibrant electric cyan & magenta flare
-    auraGrad.addColorStop(0, 'rgba(236, 72, 153, 0.25)')
-    auraGrad.addColorStop(0.5, 'rgba(6, 182, 212, 0.15)')
-    auraGrad.addColorStop(1, 'rgba(15, 23, 42, 0)')
-  } else if (smoothBass > 30) {
-    // Bass active: deep indigo & purple glow
-    auraGrad.addColorStop(0, 'rgba(99, 102, 241, 0.25)')
-    auraGrad.addColorStop(0.5, 'rgba(139, 92, 246, 0.12)')
-    auraGrad.addColorStop(1, 'rgba(15, 23, 42, 0)')
-  } else {
-    auraGrad.addColorStop(0, 'rgba(99, 102, 241, 0.15)')
-    auraGrad.addColorStop(1, 'rgba(15, 23, 42, 0)')
-  }
-  canvasCtx.fillStyle = auraGrad
-  canvasCtx.beginPath()
-  canvasCtx.arc(displayWidth / 2, centerY, auraRadius, 0, Math.PI * 2)
-  canvasCtx.fill()
-
-  // 3. Multi-Band Equalizer Spectrum Bars (Symmetrical from center)
-  const barWidth = 4
-  const gap = 3
-  const totalBarsWidth = numBars * (barWidth + gap) - gap
-  const startX = (displayWidth - totalBarsWidth) / 2
   const rawArray = cur.raw
+  const isAISpeaking = cur.source === 'playback' || (cur.source !== 'mic' && smoothLevel > 12)
+  const isUserSpeaking = cur.source === 'mic' && smoothLevel > 8
 
-  for (let i = 0; i < numBars; i++) {
-    // Map symmetrical indices to low -> high frequencies
-    const freqIdx = Math.floor(Math.abs(i - numBars / 2) * (rawArray.length / (numBars / 2)))
-    const rawVal = rawArray[Math.min(freqIdx, rawArray.length - 1)] || 0
+  // Target morph: 1.0 for AI speaking (Radial Starburst), 0.0 for User speaking (Waveform Strip)
+  const targetMorph = isAISpeaking ? 1.0 : isUserSpeaking ? 0.0 : 0.5
+  modeMorph += (targetMorph - modeMorph) * 0.1
 
-    // Smooth bar height
-    smoothBars[i] += (rawVal - smoothBars[i]) * 0.3
-    const barVal = smoothBars[i]
-    const normalizedHeight = (barVal / 255) * (displayHeight * 0.85)
-    const barHeight = Math.max(3, normalizedHeight)
+  // Rotation & phase progression
+  rotationAngle += 0.006 + (smoothHigh / 255) * 0.02 + (smoothMid / 255) * 0.01
+  phase += 0.04 + (smoothLevel / 255) * 0.06
 
-    // Falling peak cap physics
-    if (barHeight >= barPeaks[i]) {
-      barPeaks[i] = barHeight
+  // ══════════════════════════════════════════════════════════════════════════
+  // MODE 1: AI SPEAKING → RADIAL DOTTED STARBURST / SUNBURST WAVE (IMAGE 0)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (modeMorph > 0.02) {
+    canvasCtx.save()
+    canvasCtx.globalAlpha = Math.min(1, modeMorph)
+
+    // Center Glowing Orb Aura
+    const coreRadius = Math.max(12, 14 + (smoothBass / 255) * 16)
+    const maxRadius = Math.min(centerX, centerY) * 0.95
+
+    const centerGlow = canvasCtx.createRadialGradient(
+      centerX,
+      centerY,
+      2,
+      centerX,
+      centerY,
+      coreRadius * 2.2
+    )
+    if (smoothHigh > 25) {
+      centerGlow.addColorStop(0, 'rgba(255, 255, 255, 0.95)')
+      centerGlow.addColorStop(0.3, 'rgba(56, 189, 248, 0.6)')
+      centerGlow.addColorStop(0.7, 'rgba(236, 72, 153, 0.25)')
+      centerGlow.addColorStop(1, 'rgba(15, 23, 42, 0)')
     } else {
-      barPeaks[i] = Math.max(3, barPeaks[i] - 0.7)
+      centerGlow.addColorStop(0, 'rgba(255, 255, 255, 0.9)')
+      centerGlow.addColorStop(0.35, 'rgba(99, 102, 241, 0.5)')
+      centerGlow.addColorStop(0.7, 'rgba(139, 92, 246, 0.2)')
+      centerGlow.addColorStop(1, 'rgba(15, 23, 42, 0)')
     }
-
-    const x = startX + i * (barWidth + gap)
-    const y = (displayHeight - barHeight) / 2
-
-    // Dynamic Gradient based on pitch position
-    const isHighPitch = Math.abs(i - numBars / 2) > numBars * 0.3
-    const barGrad = canvasCtx.createLinearGradient(x, y, x, y + barHeight)
-    if (isHighPitch && smoothHigh > 18) {
-      barGrad.addColorStop(0, '#06b6d4')
-      barGrad.addColorStop(0.5, '#ec4899')
-      barGrad.addColorStop(1, '#8b5cf6')
-    } else {
-      barGrad.addColorStop(0, '#818cf8')
-      barGrad.addColorStop(0.6, '#6366f1')
-      barGrad.addColorStop(1, '#4338ca')
-    }
-
-    canvasCtx.fillStyle = barGrad
+    canvasCtx.fillStyle = centerGlow
     canvasCtx.beginPath()
-    canvasCtx.roundRect(x, y, barWidth, barHeight, 2)
+    canvasCtx.arc(centerX, centerY, coreRadius * 2.2, 0, Math.PI * 2)
     canvasCtx.fill()
 
-    // Peak Cap Dot
-    if (barPeaks[i] > 6) {
-      const peakY = (displayHeight - barPeaks[i]) / 2 - 2
-      canvasCtx.fillStyle = isHighPitch ? '#38bdf8' : '#a5b4fc'
-      canvasCtx.beginPath()
-      canvasCtx.arc(x + barWidth / 2, Math.max(2, peakY), 1.2, 0, Math.PI * 2)
-      canvasCtx.fill()
+    // 72 Radial Dotted Rays around 360 degrees
+    const totalRays = 72
+    const dotSpacing = 3.6
+
+    for (let r = 0; r < totalRays; r++) {
+      const angle = (r * (Math.PI * 2)) / totalRays + rotationAngle
+      const cosA = Math.cos(angle)
+      const sinA = Math.sin(angle)
+
+      // Frequency mapping from FFT bins
+      const binIdx = Math.floor((r / totalRays) * rawArray.length)
+      const rawVal = rawArray[binIdx % rawArray.length] || 0
+
+      // Compute dynamic length of ray based on audio pitch & volume
+      const harmonicPulse = Math.sin(phase * 2 + r * 0.3) * 0.15 + 0.85
+      const rayExtent =
+        coreRadius +
+        ((rawVal / 255) * (maxRadius - coreRadius) * 0.95 + 6) * harmonicPulse +
+        (smoothHigh > 20 ? (Math.sin(r * 4 + phase) > 0.4 ? 8 : 0) : 0)
+
+      const numDots = Math.max(3, Math.floor((rayExtent - coreRadius) / dotSpacing))
+
+      for (let d = 0; d < numDots; d++) {
+        const dist = coreRadius + d * dotSpacing
+        if (dist > maxRadius) break
+
+        const dotX = centerX + cosA * dist
+        const dotY = centerY + sinA * dist
+
+        const distRatio = (dist - coreRadius) / (maxRadius - coreRadius)
+        const dotSize = Math.max(0.7, 1.8 * (1 - distRatio * 0.5) + (smoothLevel / 255) * 0.4)
+
+        // Color gradient from inner white -> cyan/indigo -> magenta tips
+        let dotColor: string
+        if (distRatio < 0.25) {
+          dotColor = '#ffffff'
+        } else if (distRatio < 0.6) {
+          dotColor = smoothHigh > 20 ? '#38bdf8' : '#818cf8'
+        } else if (distRatio < 0.85) {
+          dotColor = smoothHigh > 20 ? '#c084fc' : '#6366f1'
+        } else {
+          dotColor = '#ec4899'
+        }
+
+        canvasCtx.fillStyle = dotColor
+        canvasCtx.beginPath()
+        canvasCtx.arc(dotX, dotY, dotSize, 0, Math.PI * 2)
+        canvasCtx.fill()
+      }
     }
-  }
-
-  // 4. Harmonic Glowing Sine Ribbon Waves (Siri / Gemini Live Style)
-  const drawHarmonicWave = (
-    freqMult: number,
-    phaseOffset: number,
-    ampFactor: number,
-    strokeStyle: string,
-    lineWidth: number
-  ) => {
-    canvasCtx.save()
-    canvasCtx.beginPath()
-    canvasCtx.strokeStyle = strokeStyle
-    canvasCtx.lineWidth = lineWidth
-    canvasCtx.shadowBlur = 8
-    canvasCtx.shadowColor = strokeStyle
-
-    const amp = Math.max(2, (smoothLevel / 255) * (displayHeight * 0.42) * ampFactor)
-
-    for (let x = 0; x <= displayWidth; x += 4) {
-      // Gaussian window attenuation so waves pinch at left and right edges
-      const normX = x / displayWidth
-      const envelope = Math.sin(normX * Math.PI)
-
-      // Harmonic sine formula reacting to pitch and vocal components
-      const waveVal =
-        Math.sin(normX * Math.PI * 3 * freqMult + phase + phaseOffset) * 0.7 +
-        Math.sin(normX * Math.PI * 6 * freqMult - phase * 1.3) * (smoothHigh / 255) * 0.5
-
-      const y = centerY + waveVal * amp * envelope
-
-      if (x === 0) canvasCtx.moveTo(x, y)
-      else canvasCtx.lineTo(x, y)
-    }
-    canvasCtx.stroke()
     canvasCtx.restore()
   }
 
-  // Wave 1: Primary Vocal Wave (Indigo-Cyan)
-  drawHarmonicWave(1.0, 0, 1.0, 'rgba(99, 102, 241, 0.85)', 2.2)
-
-  // Wave 2: High-Pitch Harmonic Wave (Magenta-Pink)
-  if (smoothHigh > 12) {
-    drawHarmonicWave(1.6, Math.PI * 0.4, 0.9, 'rgba(236, 72, 153, 0.8)', 1.8)
-  }
-
-  // Wave 3: Secondary Harmonic Ribbon (Electric Cyan)
-  drawHarmonicWave(0.7, Math.PI * 0.8, 0.6, 'rgba(6, 182, 212, 0.6)', 1.4)
-
-  // 5. High-Pitch Spark Particles (Dancing embers)
-  if (smoothHigh > 22 && Math.random() < 0.35) {
-    sparks.push({
-      x: displayWidth / 2 + (Math.random() - 0.5) * (displayWidth * 0.6),
-      y: centerY + (Math.random() - 0.5) * 10,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: -Math.random() * 2 - 0.8,
-      size: Math.random() * 2.2 + 1,
-      alpha: 1,
-      color: Math.random() > 0.5 ? '#38bdf8' : '#f472b6'
-    })
-  }
-
-  for (let i = sparks.length - 1; i >= 0; i--) {
-    const s = sparks[i]
-    s.x += s.vx
-    s.y += s.vy
-    s.alpha -= 0.035
-
-    if (s.alpha <= 0) {
-      sparks.splice(i, 1)
-      continue
-    }
-
+  // ══════════════════════════════════════════════════════════════════════════
+  // MODE 2: USER SPEAKING → SYMMETRIC VOICE WAVEFORM STRIP (IMAGE 1)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (modeMorph < 0.98) {
     canvasCtx.save()
-    canvasCtx.globalAlpha = s.alpha
-    canvasCtx.fillStyle = s.color
-    canvasCtx.shadowBlur = 6
-    canvasCtx.shadowColor = s.color
+    canvasCtx.globalAlpha = Math.min(1, 1 - modeMorph)
+
+    const barWidth = 3.8
+    const barGap = 3.2
+    const totalWaveWidth = numWaveBars * (barWidth + barGap) - barGap
+    const waveStartX = (displayWidth - totalWaveWidth) / 2
+
+    // Background horizontal baseline accent
+    canvasCtx.strokeStyle = 'rgba(99, 102, 241, 0.15)'
+    canvasCtx.lineWidth = 1
     canvasCtx.beginPath()
-    canvasCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2)
-    canvasCtx.fill()
+    canvasCtx.moveTo(waveStartX - 10, centerY)
+    canvasCtx.lineTo(waveStartX + totalWaveWidth + 10, centerY)
+    canvasCtx.stroke()
+
+    for (let i = 0; i < numWaveBars; i++) {
+      // Gaussian window envelope (bars are shortest at ends, peak in center harmonics like Image 1)
+      const normPos = i / (numWaveBars - 1)
+      const envelope = Math.sin(normPos * Math.PI)
+
+      // Map frequency bin to bar
+      const freqIdx = Math.floor(Math.abs(i - numWaveBars / 2) * (rawArray.length / (numWaveBars / 2)))
+      const rawVal = rawArray[Math.min(freqIdx, rawArray.length - 1)] || 0
+
+      // Add harmonic ripple variation across bars
+      const ripple = Math.sin(i * 0.45 + phase * 2.5) * 0.2 + 0.9
+      const targetHeight = Math.max(
+        3.5,
+        ((rawVal / 255) * (displayHeight * 0.8) + (smoothLevel / 255) * 15) * envelope * ripple + 4
+      )
+
+      smoothWaveBars[i] += (targetHeight - smoothWaveBars[i]) * 0.32
+      const barH = smoothWaveBars[i]
+
+      const barX = waveStartX + i * (barWidth + barGap)
+      const topY = centerY - barH / 2
+
+      // Periwinkle / indigo gradient matching Image 1
+      const barGrad = canvasCtx.createLinearGradient(barX, topY, barX, topY + barH)
+      if (smoothHigh > 25) {
+        barGrad.addColorStop(0, '#38bdf8')
+        barGrad.addColorStop(0.5, '#818cf8')
+        barGrad.addColorStop(1, '#6366f1')
+      } else {
+        barGrad.addColorStop(0, '#93c5fd')
+        barGrad.addColorStop(0.5, '#818cf8')
+        barGrad.addColorStop(1, '#6366f1')
+      }
+
+      canvasCtx.fillStyle = barGrad
+      canvasCtx.beginPath()
+      canvasCtx.roundRect(barX, topY, barWidth, barH, barWidth / 2)
+      canvasCtx.fill()
+    }
     canvasCtx.restore()
   }
 
@@ -1410,7 +1393,8 @@ onUnmounted(() => {
 
 .wave-canvas {
   width: 100%;
-  height: 52px;
+  height: 100px;
+  display: block;
 }
 
 /* Controls */
