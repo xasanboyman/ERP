@@ -64,7 +64,7 @@
           <div class="header-title-box">
             <span class="pulse-indicator" :class="clientStatus"></span>
             <div>
-              <h2 class="header-title">Antigravity ERP AI</h2>
+              <h2 class="header-title">Knit ERP AI</h2>
               <p class="header-status">
                 {{
                   clientStatus === 'connected'
@@ -663,12 +663,14 @@ const drawWave = () => {
   smoothLevel += (cur.level - smoothLevel) * 0.22
 
   const rawArray = cur.raw
-  const isAISpeaking = cur.source === 'playback' || (cur.source !== 'mic' && smoothLevel > 12)
-  const isUserSpeaking = cur.source === 'mic' && smoothLevel > 8
+  const isAISpeaking = cur.source === 'playback' || (cur.source !== 'mic' && smoothLevel > 14)
+  const isUserSpeaking = cur.source === 'mic' && smoothLevel > 6
 
-  // Target morph: 1.0 for AI speaking (Radial Starburst), 0.0 for User speaking (Waveform Strip)
-  const targetMorph = isAISpeaking ? 1.0 : isUserSpeaking ? 0.0 : 0.5
-  modeMorph += (targetMorph - modeMorph) * 0.1
+  // Mutually exclusive target morph: 1.0 when AI is speaking, 0.0 when User is speaking or Idle
+  const targetMorph = isAISpeaking ? 1.0 : 0.0
+  modeMorph += (targetMorph - modeMorph) * 0.25
+  if (modeMorph < 0.005) modeMorph = 0.0
+  if (modeMorph > 0.995) modeMorph = 1.0
 
   // Rotation & phase progression
   rotationAngle += 0.006 + (smoothHigh / 255) * 0.02 + (smoothMid / 255) * 0.01
@@ -676,10 +678,11 @@ const drawWave = () => {
 
   // ══════════════════════════════════════════════════════════════════════════
   // MODE 1: AI SPEAKING → RADIAL DOTTED STARBURST / SUNBURST WAVE (IMAGE 0)
+  // (Completely hidden when user speaks or idle)
   // ══════════════════════════════════════════════════════════════════════════
-  if (modeMorph > 0.02) {
+  if (modeMorph > 0.01) {
     canvasCtx.save()
-    canvasCtx.globalAlpha = Math.min(1, modeMorph)
+    canvasCtx.globalAlpha = Math.min(1, Math.max(0, modeMorph))
 
     // Center Glowing Orb Aura
     const coreRadius = Math.max(12, 14 + (smoothBass / 255) * 16)
@@ -763,11 +766,12 @@ const drawWave = () => {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // MODE 2: USER SPEAKING → SYMMETRIC VOICE WAVEFORM STRIP (IMAGE 1)
+  // MODE 2: USER SPEAKING OR IDLE → SYMMETRIC VOICE WAVEFORM STRIP (IMAGE 1)
+  // (Completely hidden when AI is speaking)
   // ══════════════════════════════════════════════════════════════════════════
-  if (modeMorph < 0.98) {
+  if (modeMorph < 0.99) {
     canvasCtx.save()
-    canvasCtx.globalAlpha = Math.min(1, 1 - modeMorph)
+    canvasCtx.globalAlpha = Math.min(1, Math.max(0, 1 - modeMorph))
 
     const barWidth = 3.8
     const barGap = 3.2
