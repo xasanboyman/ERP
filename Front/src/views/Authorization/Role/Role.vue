@@ -281,7 +281,7 @@ const deleteRow = async (row: any) => {
           class="font-bold rounded-xl shadow-lg shadow-indigo-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-none transition-all"
           @click="action(currentRow, 'edit')"
         >
-          {t('exampleDemo.edit')}
+          {{ t('exampleDemo.edit') }}
         </BaseButton>
         <BaseButton
           v-if="actionType !== 'detail'"
