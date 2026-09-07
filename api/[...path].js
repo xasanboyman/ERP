@@ -1993,56 +1993,148 @@ export default async function handler(req, res) {
 
     // 19. GET /api/classifier/list
     if (path === 'classifier/list') {
-      const search = (req.query?.search || urlSearchParams.get('search') || req.query?.q || urlSearchParams.get('q') || '').trim().toLowerCase();
+      const search = (req.query?.search || urlSearchParams.get('search') || req.query?.q || urlSearchParams.get('q') || '').trim();
       const page = parseInt(req.query?.page || urlSearchParams.get('page') || req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.page_size || urlSearchParams.get('page_size') || req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
+      const mode = (req.query?.mode || urlSearchParams.get('mode') || 'extended').trim().toLowerCase();
+      const lang = (req.query?.lang || urlSearchParams.get('lang') || 'uz_latn').trim();
       const offset = (page - 1) * pageSize;
 
       let list = [];
       let total = 0;
 
-      try {
-        if (search) {
-          const sParam = `%${search}%`;
-          const [countRes, rows] = await Promise.all([
-            sql`SELECT count(*) FROM classifier_items 
-                WHERE LOWER(mxik_name) LIKE ${sParam} 
-                   OR LOWER(brand_name) LIKE ${sParam} 
-                   OR shtrix_code LIKE ${sParam} 
-                   OR mxik_code LIKE ${sParam}`,
-            sql`SELECT * FROM classifier_items 
-                WHERE LOWER(mxik_name) LIKE ${sParam} 
-                   OR LOWER(brand_name) LIKE ${sParam} 
-                   OR shtrix_code LIKE ${sParam} 
-                   OR mxik_code LIKE ${sParam} 
-                ORDER BY id ASC LIMIT ${pageSize} OFFSET ${offset}`
-          ]);
-          total = parseInt(countRes[0]?.count || 0, 10);
-          list = rows;
-        } else {
-          const [countRes, rows] = await Promise.all([
-            sql`SELECT count(*) FROM classifier_items`,
-            sql`SELECT * FROM classifier_items ORDER BY id ASC LIMIT ${pageSize} OFFSET ${offset}`
-          ]);
-          total = parseInt(countRes[0]?.count || 0, 10);
-          list = rows;
+      // 1. If searching and mode is extended (default), query Tasnif Soliq's Elasticsearch API
+      // ("Matn bo'yicha kengaytirilgan qidiruv" across all 440,000+ national classifier items)
+      if (search && mode !== 'local' && mode !== 'simple') {
+        try {
+          const pZero = Math.max(0, page - 1);
+          const targetUrl = `https://tasnif.soliq.uz/api/cls-api/elasticsearch/search?lang=${encodeURIComponent(lang)}&search=${encodeURIComponent(search)}&size=${pageSize}&page=${pZero}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+          const esResp = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            }
+          });
+          clearTimeout(timeoutId);
+
+          if (esResp.ok) {
+            const esJson = await esResp.json();
+            if (esJson && Array.isArray(esJson.data) && esJson.data.length > 0) {
+              list = esJson.data.map((item, idx) => ({
+                id: item.mxikCode || (item.internationalCode ? `bar_${item.internationalCode}` : `ext_${page}_${idx}`),
+                mxik_code: item.mxikCode || '',
+                mxik_name: item.name || '',
+                brand_name: item.brandName || '',
+                attribute_name: item.attributeName || '',
+                shtrix_code: item.internationalCode || '',
+                unit: item.unitsName || 'dona',
+                group_name: item.groupName || '',
+                group_code: item.groupCode || '',
+                class_name: item.className || '',
+                position_name: item.positionName || '',
+                subposition_name: item.subPositionName || '',
+                category_name: item.categoryName || '',
+                search_mode: 'extended'
+              }));
+              total = esJson.recordTotal || list.length;
+            }
+          }
+        } catch (esErr) {
+          console.warn('Tasnif Soliq Elasticsearch extended search failed, falling back to local:', esErr.message);
         }
-      } catch (dbErr) {
-        console.error('Database classifier query error:', dbErr);
       }
 
-      // If database has 0 matching items, fallback to bundled classifier seed
-      if (total === 0) {
+      // 1b. If mode is explicitly simple ("Matn bo'yicha qidirish"), try Tasnif Soliq's by-params endpoint
+      if (search && mode === 'simple' && list.length === 0) {
+        try {
+          const pZero = Math.max(0, page - 1);
+          const targetUrl = `https://tasnif.soliq.uz/api/cls-api/mxik/search/by-params?text=${encodeURIComponent(search)}&size=${pageSize}&page=${pZero}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+          const paramsResp = await fetch(targetUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (paramsResp.ok) {
+            const pJson = await paramsResp.json();
+            const content = pJson?.data?.content;
+            if (Array.isArray(content) && content.length > 0) {
+              list = content.map((item, idx) => ({
+                id: item.mxikCode || `simple_${page}_${idx}`,
+                mxik_code: item.mxikCode || '',
+                mxik_name: item.subPositionName || item.positionName || item.className || item.groupName || search,
+                brand_name: item.brandName || '',
+                attribute_name: item.attributeName || '',
+                shtrix_code: item.internationalCode || '',
+                unit: 'dona',
+                group_name: item.groupName || '',
+                class_name: item.className || '',
+                position_name: item.positionName || '',
+                subposition_name: item.subPositionName || '',
+                search_mode: 'simple'
+              }));
+              total = pJson?.data?.totalElements || list.length;
+            }
+          }
+        } catch (pErr) {
+          console.warn('Tasnif Soliq by-params search failed:', pErr.message);
+        }
+      }
+
+      // 2. Local Database Search (Neon PostgreSQL) fallback or when no search query
+      if (list.length === 0) {
+        try {
+          if (search) {
+            const sLower = search.toLowerCase();
+            const sParam = `%${sLower}%`;
+            const [countRes, rows] = await Promise.all([
+              sql`SELECT count(*) FROM classifier_items 
+                  WHERE LOWER(mxik_name) LIKE ${sParam} 
+                     OR LOWER(brand_name) LIKE ${sParam} 
+                     OR LOWER(attribute_name) LIKE ${sParam} 
+                     OR LOWER(group_name) LIKE ${sParam} 
+                     OR shtrix_code LIKE ${sParam} 
+                     OR mxik_code LIKE ${sParam}`,
+              sql`SELECT * FROM classifier_items 
+                  WHERE LOWER(mxik_name) LIKE ${sParam} 
+                     OR LOWER(brand_name) LIKE ${sParam} 
+                     OR LOWER(attribute_name) LIKE ${sParam} 
+                     OR LOWER(group_name) LIKE ${sParam} 
+                     OR shtrix_code LIKE ${sParam} 
+                     OR mxik_code LIKE ${sParam} 
+                  ORDER BY id ASC LIMIT ${pageSize} OFFSET ${offset}`
+            ]);
+            total = parseInt(countRes[0]?.count || 0, 10);
+            list = rows;
+          } else {
+            const [countRes, rows] = await Promise.all([
+              sql`SELECT count(*) FROM classifier_items`,
+              sql`SELECT * FROM classifier_items ORDER BY id ASC LIMIT ${pageSize} OFFSET ${offset}`
+            ]);
+            total = parseInt(countRes[0]?.count || 0, 10);
+            list = rows;
+          }
+        } catch (dbErr) {
+          console.error('Database classifier query error:', dbErr);
+        }
+      }
+
+      // 3. Fallback to bundled classifier seed JSON
+      if (list.length === 0 && total === 0) {
         const seedItems = getClassifierSeedData();
         if (seedItems && seedItems.length > 0) {
           let filtered = seedItems;
           if (search) {
-            filtered = filtered.filter(item => 
-              (item.mxik_name && item.mxik_name.toLowerCase().includes(search)) ||
-              (item.brand_name && item.brand_name.toLowerCase().includes(search)) ||
-              (item.shtrix_code && item.shtrix_code.includes(search)) ||
-              (item.mxik_code && item.mxik_code.includes(search))
-            );
+            const sLower = search.toLowerCase();
+            const tokens = sLower.split(/\s+/).filter(Boolean);
+            filtered = filtered.filter(item => {
+              const fullText = `${item.mxik_name || ''} ${item.brand_name || ''} ${item.attribute_name || ''} ${item.group_name || ''} ${item.shtrix_code || ''} ${item.mxik_code || ''}`.toLowerCase();
+              return tokens.every(tok => fullText.includes(tok)) || (item.shtrix_code && item.shtrix_code.includes(sLower));
+            });
           }
           total = filtered.length;
           list = filtered.slice(offset, offset + pageSize);
@@ -2054,10 +2146,13 @@ export default async function handler(req, res) {
         data: {
           total,
           list
-        }
+        },
+        list,
+        total
       });
     }
 
+    // 19b. GET /api/classifier/by-barcode/:barcode
     if (path.startsWith('classifier/by-barcode/')) {
       const barcode = path.replace('classifier/by-barcode/', '').trim();
       let item = null;
@@ -2065,6 +2160,40 @@ export default async function handler(req, res) {
         const rows = await sql`SELECT * FROM classifier_items WHERE shtrix_code = ${barcode} LIMIT 1`;
         if (rows && rows.length > 0) item = rows[0];
       } catch (e) {}
+
+      // If not in local DB, query live Tasnif Soliq Elasticsearch
+      if (!item && barcode) {
+        try {
+          const targetUrl = `https://tasnif.soliq.uz/api/cls-api/elasticsearch/search?lang=uz_latn&search=${encodeURIComponent(barcode)}&size=5&page=0`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const esResp = await fetch(targetUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (esResp.ok) {
+            const esJson = await esResp.json();
+            if (esJson && Array.isArray(esJson.data) && esJson.data.length > 0) {
+              const exact = esJson.data.find(d => d.internationalCode === barcode) || esJson.data[0];
+              item = {
+                id: exact.mxikCode || (exact.internationalCode ? `bar_${exact.internationalCode}` : barcode),
+                mxik_code: exact.mxikCode || '',
+                mxik_name: exact.name || '',
+                brand_name: exact.brandName || '',
+                attribute_name: exact.attributeName || '',
+                shtrix_code: exact.internationalCode || barcode,
+                unit: exact.unitsName || 'dona',
+                group_name: exact.groupName || '',
+                class_name: exact.className || '',
+                position_name: exact.positionName || '',
+                subposition_name: exact.subPositionName || '',
+                source: 'tasnif_elasticsearch'
+              };
+            }
+          }
+        } catch (esErr) {
+          console.warn('Barcode lookup via Tasnif Elasticsearch failed:', esErr.message);
+        }
+      }
+
       if (!item) {
         const seedItems = getClassifierSeedData();
         item = seedItems.find(i => i.shtrix_code === barcode) || null;

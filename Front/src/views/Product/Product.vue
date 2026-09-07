@@ -345,27 +345,60 @@
       :min-resize-height="450"
     >
       <div v-if="dialogType === 'add'" class="classifier-picker-card mb-20px">
-        <div class="classifier-header">
-          <Icon icon="ep:search" class="mr-6px" />
-          <span>1. Klassifikatordan Tanlash va Shtrix-Kodni Skanerlash</span>
+        <div class="classifier-header flex items-center justify-between">
+          <div class="flex items-center">
+            <Icon icon="ep:search" class="mr-6px" />
+            <span class="font-bold">1. Klassifikatordan Tanlash va Shtrix-Kodni Skanerlash</span>
+          </div>
+          <span
+            class="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+          >
+            {{
+              classifierSearchMode === 'extended'
+                ? '⚡ Tasnif Soliq (440,000+ tovarlar)'
+                : 'Oddiy qidiruv'
+            }}
+          </span>
         </div>
 
         <div class="flex gap-12px mb-12px">
           <ElInput
             ref="barcodeInputRef"
             v-model="barcodeSearch"
-            placeholder="Shtrix-kod skanerlang (faqat raqamlar)..."
+            placeholder="Shtrix-kod skanerlang yoki kiriting (faqat raqamlar)..."
             clearable
             style="flex: 1"
             @input="(val: string) => (barcodeSearch = val.replace(/\D/g, ''))"
             @keyup.enter="handleBarcodeScan"
           >
             <template #append>
-              <ElButton type="primary" @click="handleBarcodeScan">
+              <ElButton type="primary" :loading="barcodeLoading" @click="handleBarcodeScan">
                 <Icon icon="ep:aim" class="mr-4px" /> Kodni Izlash
               </ElButton>
             </template>
           </ElInput>
+        </div>
+
+        <div class="mb-10px flex items-center justify-between flex-wrap gap-2">
+          <ElRadioGroup
+            v-model="classifierSearchMode"
+            size="small"
+            @change="onClassifierSearchModeChange"
+          >
+            <ElRadioButton label="extended">
+              <Icon icon="ep:lightning" class="mr-4px" /> Matn bo'yicha kengaytirilgan qidiruv
+            </ElRadioButton>
+            <ElRadioButton label="simple">
+              <Icon icon="ep:search" class="mr-4px" /> Matn bo'yicha qidirish
+            </ElRadioButton>
+          </ElRadioGroup>
+          <span class="text-xs text-gray-500">
+            {{
+              classifierSearchMode === 'extended'
+                ? "Barcha tovarlar, brendlar va atributlar bo'yicha kengaytirilgan qidiruv"
+                : 'Oddiy parametrli qidiruv'
+            }}
+          </span>
         </div>
 
         <div>
@@ -374,7 +407,11 @@
             filterable
             remote
             reserve-keyword
-            placeholder="411,000+ Klassifikator bazasidan izlang (masalan: Pepsi 1.5, Shaffof)..."
+            :placeholder="
+              classifierSearchMode === 'extended'
+                ? 'Kengaytirilgan qidiruv: Pepsi 1.5, Dinay, Coca Cola, ruchka...'
+                : 'Oddiy qidiruv...'
+            "
             :remote-method="remoteSearchClassifier"
             :loading="classifierLoading"
             style="width: 100%"
@@ -382,10 +419,31 @@
           >
             <ElOption
               v-for="item in classifierOptions"
-              :key="item.id"
+              :key="item.id || item.mxik_code || item.shtrix_code"
               :label="`${item.brand_name ? '[' + item.brand_name + '] ' : ''}${item.mxik_name} ${item.attribute_name ? '(' + item.attribute_name + ')' : ''} [${item.shtrix_code || item.mxik_code}]`"
-              :value="item.id"
-            />
+              :value="item.id || item.mxik_code"
+            >
+              <div class="flex flex-col py-4px" style="line-height: 1.3">
+                <div class="flex items-center gap-6px">
+                  <ElTag v-if="item.brand_name" size="small" type="primary" effect="plain">{{
+                    item.brand_name
+                  }}</ElTag>
+                  <span class="font-medium text-sm text-gray-800 dark:text-gray-100">{{
+                    item.mxik_name
+                  }}</span>
+                </div>
+                <div class="flex items-center gap-8px text-xs text-gray-400 mt-2px">
+                  <span v-if="item.attribute_name" class="text-blue-500 font-mono">{{
+                    item.attribute_name
+                  }}</span>
+                  <span v-if="item.shtrix_code">Shtrix: {{ item.shtrix_code }}</span>
+                  <span v-if="item.mxik_code">MXIK: {{ item.mxik_code }}</span>
+                  <span v-if="item.group_name" class="truncate" style="max-width: 260px">{{
+                    item.group_name
+                  }}</span>
+                </div>
+              </div>
+            </ElOption>
           </ElSelect>
         </div>
       </div>
@@ -943,7 +1001,10 @@ const dialogType = ref<'add' | 'edit'>('add')
 const formRef = ref<FormInstance>()
 const barcodeInputRef = ref<any>(null)
 const barcodeSearch = ref('')
+const barcodeLoading = ref(false)
 const classifierLoading = ref(false)
+const classifierSearchMode = ref<'extended' | 'simple'>('extended')
+const lastClassifierQuery = ref('')
 const classifierOptions = ref<any[]>([])
 const selectedClassifierId = ref<number | string | undefined>(undefined)
 
@@ -1142,14 +1203,24 @@ const handleCurrentChange = (val: number) => {
 const classifierCacheMap = new Map<string, any[]>()
 let searchDebounceTimer: any = null
 
+const onClassifierSearchModeChange = () => {
+  classifierCacheMap.clear()
+  if (lastClassifierQuery.value) {
+    remoteSearchClassifier(lastClassifierQuery.value)
+  }
+}
+
 const remoteSearchClassifier = (query: string) => {
   if (!query || query.trim().length < 2) {
     classifierOptions.value = []
+    lastClassifierQuery.value = ''
     return
   }
   const cleanQ = query.trim()
-  if (classifierCacheMap.has(cleanQ)) {
-    classifierOptions.value = classifierCacheMap.get(cleanQ) || []
+  lastClassifierQuery.value = cleanQ
+  const cacheKey = `${classifierSearchMode.value}:${cleanQ}`
+  if (classifierCacheMap.has(cacheKey)) {
+    classifierOptions.value = classifierCacheMap.get(cacheKey) || []
     return
   }
 
@@ -1158,18 +1229,23 @@ const remoteSearchClassifier = (query: string) => {
   searchDebounceTimer = setTimeout(async () => {
     classifierLoading.value = true
     try {
-      const res = await searchClassifierApi({ search: cleanQ, page: 1, page_size: 20 })
+      const res = await searchClassifierApi({
+        search: cleanQ,
+        mode: classifierSearchMode.value,
+        page: 1,
+        page_size: 25
+      })
       if (res && res.data) {
         const list = Array.isArray(res.data) ? res.data : (res.data as any).list || []
         classifierOptions.value = list
-        classifierCacheMap.set(cleanQ, list)
+        classifierCacheMap.set(cacheKey, list)
       }
     } catch (err) {
-      console.error(err)
+      console.error('Classifier search error:', err)
     } finally {
       classifierLoading.value = false
     }
-  }, 120)
+  }, 150)
 }
 
 const applyClassifierToForm = (item: any) => {
@@ -1200,8 +1276,10 @@ const applyClassifierToForm = (item: any) => {
   ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
 }
 
-const handleClassifierSelect = (val: number) => {
-  const found = classifierOptions.value.find((c) => c.id === val)
+const handleClassifierSelect = (val: number | string) => {
+  const found = classifierOptions.value.find(
+    (c) => c.id === val || c.mxik_code === val || c.shtrix_code === val
+  )
   if (found) {
     applyClassifierToForm(found)
   }
@@ -1213,6 +1291,7 @@ const handleBarcodeScan = async () => {
     ElMessage.warning('Iltimos, shtrix-kodni faqat raqamlarda kiriting')
     return
   }
+  barcodeLoading.value = true
   try {
     const res = await getClassifierByBarcodeApi(code)
     if (res && res.data) {
@@ -1230,6 +1309,8 @@ const handleBarcodeScan = async () => {
     }
   } catch (err) {
     ElMessage.error("Shtrix-kod bo'yicha qidirishda xatolik")
+  } finally {
+    barcodeLoading.value = false
   }
 }
 

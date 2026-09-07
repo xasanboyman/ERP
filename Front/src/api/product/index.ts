@@ -66,6 +66,8 @@ export const searchClassifierApi = (params: {
   shtrix_code?: string
   page?: number
   page_size?: number
+  mode?: 'extended' | 'simple' | 'local' | string
+  lang?: string
 }) => {
   return request.get<{
     code: number
