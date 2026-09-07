@@ -345,34 +345,57 @@
       :min-resize-height="450"
     >
       <div v-if="dialogType === 'add'" class="classifier-picker-card mb-20px">
-        <div class="classifier-header flex items-center justify-between">
-          <div class="flex items-center">
-            <Icon icon="ep:search" class="mr-6px" />
-            <span class="font-bold">1. Klassifikatordan Tanlash va Shtrix-Kodni Skanerlash</span>
+        <div
+          class="classifier-header flex items-center justify-between flex-wrap gap-2 pb-10px mb-12px border-b border-blue-200/50 dark:border-blue-800/50"
+        >
+          <div class="flex items-center gap-8px">
+            <div
+              class="w-26px h-26px rounded-lg bg-blue-500 text-white flex items-center justify-center shadow-sm"
+            >
+              <Icon icon="ep:search" style="font-size: 14px" />
+            </div>
+            <div>
+              <span class="font-bold text-sm text-gray-900 dark:text-gray-100">
+                1. Klassifikatordan Tanlash va Shtrix-Kodni Skanerlash
+              </span>
+              <span class="text-xs text-gray-400 ml-6px font-normal hidden sm:inline">
+                (Formani bir zumda avtomatik to'ldirish)
+              </span>
+            </div>
           </div>
-          <span
-            class="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+          <div
+            class="flex items-center gap-6px px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold"
           >
-            {{
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>{{
               classifierSearchMode === 'extended'
                 ? '⚡ Tasnif Soliq (440,000+ tovarlar)'
                 : 'Oddiy qidiruv'
-            }}
-          </span>
+            }}</span>
+          </div>
         </div>
 
-        <div class="flex gap-12px mb-12px">
+        <div class="flex gap-10px mb-12px">
           <ElInput
             ref="barcodeInputRef"
             v-model="barcodeSearch"
-            placeholder="Shtrix-kod skanerlang yoki kiriting (faqat raqamlar)..."
+            placeholder="Shtrix-kodni skanerlang yoki qo'lda kiriting (masalan: 4780022620153)..."
             clearable
+            size="default"
             style="flex: 1"
             @input="(val: string) => (barcodeSearch = val.replace(/\D/g, ''))"
             @keyup.enter="handleBarcodeScan"
           >
+            <template #prefix>
+              <Icon icon="ep:reading" class="text-gray-400" />
+            </template>
             <template #append>
-              <ElButton type="primary" :loading="barcodeLoading" @click="handleBarcodeScan">
+              <ElButton
+                type="primary"
+                :loading="barcodeLoading"
+                class="!px-16px font-semibold"
+                @click="handleBarcodeScan"
+              >
                 <Icon icon="ep:aim" class="mr-4px" /> Kodni Izlash
               </ElButton>
             </template>
@@ -383,20 +406,22 @@
           <ElRadioGroup
             v-model="classifierSearchMode"
             size="small"
+            class="custom-search-mode-radios"
             @change="onClassifierSearchModeChange"
           >
             <ElRadioButton label="extended">
-              <Icon icon="ep:lightning" class="mr-4px" /> Matn bo'yicha kengaytirilgan qidiruv
+              <Icon icon="ep:lightning" class="mr-4px text-amber-500" /> Matn bo'yicha
+              kengaytirilgan qidiruv
             </ElRadioButton>
             <ElRadioButton label="simple">
               <Icon icon="ep:search" class="mr-4px" /> Matn bo'yicha qidirish
             </ElRadioButton>
           </ElRadioGroup>
-          <span class="text-xs text-gray-500">
+          <span class="text-xs text-gray-500 italic">
             {{
               classifierSearchMode === 'extended'
-                ? "Barcha tovarlar, brendlar va atributlar bo'yicha kengaytirilgan qidiruv"
-                : 'Oddiy parametrli qidiruv'
+                ? "Barcha tovarlar, brendlar va atributlar bo'yicha to'liq matnli qidiruv"
+                : 'Faqat lokal bazadan oddiy qidiruv'
             }}
           </span>
         </div>
@@ -407,9 +432,12 @@
             filterable
             remote
             reserve-keyword
+            clearable
+            popper-class="classifier-select-popper"
+            size="large"
             :placeholder="
               classifierSearchMode === 'extended'
-                ? 'Kengaytirilgan qidiruv: Pepsi 1.5, Dinay, Coca Cola, ruchka...'
+                ? 'Tovar nomi yoki brendini yozing (masalan: Pepsi 1.5, Coca Cola, Shaffof, Dinay, ruchka...)'
                 : 'Oddiy qidiruv...'
             "
             :remote-method="remoteSearchClassifier"
@@ -417,33 +445,49 @@
             style="width: 100%"
             @change="handleClassifierSelect"
           >
+            <template #prefix>
+              <Icon icon="ep:search" class="text-blue-500 mr-2px" />
+            </template>
             <ElOption
               v-for="item in classifierOptions"
               :key="item.id || item.mxik_code || item.shtrix_code"
               :label="`${item.brand_name ? '[' + item.brand_name + '] ' : ''}${item.mxik_name} ${item.attribute_name ? '(' + item.attribute_name + ')' : ''} [${item.shtrix_code || item.mxik_code}]`"
               :value="item.id || item.mxik_code"
+              class="classifier-option-item"
             >
-              <div class="flex flex-col py-4px" style="line-height: 1.3">
-                <div class="flex items-center gap-6px">
-                  <ElTag v-if="item.brand_name" size="small" type="primary" effect="plain">{{
+              <div class="classifier-item-card">
+                <div class="classifier-item-top">
+                  <span v-if="item.brand_name" class="classifier-brand-tag">{{
                     item.brand_name
-                  }}</ElTag>
-                  <span class="font-medium text-sm text-gray-800 dark:text-gray-100">{{
-                    item.mxik_name
                   }}</span>
+                  <span class="classifier-item-title">{{ item.mxik_name }}</span>
                 </div>
-                <div class="flex items-center gap-8px text-xs text-gray-400 mt-2px">
-                  <span v-if="item.attribute_name" class="text-blue-500 font-mono">{{
-                    item.attribute_name
-                  }}</span>
-                  <span v-if="item.shtrix_code">Shtrix: {{ item.shtrix_code }}</span>
-                  <span v-if="item.mxik_code">MXIK: {{ item.mxik_code }}</span>
-                  <span v-if="item.group_name" class="truncate" style="max-width: 260px">{{
-                    item.group_name
-                  }}</span>
+                <div class="classifier-item-meta">
+                  <span v-if="item.attribute_name" class="classifier-badge-attr">
+                    <Icon icon="ep:box" class="mr-3px" />{{ item.attribute_name }}
+                  </span>
+                  <span v-if="item.shtrix_code" class="classifier-badge-code">
+                    <Icon icon="ep:reading" class="mr-3px" />Shtrix: {{ item.shtrix_code }}
+                  </span>
+                  <span v-if="item.mxik_code" class="classifier-badge-code">
+                    <Icon icon="ep:document" class="mr-3px" />MXIK: {{ item.mxik_code }}
+                  </span>
+                </div>
+                <div v-if="item.group_name" class="classifier-item-group">
+                  <span>{{ item.group_name }}</span>
                 </div>
               </div>
             </ElOption>
+            <template #empty>
+              <div class="p-16px text-center text-gray-400 text-xs">
+                <Icon icon="ep:info-filled" class="mr-4px text-blue-400 align-middle" />
+                <span v-if="classifierLoading">Qidirilmoqda...</span>
+                <span v-else
+                  >Tovar nomi yoki brendini qidirish uchun kamida 2 ta harf yozing (masalan: Pepsi,
+                  Cola, Dinay)</span
+                >
+              </div>
+            </template>
           </ElSelect>
         </div>
       </div>
@@ -1739,10 +1783,20 @@ const deleteFromDetail = () => {
 
   /* Classifier Modal Styling */
   .classifier-picker-card {
-    padding: 14px 16px;
-    background: rgba(59, 130, 246, 0.06);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    border-radius: 8px;
+    padding: 16px 18px;
+    background: linear-gradient(
+      135deg,
+      rgba(59, 130, 246, 0.05) 0%,
+      rgba(147, 197, 253, 0.08) 100%
+    );
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.04);
+  }
+
+  :global(.dark) & .classifier-picker-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+    border-color: rgba(59, 130, 246, 0.25);
   }
 
   .classifier-header {
@@ -1752,6 +1806,14 @@ const deleteFromDetail = () => {
     margin-bottom: 10px;
     display: flex;
     align-items: center;
+  }
+
+  .custom-search-mode-radios {
+    :deep(.el-radio-button__inner) {
+      font-weight: 500;
+      font-size: 12px;
+      padding: 6px 12px;
+    }
   }
 
   /* Custom Formatted Price Inputs */
@@ -1782,6 +1844,178 @@ const deleteFromDetail = () => {
       font-weight: 700;
       letter-spacing: 0.5px;
     }
+  }
+}
+</style>
+
+<!-- Teleported Classifier Dropdown Popper Styling (Unscoped for document.body teleports) -->
+<style lang="less">
+.classifier-select-popper {
+  max-width: 820px !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 16px 36px -4px rgba(0, 0, 0, 0.16),
+    0 4px 12px -2px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid #e2e8f0 !important;
+  overflow: hidden !important;
+
+  .el-select-dropdown__wrap {
+    max-height: 420px !important;
+  }
+
+  .el-select-dropdown__list {
+    padding: 6px 0 !important;
+  }
+
+  .el-select-dropdown__item {
+    height: auto !important;
+    min-height: 68px !important;
+    line-height: 1.4 !important;
+    padding: 10px 16px !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    transition: background-color 0.15s ease !important;
+
+    &:last-child {
+      border-bottom: none !important;
+    }
+
+    &.hover,
+    &:hover {
+      background-color: #f0f7ff !important;
+    }
+
+    &.selected {
+      background-color: #e0f2fe !important;
+      font-weight: normal !important;
+    }
+  }
+
+  .classifier-item-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .classifier-item-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .classifier-brand-tag {
+    display: inline-flex;
+    align-items: center;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+    flex-shrink: 0;
+  }
+
+  .classifier-item-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .classifier-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+  }
+
+  .classifier-badge-attr {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(99, 102, 241, 0.08);
+    color: #4f46e5;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-weight: 500;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .classifier-badge-code {
+    display: inline-flex;
+    align-items: center;
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+  }
+
+  .classifier-item-group {
+    font-size: 11.5px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+html.dark .classifier-select-popper,
+.dark .classifier-select-popper {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6) !important;
+
+  .el-select-dropdown__item {
+    border-bottom-color: #334155 !important;
+
+    &.hover,
+    &:hover {
+      background-color: rgba(59, 130, 246, 0.16) !important;
+    }
+
+    &.selected {
+      background-color: rgba(59, 130, 246, 0.28) !important;
+    }
+  }
+
+  .classifier-item-title {
+    color: #f8fafc !important;
+  }
+
+  .classifier-brand-tag {
+    background: #3b82f6 !important;
+  }
+
+  .classifier-badge-attr {
+    background: rgba(99, 102, 241, 0.2) !important;
+    color: #c7d2fe !important;
+    border-color: rgba(99, 102, 241, 0.35) !important;
+  }
+
+  .classifier-badge-code {
+    background: #0f172a !important;
+    color: #cbd5e1 !important;
+    border-color: #334155 !important;
+  }
+
+  .classifier-item-group {
+    color: #94a3b8 !important;
   }
 }
 </style>
