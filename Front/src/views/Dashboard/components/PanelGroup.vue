@@ -74,15 +74,10 @@ const loadData = async () => {
     const revenue = totalSales > 0 ? totalSales : totalInventoryRetail || 0
     const cogs = totalSales > 0 ? revenue * costRatio : totalInventoryCost || 0
 
-    // 2. Staff Salaries
-    let paidSalaries = salaries
-      .filter((s: any) => s.status === 'paid')
+    // 2. Staff Salaries (Faqat haqiqatda to'langan maoshlar)
+    const paidSalaries = salaries
+      .filter((s: any) => (s.status || '').toLowerCase() === 'paid')
       .reduce((sum: number, s: any) => sum + (parseFloat(s.netSalary) || 0), 0)
-    if (!paidSalaries) {
-      paidSalaries = workers
-        .filter((w: any) => w.status === 1)
-        .reduce((sum: number, w: any) => sum + (parseFloat(w.baseSalary) || 0), 0)
-    }
 
     // 3. Short-term Worker Outputs (Vyrabotka)
     const shortTerm = outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0)

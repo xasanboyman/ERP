@@ -851,6 +851,62 @@ export default async function handler(req, res) {
       });
     }
 
+    // POST /api/salary/delete
+    if (path === 'salary/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM salaries WHERE id = ANY(${ids})`;
+      } else {
+        await sql`DELETE FROM salaries`;
+      }
+      return res.status(200).json({ code: 0, message: "O'chirildi" });
+    }
+
+    // POST /api/salary/clear
+    if (path === 'salary/clear' && req.method === 'POST') {
+      await sql`DELETE FROM salaries`;
+      return res.status(200).json({ code: 0, message: "Barcha maoshlar tozalandi" });
+    }
+
+    // POST /api/salary/save
+    if (path === 'salary/save' && req.method === 'POST') {
+      const { id, workerId, baseSalary, allowance, deduction, netSalary, payDate, status, remark } = req.body || {};
+      const calculatedNet = parseFloat(netSalary) || ((parseFloat(baseSalary) || 0) + (parseFloat(allowance) || 0) - (parseFloat(deduction) || 0));
+      if (id) {
+        await sql`
+          UPDATE salaries 
+          SET "workerId" = ${workerId}, "baseSalary" = ${parseFloat(baseSalary) || 0}, allowance = ${parseFloat(allowance) || 0}, deduction = ${parseFloat(deduction) || 0}, "netSalary" = ${calculatedNet}, "payDate" = ${payDate}, status = ${status || 'paid'}, remark = ${remark}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'S' + Math.floor(100000 + Math.random() * 900000);
+        await sql`
+          INSERT INTO salaries (id, "workerId", "baseSalary", allowance, deduction, "netSalary", "payDate", status, remark)
+          VALUES (${newId}, ${workerId}, ${parseFloat(baseSalary) || 0}, ${parseFloat(allowance) || 0}, ${parseFloat(deduction) || 0}, ${calculatedNet}, ${payDate || to_char(NOW(), 'YYYY-MM-DD')}, ${status || 'paid'}, ${remark})
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Saqlandi' });
+    }
+
+    // POST /api/salary/payout
+    if (path === 'salary/payout' && req.method === 'POST') {
+      const { items, period_month, remark } = req.body || {};
+      if (Array.isArray(items) && items.length > 0) {
+        for (const item of items) {
+          const newId = 'S' + Math.floor(100000 + Math.random() * 900000);
+          const base = parseFloat(item.baseSalary) || 0;
+          const allow = parseFloat(item.allowance) || 0;
+          const ded = parseFloat(item.deduction) || 0;
+          const net = base + allow - ded;
+          await sql`
+            INSERT INTO salaries (id, "workerId", "baseSalary", allowance, deduction, "netSalary", "payDate", status, remark)
+            VALUES (${newId}, ${item.workerId}, ${base}, ${allow}, ${ded}, ${net}, to_char(NOW(), 'YYYY-MM-DD'), 'paid', ${remark || (period_month ? period_month + ' oylik maoshi' : 'Oylik maosh')})
+          `;
+        }
+      }
+      return res.status(200).json({ code: 0, message: 'Maoshlar muvaffaqiyatli tarqatildi' });
+    }
+
     // 13. GET /api/sales/list
     if (path === 'sales/list') {
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);

@@ -1377,14 +1377,18 @@ const loadAnalyticsData = async (silent = false) => {
     const baseRevenue = totalSales > 0 ? totalSales : totalInventoryRetail || 0
     const baseCOGS = totalSales > 0 ? baseRevenue * costRatio : totalInventoryCost || 0
 
-    // Accurate Staff Compensation Calculation (Always Positive):
-    const activeStaffMonthly = workers
-      .filter((w: any) => w.status === 1)
-      .reduce((sum: number, w: any) => sum + (parseFloat(w.baseSalary) || 0), 0)
+    // Accurate Staff Compensation Calculation (faqat haqiqiy aylanma yoki to'langan maoshlar mavjud bo'lsa):
+    const hasActivity = totalSales > 0 || totalInventoryRetail > 0
+    const activeStaffMonthly = hasActivity
+      ? workers
+          .filter((w: any) => w.status === 1)
+          .reduce((sum: number, w: any) => sum + (parseFloat(w.baseSalary) || 0), 0)
+      : 0
 
     const baseSalaries = activeStaffMonthly * 6
-    const baseShortTerm =
-      outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0) * 6
+    const baseShortTerm = hasActivity
+      ? outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0) * 6
+      : 0
 
     // 2. Generate Monthly Dynamics Trend Data
     const months = [
@@ -1408,11 +1412,11 @@ const loadAnalyticsData = async (silent = false) => {
       const mult = multipliers[idx]
       const mRev = parseFloat(((baseRevenue / 6) * mult).toFixed(2))
       const mCOGS = parseFloat((mRev * costRatio).toFixed(2))
-      const mStaff = parseFloat(((baseSalaries / 6) * (1 + idx * 0.02)).toFixed(2))
-      const mShortTerm = parseFloat(((baseShortTerm / 6) * mult).toFixed(2))
+      const mStaff = baseRevenue > 0 ? parseFloat(((baseSalaries / 6) * (1 + idx * 0.02)).toFixed(2)) : 0
+      const mShortTerm = baseRevenue > 0 ? parseFloat(((baseShortTerm / 6) * mult).toFixed(2)) : 0
       const mExpenses = parseFloat((mCOGS + mStaff + mShortTerm).toFixed(2))
       const mProfit = parseFloat(Math.max(0, mRev - mExpenses).toFixed(2))
-      const mMargin = parseFloat(((mProfit / mRev) * 100).toFixed(1))
+      const mMargin = mRev > 0 ? parseFloat(((mProfit / mRev) * 100).toFixed(1)) : 0
 
       revList.push(mRev)
       cogsList.push(mCOGS)
