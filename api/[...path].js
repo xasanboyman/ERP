@@ -1,7 +1,30 @@
 import { neon } from '@neondatabase/serverless';
 import jwt from 'jsonwebtoken';
+import fs from 'fs';
+import pathModule from 'path';
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_OgGezc9umYl0@ep-hidden-mountain-a5l36vpb-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require';
+let classifierSeedData = null;
+function getClassifierSeedData() {
+  if (!classifierSeedData) {
+    try {
+      const candidates = [
+        pathModule.join(process.cwd(), 'api', 'classifier_seed.json'),
+        pathModule.join(process.cwd(), 'classifier_seed.json')
+      ];
+      for (const p of candidates) {
+        if (fs.existsSync(p)) {
+          classifierSeedData = JSON.parse(fs.readFileSync(p, 'utf8'));
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load classifier_seed.json:', e);
+    }
+  }
+  return classifierSeedData || [];
+}
+
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_ArFp1ORwLbX6@ep-sparkling-fog-axd0fzvc-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 const SECRET_KEY = process.env.SECRET_KEY || 'super-secret-key-that-is-hard-to-guess';
 
 let sqlClient;
@@ -15,6 +38,250 @@ function getSql() {
     sqlClient = neon(connStr);
   }
   return sqlClient;
+}
+
+let schemaInitialized = false;
+async function ensureSchema(sql) {
+  if (schemaInitialized) return;
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR UNIQUE NOT NULL,
+        password VARCHAR NOT NULL,
+        full_name VARCHAR,
+        initials VARCHAR,
+        avatar TEXT,
+        role VARCHAR,
+        "roleId" VARCHAR,
+        email VARCHAR,
+        department_id VARCHAR,
+        permissions JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS roles (
+        id VARCHAR PRIMARY KEY,
+        "roleName" VARCHAR NOT NULL,
+        status INTEGER DEFAULT 1,
+        permissions JSONB,
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS departments (
+        id VARCHAR PRIMARY KEY,
+        name VARCHAR NOT NULL,
+        status INTEGER DEFAULT 1,
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS branches (
+        id VARCHAR PRIMARY KEY,
+        name VARCHAR NOT NULL,
+        status INTEGER DEFAULT 1,
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS workers (
+        id VARCHAR PRIMARY KEY,
+        worker_id VARCHAR,
+        name VARCHAR NOT NULL,
+        username VARCHAR,
+        department_id VARCHAR,
+        "departmentId" VARCHAR,
+        role VARCHAR,
+        email VARCHAR,
+        phone VARCHAR,
+        status INTEGER DEFAULT 1,
+        "baseSalary" DOUBLE PRECISION DEFAULT 0,
+        base_salary DOUBLE PRECISION DEFAULT 0,
+        entry_date VARCHAR,
+        notes TEXT,
+        avatar TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS products (
+        id VARCHAR PRIMARY KEY,
+        "productName" VARCHAR NOT NULL,
+        "SKU" VARCHAR,
+        category VARCHAR,
+        price DOUBLE PRECISION DEFAULT 0,
+        cost DOUBLE PRECISION DEFAULT 0,
+        "quantityInStock" INTEGER DEFAULT 0,
+        status INTEGER DEFAULT 1,
+        shtrix_code VARCHAR,
+        mxik_code VARCHAR,
+        brand_name VARCHAR,
+        image_url TEXT,
+        unit VARCHAR,
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS product_packagings (
+        id SERIAL PRIMARY KEY,
+        product_id VARCHAR,
+        name VARCHAR,
+        coefficient DOUBLE PRECISION DEFAULT 1,
+        barcode VARCHAR,
+        is_base_unit BOOLEAN DEFAULT FALSE
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS classifier_items (
+        id INTEGER PRIMARY KEY,
+        group_name VARCHAR,
+        class_name VARCHAR,
+        position_name VARCHAR,
+        subposition_name VARCHAR,
+        brand_name VARCHAR,
+        attribute_name VARCHAR,
+        mxik_code VARCHAR,
+        mxik_name TEXT,
+        shtrix_code VARCHAR,
+        unit VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sales (
+        id VARCHAR PRIMARY KEY,
+        items JSONB,
+        total DOUBLE PRECISION DEFAULT 0,
+        total_amount DOUBLE PRECISION DEFAULT 0,
+        payment_method VARCHAR,
+        status VARCHAR,
+        customer_name VARCHAR,
+        customer_phone VARCHAR,
+        debt_amount DOUBLE PRECISION DEFAULT 0,
+        debt_due_date VARCHAR,
+        user_id VARCHAR,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sale_items (
+        id SERIAL PRIMARY KEY,
+        sale_id VARCHAR,
+        product_id VARCHAR,
+        product_name VARCHAR,
+        quantity DOUBLE PRECISION,
+        price DOUBLE PRECISION,
+        total DOUBLE PRECISION
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS salaries (
+        id VARCHAR PRIMARY KEY,
+        "workerId" VARCHAR,
+        "baseSalary" DOUBLE PRECISION DEFAULT 0,
+        allowance DOUBLE PRECISION DEFAULT 0,
+        deduction DOUBLE PRECISION DEFAULT 0,
+        "netSalary" DOUBLE PRECISION DEFAULT 0,
+        "payDate" VARCHAR,
+        status VARCHAR,
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS positions (
+        id VARCHAR PRIMARY KEY,
+        name VARCHAR,
+        department_id VARCHAR,
+        base_salary DOUBLE PRECISION DEFAULT 0,
+        status INTEGER DEFAULT 1,
+        description TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS staff_timesheets (
+        id VARCHAR PRIMARY KEY,
+        date VARCHAR,
+        status VARCHAR,
+        records JSONB,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS staff_outputs (
+        id VARCHAR PRIMARY KEY,
+        "workerId" VARCHAR,
+        "workerName" VARCHAR,
+        name VARCHAR,
+        amount DOUBLE PRECISION DEFAULT 0,
+        period_month VARCHAR,
+        comment TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS staff_adjustments (
+        id VARCHAR PRIMARY KEY,
+        "workerId" VARCHAR,
+        document_type VARCHAR,
+        amount DOUBLE PRECISION DEFAULT 0,
+        period_month VARCHAR,
+        description TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS monthly_financial_snapshots (
+        id SERIAL PRIMARY KEY,
+        period_month VARCHAR UNIQUE NOT NULL,
+        revenue DOUBLE PRECISION DEFAULT 0,
+        cogs DOUBLE PRECISION DEFAULT 0,
+        staff_salaries DOUBLE PRECISION DEFAULT 0,
+        short_term_outputs DOUBLE PRECISION DEFAULT 0,
+        total_expenses DOUBLE PRECISION DEFAULT 0,
+        net_profit DOUBLE PRECISION DEFAULT 0,
+        profit_margin DOUBLE PRECISION DEFAULT 0,
+        sales_count INTEGER DEFAULT 0,
+        closed_by VARCHAR,
+        closed_at VARCHAR,
+        remark TEXT
+      );
+    `;
+
+    // Seed default roles if empty
+    await sql`
+      INSERT INTO roles (id, "roleName", status, permissions, remark, "createTime")
+      VALUES 
+        ('1', 'Super Administrator', 1, '["*.*.*"]'::jsonb, 'Tizimning barcha boshqaruv huquqlariga ega', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')),
+        ('2', 'Administrator', 1, '["/dashboard", "/dashboard/analysis", "/dashboard/workplace", "/product", "/product/list", "/sales", "/sales/pos", "/sales/debtors", "/hr", "/hr/workers", "/hr/timesheets", "/hr/outputs", "/hr/adjustments", "/hr/salary"]'::jsonb, 'Oddiy administrator', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')),
+        ('3', 'Oddiy xodim', 1, '["/dashboard", "/dashboard/workplace", "/product", "/product/list", "/sales", "/sales/pos"]'::jsonb, 'Faqat ish joyi, kassa (POS) va mahsulotlar bilan ishlash huquqiga ega', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
+    // Seed default department if empty
+    await sql`
+      INSERT INTO departments (id, name, status, remark, "createTime")
+      VALUES ('DEPT-HQ', 'Boshqaruv', 1, 'Bosh ofis va ma''muriyat', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
+    // Seed default branch if empty
+    await sql`
+      INSERT INTO branches (id, name, status, remark, "createTime")
+      VALUES ('BR-01', 'Asosiy filial', 1, 'Bosh savdo filiali', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
+    schemaInitialized = true;
+  } catch (err) {
+    console.warn('ensureSchema warning:', err);
+  }
 }
 
 const defaultAdminRoutes = [
@@ -399,6 +666,7 @@ export default async function handler(req, res) {
   const path = pathname.replace(/^\/+|\/+$/g, '');
   const urlSearchParams = new URLSearchParams(search || '');
   const sql = getSql();
+  await ensureSchema(sql);
 
   try {
     // 1. POST /api/user/login (Public)
@@ -1725,8 +1993,105 @@ export default async function handler(req, res) {
 
     // 19. GET /api/classifier/list
     if (path === 'classifier/list') {
-      const rows = await sql`SELECT * FROM classifier_items ORDER BY id ASC`;
-      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+      const search = (req.query?.search || urlSearchParams.get('search') || req.query?.q || urlSearchParams.get('q') || '').trim().toLowerCase();
+      const page = parseInt(req.query?.page || urlSearchParams.get('page') || req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.page_size || urlSearchParams.get('page_size') || req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
+      const offset = (page - 1) * pageSize;
+
+      let list = [];
+      let total = 0;
+
+      try {
+        if (search) {
+          const sParam = `%${search}%`;
+          const [countRes, rows] = await Promise.all([
+            sql`SELECT count(*) FROM classifier_items 
+                WHERE LOWER(mxik_name) LIKE ${sParam} 
+                   OR LOWER(brand_name) LIKE ${sParam} 
+                   OR shtrix_code LIKE ${sParam} 
+                   OR mxik_code LIKE ${sParam}`,
+            sql`SELECT * FROM classifier_items 
+                WHERE LOWER(mxik_name) LIKE ${sParam} 
+                   OR LOWER(brand_name) LIKE ${sParam} 
+                   OR shtrix_code LIKE ${sParam} 
+                   OR mxik_code LIKE ${sParam} 
+                ORDER BY id ASC LIMIT ${pageSize} OFFSET ${offset}`
+          ]);
+          total = parseInt(countRes[0]?.count || 0, 10);
+          list = rows;
+        } else {
+          const [countRes, rows] = await Promise.all([
+            sql`SELECT count(*) FROM classifier_items`,
+            sql`SELECT * FROM classifier_items ORDER BY id ASC LIMIT ${pageSize} OFFSET ${offset}`
+          ]);
+          total = parseInt(countRes[0]?.count || 0, 10);
+          list = rows;
+        }
+      } catch (dbErr) {
+        console.error('Database classifier query error:', dbErr);
+      }
+
+      // If database has 0 matching items, fallback to bundled classifier seed
+      if (total === 0) {
+        const seedItems = getClassifierSeedData();
+        if (seedItems && seedItems.length > 0) {
+          let filtered = seedItems;
+          if (search) {
+            filtered = filtered.filter(item => 
+              (item.mxik_name && item.mxik_name.toLowerCase().includes(search)) ||
+              (item.brand_name && item.brand_name.toLowerCase().includes(search)) ||
+              (item.shtrix_code && item.shtrix_code.includes(search)) ||
+              (item.mxik_code && item.mxik_code.includes(search))
+            );
+          }
+          total = filtered.length;
+          list = filtered.slice(offset, offset + pageSize);
+        }
+      }
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          total,
+          list
+        }
+      });
+    }
+
+    if (path.startsWith('classifier/by-barcode/')) {
+      const barcode = path.replace('classifier/by-barcode/', '').trim();
+      let item = null;
+      try {
+        const rows = await sql`SELECT * FROM classifier_items WHERE shtrix_code = ${barcode} LIMIT 1`;
+        if (rows && rows.length > 0) item = rows[0];
+      } catch (e) {}
+      if (!item) {
+        const seedItems = getClassifierSeedData();
+        item = seedItems.find(i => i.shtrix_code === barcode) || null;
+      }
+      return res.status(200).json({ code: 0, data: item });
+    }
+
+    if (path === 'classifier/sync' && req.method === 'POST') {
+      const seedItems = getClassifierSeedData();
+      let inserted = 0;
+      if (seedItems && seedItems.length > 0) {
+        // Insert in small batches of 100
+        const batchSize = 100;
+        const toInsert = seedItems.slice(0, 1000);
+        for (let i = 0; i < toInsert.length; i += batchSize) {
+          const chunk = toInsert.slice(i, i + batchSize);
+          for (const item of chunk) {
+            await sql`
+              INSERT INTO classifier_items (id, group_name, class_name, position_name, subposition_name, brand_name, attribute_name, mxik_code, mxik_name, shtrix_code, unit)
+              VALUES (${item.id}, ${item.group_name}, ${item.class_name}, ${item.position_name}, ${item.subposition_name}, ${item.brand_name}, ${item.attribute_name}, ${item.mxik_code}, ${item.mxik_name}, ${item.shtrix_code}, ${item.unit})
+              ON CONFLICT (id) DO NOTHING
+            `;
+            inserted++;
+          }
+        }
+      }
+      return res.status(200).json({ code: 0, message: `${inserted} ta klassifikator elementi sinxronlashtirildi` });
     }
 
     // 20. GET /api/analysis/financial-overview
