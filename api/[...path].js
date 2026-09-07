@@ -2034,7 +2034,7 @@ export default async function handler(req, res) {
           const pZero = Math.max(0, page - 1);
           const targetUrl = `https://tasnif.soliq.uz/api/cls-api/elasticsearch/search?lang=${encodeURIComponent(lang)}&search=${encodeURIComponent(search)}&size=${pageSize}&page=${pZero}`;
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4500);
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
           const esResp = await fetch(targetUrl, {
             signal: controller.signal,
@@ -2078,7 +2078,7 @@ export default async function handler(req, res) {
           const pZero = Math.max(0, page - 1);
           const targetUrl = `https://tasnif.soliq.uz/api/cls-api/mxik/search/by-params?text=${encodeURIComponent(search)}&size=${pageSize}&page=${pZero}`;
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
           const paramsResp = await fetch(targetUrl, { signal: controller.signal });
           clearTimeout(timeoutId);
@@ -2190,7 +2190,7 @@ export default async function handler(req, res) {
         try {
           const targetUrl = `https://tasnif.soliq.uz/api/cls-api/elasticsearch/search?lang=uz_latn&search=${encodeURIComponent(barcode)}&size=5&page=0`;
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
           const esResp = await fetch(targetUrl, { signal: controller.signal });
           clearTimeout(timeoutId);
           if (esResp.ok) {
