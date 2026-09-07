@@ -67,6 +67,9 @@ router.beforeEach(async (to, from, next) => {
     } else {
       if (permissionStore.getIsAddRouters) {
         const user = userStore.getUserInfo
+        if (user && !user.role) {
+          user.role = user.username === 'admin' ? 'Super Administrator' : 'Oddiy xodim'
+        }
         const role = (user?.role || '').toLowerCase()
         const isSuper = role.includes('admin') || role.includes('super')
 
@@ -114,7 +117,10 @@ router.beforeEach(async (to, from, next) => {
       if (!roleRouters || (Array.isArray(roleRouters) && roleRouters.length === 0)) {
         try {
           const user = userStore.getUserInfo
-          const roleName = user?.username || user?.role || 'admin'
+          if (user && !user.role) {
+            user.role = user.username === 'admin' ? 'Super Administrator' : 'Oddiy xodim'
+          }
+          const roleName = user?.role || user?.username || 'Oddiy xodim'
           const res = appStore.serverDynamicRouter
             ? await getAdminRoleApi({ roleName })
             : await getTestRoleApi({ roleName })

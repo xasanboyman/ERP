@@ -4,15 +4,29 @@ import router from '@/router'
 
 const { t } = useI18n()
 
-const hasPermission = (value: string): boolean => {
-  const permission = (router.currentRoute.value.meta.permission || []) as string[]
-  if (!value) {
-    throw new Error(t('permission.hasPermission'))
-  }
-  if (permission.includes(value)) {
+import { useUserStoreWithOut } from '@/store/modules/user'
+
+const hasPermission = (value: string | string[]): boolean => {
+  if (!value || (Array.isArray(value) && value.length === 0)) {
     return true
   }
-  return false
+  const userStore = useUserStoreWithOut()
+  const role = (userStore.getUserInfo?.role || '').toLowerCase()
+  if (role.includes('admin') || role.includes('super')) {
+    return true
+  }
+
+  const userPerms = (userStore.getUserInfo?.permissions || []) as string[]
+  if (userPerms.includes('*.*.*') || userPerms.includes('*')) {
+    return true
+  }
+
+  const checkList = Array.isArray(value) ? value : [value]
+  const hasUserPerm = checkList.some((v) => userPerms.includes(v))
+  if (hasUserPerm) return true
+
+  const routePerms = (router.currentRoute.value.meta?.permission || []) as string[]
+  return checkList.some((v) => routePerms.includes(v))
 }
 function hasPermi(el: Element, binding: DirectiveBinding) {
   const value = binding.value

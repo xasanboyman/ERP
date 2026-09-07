@@ -25,6 +25,16 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item :label="t('userDemo.role')">
+          <el-select
+            v-model="searchQuery.role"
+            placeholder="Rol bo'yicha"
+            clearable
+            style="width: 170px"
+          >
+            <el-option v-for="r in roleOptions" :key="r" :label="r" :value="r" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">{{ t('common.search') }}</el-button>
           <el-button @click="resetSearch">{{ t('common.reset') }}</el-button>
@@ -72,9 +82,13 @@
       </el-table-column>
       <el-table-column prop="role" :label="t('userDemo.role')" min-width="180">
         <template #default="scope">
-          <span class="font-semibold text-gray-800 dark:text-gray-200">{{
-            scope.row.role || t('erp.regularWorker')
-          }}</span>
+          <el-tag
+            :type="getRoleTagType(scope.row.role)"
+            class="font-semibold rounded-lg"
+            effect="light"
+          >
+            {{ scope.row.role || 'Oddiy xodim' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="departmentName" :label="t('erp.departmentNameCol')" min-width="160">
@@ -326,7 +340,8 @@ const roleOptions = ref<string[]>([
 
 const searchQuery = reactive({
   name: '',
-  departmentId: ''
+  departmentId: '',
+  role: ''
 })
 
 const pagination = reactive({
@@ -334,11 +349,12 @@ const pagination = reactive({
   pageSize: 10
 })
 
-const _getRoleTagType = (roleName: string) => {
-  if (!roleName) return 'info'
+const getRoleTagType = (roleName?: string) => {
+  if (!roleName) return 'primary'
   if (roleName.includes('Super')) return 'danger'
   if (roleName.includes('Admin')) return 'warning'
   if (roleName.includes('Cashier') || roleName.includes('Kassir')) return 'success'
+  if (roleName.includes('Oddiy') || roleName.includes('Staff')) return 'primary'
   return 'info'
 }
 
@@ -347,7 +363,7 @@ const fetchRoles = async () => {
     const res: any = await getRoleListApi()
     if (res && res.data && res.data.list && res.data.list.length > 0) {
       const names = res.data.list.map((r: any) => r.roleName || r.name || r.role).filter(Boolean)
-      roleOptions.value = Array.from(new Set(names))
+      roleOptions.value = Array.from(new Set(['Oddiy xodim', ...names]))
     }
   } catch (error) {
     console.error('Failed to load system roles', error)
@@ -389,7 +405,8 @@ const getList = async (silent = false) => {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       name: searchQuery.name,
-      departmentId: searchQuery.departmentId
+      departmentId: searchQuery.departmentId,
+      role: searchQuery.role
     })
     if (res && res.data) {
       tableData.value = res.data.list || []
@@ -439,6 +456,7 @@ const handleSearch = () => {
 const resetSearch = () => {
   searchQuery.name = ''
   searchQuery.departmentId = ''
+  searchQuery.role = ''
   pagination.pageIndex = 1
   getList()
 }
@@ -506,7 +524,9 @@ const openAddDialog = () => {
   form.account = ''
   form.email = ''
   form.phone = ''
-  form.role = roleOptions.value[0] || 'Kassir'
+  form.role = roleOptions.value.includes('Oddiy xodim')
+    ? 'Oddiy xodim'
+    : roleOptions.value[0] || 'Oddiy xodim'
   form.departmentId = ''
   form.hireDate = new Date().toISOString().substring(0, 10)
   form.status = 1
@@ -524,7 +544,7 @@ const openEditDialog = (row: WorkerType) => {
   form.account = row.account
   form.email = row.email || ''
   form.phone = row.phone || ''
-  form.role = row.role || 'Kassir'
+  form.role = row.role || 'Oddiy xodim'
   form.departmentId = row.departmentId || ''
   form.hireDate = row.hireDate || ''
   form.status = row.status ?? 1

@@ -56,8 +56,20 @@ def seed_database():
             id="3",
             roleName="Oddiy xodim",
             status=1,
-            remark="Faqat ko'rish huquqiga ega bo'lgan xodim",
-            permissions=[]
+            remark="Faqat ish joyi, kassa (POS) va mahsulotlar bilan ishlash huquqiga ega",
+            permissions=[
+                "/dashboard",
+                "/dashboard/workplace",
+                "dashboard:workplace",
+                "/product",
+                "/product/list",
+                "product:view",
+                "/sales",
+                "/sales/pos",
+                "sales:pos",
+                "sales:view",
+                "sales:create"
+            ]
         ))
 
         print("Seeding Departments...")

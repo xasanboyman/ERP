@@ -89,7 +89,7 @@ const autoCheckNodeAndParent = (node: any) => {
 }
 
 // Called when action checkboxes change on the right panel
-const onActionChange = (checkedActions: string[]) => {
+const onActionChange = (_checkedActions: string[]) => {
   const node = unref(currentTreeData)
   if (!node) return
   autoCheckNodeAndParent(node)
@@ -125,6 +125,88 @@ const clearAllCurrentActions = () => {
       }
     })
   }
+}
+
+const applyRoleTemplate = (templateName: string) => {
+  const tree = unref(treeRef)
+  if (!tree) return
+
+  if (templateName === 'clear') {
+    eachTree(treeData.value, (node: any) => {
+      if (!node.meta) node.meta = { permission: [] }
+      node.meta.permission = []
+    })
+    tree.setCheckedKeys([])
+    return
+  }
+
+  const checkedIds: any[] = []
+  eachTree(treeData.value, (node: any) => {
+    if (!node.meta) node.meta = { permission: [] }
+    const path = (node.path || '').toLowerCase()
+    let enableThisNode = false
+    let enableActions: string[] = []
+
+    if (templateName === 'super_admin') {
+      enableThisNode = true
+      enableActions = (node.permissionList || []).map((a: any) => a.value)
+    } else if (templateName === 'manager') {
+      if (!path.includes('authorization') && !path.includes('role') && !path.includes('salary')) {
+        enableThisNode = true
+        enableActions = (node.permissionList || []).map((a: any) => a.value)
+      }
+    } else if (templateName === 'cashier') {
+      if (
+        path.includes('dashboard') ||
+        path.includes('workplace') ||
+        path.includes('sales') ||
+        path.includes('pos') ||
+        path.includes('product')
+      ) {
+        enableThisNode = true
+        enableActions = (node.permissionList || []).map((a: any) => a.value)
+      }
+    } else if (templateName === 'staff') {
+      if (
+        path.includes('dashboard') ||
+        path.includes('workplace') ||
+        path.includes('product') ||
+        path.includes('pos')
+      ) {
+        enableThisNode = true
+        enableActions = (node.permissionList || [])
+          .filter(
+            (a: any) =>
+              a.value.includes('view') || a.value.includes('pos') || a.value.includes('workplace')
+          )
+          .map((a: any) => a.value)
+      }
+    }
+
+    if (enableThisNode) {
+      node.meta.permission =
+        enableActions.length > 0
+          ? enableActions
+          : (node.permissionList || []).map((a: any) => a.value)
+      checkedIds.push(node.id)
+    } else {
+      node.meta.permission = []
+    }
+  })
+
+  tree.setCheckedKeys([])
+  for (const id of checkedIds) {
+    tree.setChecked(id, true, false)
+  }
+
+  const firstChecked = treeData.value.find((n: any) => checkedIds.includes(n.id))
+  if (firstChecked) {
+    currentTreeData.value = firstChecked
+  }
+}
+
+const selectAllMenus = () => {
+  applyRoleTemplate('super_admin')
 }
 
 const onCheck = (node: any, state: any) => {
@@ -220,6 +302,60 @@ const formSchema = ref<Array<FormSchema>>([
         default: () => {
           return (
             <div class="role-permission-matrix w-full border border-[var(--el-border-color-lighter)] rounded-2xl p-16px bg-[var(--el-fill-color-light)] dark:bg-slate-950/95 dark:border-slate-800 flex flex-col flex-1 min-h-0 shadow-sm">
+              {/* Quick Preset Templates */}
+              <div class="flex items-center justify-between mb-12px pb-12px border-b border-[var(--el-border-color-lighter)] dark:border-slate-800/80 flex-shrink-0 flex-wrap gap-8px">
+                <div class="flex items-center gap-8px flex-wrap">
+                  <span class="text-12px font-bold text-slate-500 dark:text-slate-400">
+                    Tezkor shablonlar:
+                  </span>
+                  <ElButton
+                    size="small"
+                    type="primary"
+                    plain
+                    onClick={() => applyRoleTemplate('super_admin')}
+                    class="!rounded-lg !text-12px !font-semibold"
+                  >
+                    👑 Super Admin
+                  </ElButton>
+                  <ElButton
+                    size="small"
+                    type="warning"
+                    plain
+                    onClick={() => applyRoleTemplate('manager')}
+                    class="!rounded-lg !text-12px !font-semibold"
+                  >
+                    🏢 Menedjer
+                  </ElButton>
+                  <ElButton
+                    size="small"
+                    type="success"
+                    plain
+                    onClick={() => applyRoleTemplate('cashier')}
+                    class="!rounded-lg !text-12px !font-semibold"
+                  >
+                    💳 Kassir (POS)
+                  </ElButton>
+                  <ElButton
+                    size="small"
+                    type="info"
+                    plain
+                    onClick={() => applyRoleTemplate('staff')}
+                    class="!rounded-lg !text-12px !font-semibold"
+                  >
+                    👤 Oddiy xodim
+                  </ElButton>
+                </div>
+                <ElButton
+                  size="small"
+                  type="danger"
+                  link
+                  onClick={() => applyRoleTemplate('clear')}
+                  class="!text-12px !font-bold"
+                >
+                  Hammasini tozalash
+                </ElButton>
+              </div>
+
               {/* Matrix Content */}
               <div class="flex gap-20px flex-1 min-h-0">
                 {/* Left Tree Column */}
@@ -233,15 +369,27 @@ const formSchema = ref<Array<FormSchema>>([
                       />
                       <span>1. Sahifalar & Menyular</span>
                     </div>
-                    <ElButton
-                      size="small"
-                      type="info"
-                      link
-                      onClick={toggleExpandAll}
-                      class="!text-12px !text-slate-500 dark:!text-slate-400 hover:!text-blue-600"
-                    >
-                      {isExpandedAll.value ? "Yig'ish" : 'Yoyish'}
-                    </ElButton>
+                    <div class="flex items-center gap-6px">
+                      <ElButton
+                        size="small"
+                        type="primary"
+                        link
+                        onClick={selectAllMenus}
+                        class="!text-12px !text-blue-600 dark:text-blue-400 !font-semibold"
+                      >
+                        Barchasi
+                      </ElButton>
+                      <span class="text-slate-300 dark:text-slate-700">|</span>
+                      <ElButton
+                        size="small"
+                        type="info"
+                        link
+                        onClick={toggleExpandAll}
+                        class="!text-12px !text-slate-500 dark:!text-slate-400 hover:!text-blue-600"
+                      >
+                        {isExpandedAll.value ? "Yig'ish" : 'Yoyish'}
+                      </ElButton>
+                    </div>
                   </div>
 
                   {/* Filter Search */}

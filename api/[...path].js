@@ -214,6 +214,20 @@ const defaultRoleKeys = [
   '/authorization/role'
 ];
 
+const defaultWorkerPermissions = [
+  '/dashboard',
+  '/dashboard/workplace',
+  'dashboard:workplace',
+  '/product',
+  '/product/list',
+  'product:view',
+  '/sales',
+  '/sales/pos',
+  'sales:pos',
+  'sales:view',
+  'sales:create'
+];
+
 function filterRoutesByRole(permissions) {
   if (!Array.isArray(permissions) || permissions.includes('*.*.*') || permissions.includes('*') || permissions.includes('all')) {
     return defaultAdminRoutes;
@@ -262,7 +276,34 @@ function filterRoutesByRole(permissions) {
     }
   }
 
-  return filtered.length > 0 ? filtered : defaultAdminRoutes;
+  if (filtered.length > 0) return filtered;
+  if (permissions.includes('*.*.*') || permissions.includes('*')) return defaultAdminRoutes;
+
+  // Safe fallback for unprivileged/unassigned users:
+  return [
+    {
+      path: '/dashboard',
+      component: '#',
+      redirect: '/dashboard/workplace',
+      name: 'Dashboard',
+      meta: {
+        title: 'router.dashboard',
+        icon: 'vi-ant-design:dashboard-filled',
+        alwaysShow: true
+      },
+      children: [
+        {
+          path: 'workplace',
+          component: 'views/Dashboard/Workplace',
+          name: 'Workplace',
+          meta: {
+            title: 'router.workplace',
+            noCache: true
+          }
+        }
+      ]
+    }
+  ];
 }
 
 function filterRoleKeysByRole(permissions) {
@@ -284,6 +325,7 @@ function filterRoleKeysByRole(permissions) {
 
   return keys.length > 0 ? keys : ['/dashboard', '/dashboard/workplace'];
 }
+
 
 function authenticate(req, res) {
   const authHeader = req?.headers?.authorization || req?.headers?.Authorization;
@@ -375,7 +417,7 @@ export default async function handler(req, res) {
             id: worker.id,
             username: worker.account || `worker_${worker.id}`,
             full_name: worker.name,
-            role: worker.role || 'Cashier',
+            role: worker.role || 'Oddiy xodim',
             roleId: '3',
             avatar: worker.avatar || '',
             permissions: []
@@ -395,13 +437,29 @@ export default async function handler(req, res) {
         }
       }
 
+      // Ensure user has a valid role and roleId:
+      if (!user.role) {
+        user.role = user.username === 'admin' ? 'Super Administrator' : 'Oddiy xodim';
+        user.roleId = user.username === 'admin' ? '1' : '3';
+      }
+
       const token = 'Bearer ' + jwt.sign({ sub: user.username, id: user.id }, SECRET_KEY, { expiresIn: '8h' });
       let permissions = user.permissions;
       if (typeof permissions === 'string') {
         try { permissions = JSON.parse(permissions); } catch (e) { permissions = []; }
       }
-      if (!Array.isArray(permissions)) {
-        permissions = ['*.*.*'];
+      if (!Array.isArray(permissions) || permissions.length === 0) {
+        if (user.role === 'Super Administrator' || user.username === 'admin') {
+          permissions = ['*.*.*'];
+        } else {
+          const rRows = await sql`SELECT * FROM roles WHERE "roleName" = ${user.role} OR id = ${user.roleId || user.role} LIMIT 1`;
+          if (rRows[0] && rRows[0].permissions) {
+            permissions = typeof rRows[0].permissions === 'string' ? JSON.parse(rRows[0].permissions) : rRows[0].permissions;
+          }
+          if (!Array.isArray(permissions) || permissions.length === 0) {
+            permissions = defaultWorkerPermissions;
+          }
+        }
       }
 
       return res.status(200).json({
@@ -412,8 +470,8 @@ export default async function handler(req, res) {
           full_name: user.full_name || user.username || 'admin',
           initials: (user.full_name || user.username || 'AD').substring(0, 2).toUpperCase(),
           avatar: user.avatar || '',
-          role: user.role || 'Super Administrator',
-          roleId: user.roleId || '1',
+          role: user.role,
+          roleId: user.roleId || (user.role === 'Super Administrator' ? '1' : '3'),
           email: user.email || '',
           department_id: user.department_id || 'DEPT-HQ',
           permissions: permissions,
@@ -526,22 +584,87 @@ export default async function handler(req, res) {
       });
     }
 
-    // 9. GET /api/worker/list
+    // 9. Worker Endpoints
     if (path === 'worker/list') {
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
+      const name = (req.query?.name || urlSearchParams.get('name') || '').trim();
+      const departmentId = (req.query?.departmentId || urlSearchParams.get('departmentId') || '').trim();
+      const role = (req.query?.role || urlSearchParams.get('role') || '').trim();
       const offset = (pageIndex - 1) * pageSize;
-      const [countRes, rows] = await Promise.all([
-        sql`SELECT count(*) FROM workers`,
-        sql`SELECT * FROM workers ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
-      ]);
+
+      let allRows = await sql`SELECT * FROM workers ORDER BY id DESC`;
+      if (name) {
+        const ln = name.toLowerCase();
+        allRows = allRows.filter(w => (w.name || '').toLowerCase().includes(ln) || (w.account || '').toLowerCase().includes(ln) || (w.id || '').toLowerCase().includes(ln));
+      }
+      if (departmentId) {
+        allRows = allRows.filter(w => w.departmentId === departmentId || w.department_id === departmentId);
+      }
+      if (role) {
+        allRows = allRows.filter(w => (w.role || 'Oddiy xodim') === role);
+      }
+
+      const total = allRows.length;
+      const paginated = allRows.slice(offset, offset + pageSize).map(w => ({
+        ...w,
+        role: w.role || 'Oddiy xodim'
+      }));
+
       return res.status(200).json({
         code: 0,
         data: {
-          total: parseInt(countRes[0].count, 10),
-          list: rows
+          total,
+          list: paginated
         }
       });
+    }
+
+    if (path === 'worker/save' && req.method === 'POST') {
+      const { id, name, account, email, phone, role, departmentId, hireDate, status, baseSalary, remark } = req.body || {};
+      const effectiveRole = role || 'Oddiy xodim';
+      const effectiveStatus = status !== undefined ? parseInt(status, 10) : 1;
+      const effectiveSalary = baseSalary !== undefined ? parseFloat(baseSalary) : 0;
+
+      if (id) {
+        await sql`
+          UPDATE workers 
+          SET name = ${name}, 
+              account = ${account || null}, 
+              email = ${email || null}, 
+              phone = ${phone || null}, 
+              role = ${effectiveRole}, 
+              "departmentId" = ${departmentId || null}, 
+              "hireDate" = ${hireDate || null}, 
+              status = ${effectiveStatus}, 
+              "baseSalary" = ${effectiveSalary}, 
+              remark = ${remark || null}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'WORK-' + Math.floor(100 + Math.random() * 900);
+        await sql`
+          INSERT INTO workers (id, name, account, email, phone, role, "departmentId", "hireDate", status, "baseSalary", remark)
+          VALUES (${newId}, ${name}, ${account || null}, ${email || null}, ${phone || null}, ${effectiveRole}, ${departmentId || null}, ${hireDate || null}, ${effectiveStatus}, ${effectiveSalary}, ${remark || null})
+        `;
+      }
+      return res.status(200).json({ code: 0, data: 'success', message: 'Xodim ma\'lumotlari muvaffaqiyatli saqlandi' });
+    }
+
+    if (path === 'worker/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM workers WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, data: 'success', message: "Xodimlar muvaffaqiyatli bo'shatildi" });
+    }
+
+    if (path === 'worker/avatar' && req.method === 'POST') {
+      const { id, avatar } = req.body || {};
+      if (id && avatar) {
+        await sql`UPDATE workers SET avatar = ${avatar} WHERE id = ${id}`;
+      }
+      return res.status(200).json({ code: 0, data: { id, avatar } });
     }
 
     // 10. Roles Endpoints
@@ -570,6 +693,9 @@ export default async function handler(req, res) {
               }
             }
           }
+        }
+        if (!Array.isArray(permissions) || permissions.length === 0) {
+          permissions = defaultWorkerPermissions;
         }
         return res.status(200).json({ code: 0, data: filterRoutesByRole(permissions) });
       }
@@ -601,6 +727,9 @@ export default async function handler(req, res) {
             }
           }
         }
+      }
+      if (!Array.isArray(permissions) || permissions.length === 0) {
+        permissions = defaultWorkerPermissions;
       }
       return res.status(200).json({ code: 0, data: filterRoleKeysByRole(permissions) });
     }
@@ -638,6 +767,9 @@ export default async function handler(req, res) {
         return res.status(403).json({ code: 403, message: "Kechirasiz, rollarni o'chirish uchun Administrator huquqi talab qilinadi." });
       }
       const { id } = req.body || {};
+      if (id === '1') {
+        return res.status(400).json({ code: 400, message: "Super Administrator rolini o'chirib bo'lmaydi!" });
+      }
       if (id) {
         await sql`DELETE FROM roles WHERE id = ${id}`;
       }

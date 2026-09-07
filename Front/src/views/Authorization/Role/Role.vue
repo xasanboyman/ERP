@@ -4,7 +4,7 @@ import { getRoleListApi, saveRoleApi, deleteRoleApi } from '@/api/role'
 import { useTable } from '@/hooks/web/useTable'
 import { useI18n } from '@/hooks/web/useI18n'
 import { Table, TableColumn } from '@/components/Table'
-import { ElTag, ElMessage } from 'element-plus'
+import { ElTag, ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@/components/Search'
 import { FormSchema } from '@/components/Form'
 import { ContentWrap } from '@/components/ContentWrap'
@@ -12,6 +12,7 @@ import Write from './components/Write.vue'
 import Detail from './components/Detail.vue'
 import { ResizeDialog } from '@/components/Dialog'
 import { BaseButton } from '@/components/Button'
+import { Icon } from '@/components/Icon'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 
 const dialogInitWidth = Math.min(window.innerWidth * 0.95, 1600)
@@ -19,15 +20,20 @@ const dialogInitHeight = Math.min(window.innerHeight * 0.92, 950)
 
 const { t } = useI18n()
 
-const searchParams = ref<{ roleName?: string }>({})
+const searchParams = ref<{ roleName?: string; status?: number | string }>({})
 
 const { tableRegister, tableState, tableMethods } = useTable({
   fetchDataApi: async () => {
     const res = await getRoleListApi()
     let list = res?.data?.list || (Array.isArray(res?.data) ? res.data : [])
-    if (searchParams.value && searchParams.value.roleName) {
-      const kw = searchParams.value.roleName.toLowerCase().trim()
-      list = list.filter((r: any) => (r.roleName || '').toLowerCase().includes(kw))
+    if (searchParams.value) {
+      if (searchParams.value.roleName) {
+        const kw = searchParams.value.roleName.toLowerCase().trim()
+        list = list.filter((r: any) => (r.roleName || '').toLowerCase().includes(kw))
+      }
+      if (searchParams.value.status !== undefined && searchParams.value.status !== '') {
+        list = list.filter((r: any) => Number(r.status) === Number(searchParams.value.status))
+      }
     }
     return {
       list: list,
@@ -92,9 +98,11 @@ const tableColumns = reactive<TableColumn[]>([
             <BaseButton type="success" size="small" onClick={() => action(row, 'detail')}>
               {t('exampleDemo.detail')}
             </BaseButton>
-            <BaseButton type="danger" size="small" onClick={() => deleteRow(row)}>
-              {t('exampleDemo.del')}
-            </BaseButton>
+            {row.roleName !== 'Super Administrator' && row.id !== '1' ? (
+              <BaseButton type="danger" size="small" onClick={() => deleteRow(row)}>
+                {t('exampleDemo.del')}
+              </BaseButton>
+            ) : null}
           </div>
         )
       }
@@ -106,12 +114,28 @@ const searchSchema = reactive<FormSchema[]>([
   {
     field: 'roleName',
     label: 'Rol Nomi',
-    component: 'Input'
+    component: 'Input',
+    componentProps: {
+      placeholder: 'Rol nomi bo‘yicha qidirish...'
+    }
+  },
+  {
+    field: 'status',
+    label: 'Holati',
+    component: 'Select',
+    componentProps: {
+      placeholder: 'Barchasi',
+      options: [
+        { label: 'Barchasi', value: '' },
+        { label: 'Faol', value: 1 },
+        { label: "O'chirilgan", value: 0 }
+      ]
+    }
   }
 ])
 
 const setSearchParams = (data: any) => {
-  searchParams.value = data
+  searchParams.value = data || {}
   getList()
 }
 
@@ -168,14 +192,31 @@ const save = async () => {
 }
 
 const deleteRow = async (row: any) => {
+  if (row.roleName === 'Super Administrator' || row.id === '1') {
+    ElMessage.warning("Super Administrator tizimning asosiy roli bo'lib, uni o'chirib bo'lmaydi!")
+    return
+  }
   try {
+    await ElMessageBox.confirm(
+      `Haqiqatan ham "${row.roleName}" rolini o'chirmoqchimisiz? Ushbu rolga biriktirilgan xodimlar huquqlari o'zgarishi mumkin.`,
+      "Rolni o'chirishni tasdiqlang",
+      {
+        confirmButtonText: "Ha, o'chirish",
+        cancelButtonText: 'Bekor qilish',
+        type: 'warning'
+      }
+    )
     const res = await deleteRoleApi({ id: row.id })
     if (res && res.code === 0) {
       ElMessage.success("Rol muvaffaqiyatli o'chirildi")
       getList()
+    } else {
+      ElMessage.error(res?.message || "O'chirishda xatolik yuz berdi")
     }
   } catch (e: any) {
-    ElMessage.error(e.message || "O'chirishda xatolik yuz berdi")
+    if (e !== 'cancel') {
+      ElMessage.error(e.message || "O'chirishda xatolik yuz berdi")
+    }
   }
 }
 </script>
@@ -183,8 +224,20 @@ const deleteRow = async (row: any) => {
 <template>
   <ContentWrap>
     <Search :schema="searchSchema" @reset="setSearchParams" @search="setSearchParams" />
-    <div class="mb-10px">
-      <BaseButton type="primary" @click="AddAction">{{ t('exampleDemo.add') }}</BaseButton>
+    <div class="mb-14px flex items-center justify-between">
+      <div class="flex items-center gap-10px">
+        <BaseButton type="primary" @click="AddAction">
+          <Icon icon="vi-ep:plus" class="mr-4px" />
+          {{ t('exampleDemo.add') }}
+        </BaseButton>
+        <BaseButton type="default" @click="getList">
+          <Icon icon="vi-ep:refresh" class="mr-4px" />
+          Yangilash
+        </BaseButton>
+      </div>
+      <div class="text-13px text-slate-500 font-medium">
+        Jami: <span class="font-bold text-blue-600 dark:text-blue-400">{{ total }}</span> ta rol
+      </div>
     </div>
     <Table
       :columns="tableColumns"
@@ -215,6 +268,21 @@ const deleteRow = async (row: any) => {
 
     <template #footer>
       <div class="flex justify-end items-center gap-14px px-8px py-6px">
+        <BaseButton
+          v-if="actionType === 'detail'"
+          type="primary"
+          :style="{
+            paddingLeft: 'var(--app-button-px, 24px)',
+            paddingRight: 'var(--app-button-px, 24px)',
+            paddingTop: 'var(--app-button-py, 11px)',
+            paddingBottom: 'var(--app-button-py, 11px)',
+            fontSize: 'var(--app-font-size, 14px)'
+          }"
+          class="font-bold rounded-xl shadow-lg shadow-indigo-500/20 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border-none transition-all"
+          @click="action(currentRow, 'edit')"
+        >
+          {t('exampleDemo.edit')}
+        </BaseButton>
         <BaseButton
           v-if="actionType !== 'detail'"
           type="primary"
