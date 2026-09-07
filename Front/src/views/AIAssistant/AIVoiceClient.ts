@@ -119,7 +119,9 @@ class AudioQueue {
       try {
         s.stop()
         s.disconnect()
-      } catch {}
+      } catch {
+        // ignore disconnect errors
+      }
     }
     this.activeSources.clear()
     this.nextPlayTime = 0
@@ -724,15 +726,17 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
       // --- ANALYTICS & REPORTS ---
       {
         name: 'get_top_selling_products',
-        description: "Eng ko'p sotilgan tovarlar va mahsulotlar reytingi (top selling products), har bir tovarning sotilgan dona soni va umumiy tushumi."
+        description:
+          "Eng ko'p sotilgan tovarlar va mahsulotlar reytingi (top selling products), har bir tovarning sotilgan dona soni va umumiy tushumi."
       },
       {
         name: 'get_sales_analytics',
-        description: "Umumiy sotuvlar soni, kassa tushumi va to'lov usullari bo'yicha to'liq statistika."
+        description:
+          "Umumiy sotuvlar soni, kassa tushumi va to'lov usullari bo'yicha to'liq statistika."
       },
       {
         name: 'get_debt_report',
-        description: "Mijozlarning jami qarzlari, faol qarzdorlar va nasiyalar hisoboti."
+        description: 'Mijozlarning jami qarzlari, faol qarzdorlar va nasiyalar hisoboti.'
       },
 
       // --- SALARY ---

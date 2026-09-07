@@ -1979,10 +1979,9 @@ const handleCheckout = async () => {
   }
 
   submittingCheckout.value = true
+  const paidVal =
+    checkoutForm.payment_method === 'nasiya' ? checkoutForm.paid_amount || 0 : grandTotal.value
   try {
-    const paidVal =
-      checkoutForm.payment_method === 'nasiya' ? checkoutForm.paid_amount || 0 : grandTotal.value
-
     const res: any = await checkoutSaleApi({
       cashier_name: activeCashier.value,
       customer_name:

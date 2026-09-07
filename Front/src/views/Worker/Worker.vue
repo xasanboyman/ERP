@@ -118,8 +118,17 @@
       </el-table-column>
       <el-table-column :label="t('common.action')" width="160" fixed="right" align="center">
         <template #default="scope">
-          <div v-if="scope?.row" class="flex items-center justify-center gap-8px flex-nowrap whitespace-nowrap">
-            <el-button link type="primary" size="small" class="!font-bold !text-13px" @click="openEditDialog(scope.row)">
+          <div
+            v-if="scope?.row"
+            class="flex items-center justify-center gap-8px flex-nowrap whitespace-nowrap"
+          >
+            <el-button
+              link
+              type="primary"
+              size="small"
+              class="!font-bold !text-13px"
+              @click="openEditDialog(scope.row)"
+            >
               {{ t('common.edit') }}
             </el-button>
             <el-dropdown trigger="click">

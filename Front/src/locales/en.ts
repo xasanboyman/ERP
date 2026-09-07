@@ -879,7 +879,7 @@ export default {
     yield: 'Yield',
     dynamic: 'Dynamic',
     push: 'push',
-    pushCode: 'Archer push code to Github',
+    pushCode: 'Hasanboy push code to Github',
     follow: 'Follow',
     activeWorkers: 'Active Workers',
     mostSoldProducts: 'Most Sold Products',

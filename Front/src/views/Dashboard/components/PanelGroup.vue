@@ -70,9 +70,9 @@ const loadData = async () => {
       0
     )
 
-    const costRatio = totalInventoryRetail > 0 ? totalInventoryCost / totalInventoryRetail : 0.62
-    const revenue = totalSales > 0 ? totalSales : totalInventoryRetail || 145000
-    const cogs = totalSales > 0 ? revenue * costRatio : totalInventoryCost || 89000
+    const costRatio = totalInventoryRetail > 0 ? totalInventoryCost / totalInventoryRetail : 0
+    const revenue = totalSales > 0 ? totalSales : totalInventoryRetail || 0
+    const cogs = totalSales > 0 ? revenue * costRatio : totalInventoryCost || 0
 
     // 2. Staff Salaries
     let paidSalaries = salaries
@@ -83,11 +83,9 @@ const loadData = async () => {
         .filter((w: any) => w.status === 1)
         .reduce((sum: number, w: any) => sum + (parseFloat(w.baseSalary) || 0), 0)
     }
-    if (!paidSalaries) paidSalaries = 14500
 
     // 3. Short-term Worker Outputs (Vyrabotka)
-    let shortTerm = outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0)
-    if (!shortTerm) shortTerm = 3800
+    const shortTerm = outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0)
 
     // 4. Totals & Real Net Profit
     const payroll = paidSalaries + shortTerm

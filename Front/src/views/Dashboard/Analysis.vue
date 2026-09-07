@@ -1373,21 +1373,18 @@ const loadAnalyticsData = async (silent = false) => {
       0
     )
 
-    const costRatio = totalInventoryRetail > 0 ? totalInventoryCost / totalInventoryRetail : 0.62
-    const baseRevenue = totalSales > 0 ? totalSales : totalInventoryRetail || 145000
-    const baseCOGS = totalSales > 0 ? baseRevenue * costRatio : totalInventoryCost || 89000
+    const costRatio = totalInventoryRetail > 0 ? totalInventoryCost / totalInventoryRetail : 0
+    const baseRevenue = totalSales > 0 ? totalSales : totalInventoryRetail || 0
+    const baseCOGS = totalSales > 0 ? baseRevenue * costRatio : totalInventoryCost || 0
 
     // Accurate Staff Compensation Calculation (Always Positive):
     const activeStaffMonthly = workers
       .filter((w: any) => w.status === 1)
       .reduce((sum: number, w: any) => sum + (parseFloat(w.baseSalary) || 0), 0)
 
-    const baseSalaries = (activeStaffMonthly > 0 ? activeStaffMonthly : 24300) * 6
+    const baseSalaries = activeStaffMonthly * 6
     const baseShortTerm =
-      Math.max(
-        outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0),
-        3800
-      ) * 6
+      outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0) * 6
 
     // 2. Generate Monthly Dynamics Trend Data
     const months = [

@@ -68,7 +68,7 @@
               <p class="header-status">
                 {{
                   clientStatus === 'connected'
-                    ? "Ovozli rejimda (Tinglanmoqda...)"
+                    ? 'Ovozli rejimda (Tinglanmoqda...)'
                     : clientStatus === 'connecting'
                       ? "Bog'lanmoqda..."
                       : 'Onlayn va buyruqlarga tayyor'
@@ -110,8 +110,8 @@
             <div class="welcome-icon">✨</div>
             <h3>Qanday yordam bera olaman?</h3>
             <p>
-              ERP tizimi, mahsulotlar, qarzlar, kassa va xodimlarni boshqarish bo'yicha tezkor
-              savol yoki buyruq bering.
+              ERP tizimi, mahsulotlar, qarzlar, kassa va xodimlarni boshqarish bo'yicha tezkor savol
+              yoki buyruq bering.
             </p>
 
             <!-- Quick Suggestions -->
@@ -422,7 +422,7 @@ const handleTextSubmit = async () => {
         } else {
           messages.value.push({
             role: 'model',
-            text: "Hozircha sotilgan tovarlar statistikasi mavjud emas."
+            text: 'Hozircha sotilgan tovarlar statistikasi mavjud emas.'
           })
         }
       } catch {
@@ -488,14 +488,17 @@ const handleTextSubmit = async () => {
             (sum: number, s: any) => sum + Number(s.total_amount || 0),
             0
           )
-          const totalItems = list.reduce((sum: number, s: any) => sum + Number(s.total_items || 1), 0)
+          const totalItems = list.reduce(
+            (sum: number, s: any) => sum + Number(s.total_items || 1),
+            0
+          )
           const text = `📊 Savdo va Kassa Ma'lumotlari:\n• Jami qayd etilgan sotuvlar: ${list.length} ta chek\n• Sotilgan tovarlar soni: ${totalItems} dona\n• Umumiy tushum aylanmasi: $${totalRevenue.toLocaleString()}`
           messages.value.push({ role: 'model', text })
         }
       } catch {
         messages.value.push({
           role: 'model',
-          text: "Sotuvlar hisobotini yuklashda xatolik yuz berdi."
+          text: 'Sotuvlar hisobotini yuklashda xatolik yuz berdi.'
         })
       }
       isThinking.value = false
@@ -792,7 +795,9 @@ const drawWave = () => {
       const envelope = Math.sin(normPos * Math.PI)
 
       // Map frequency bin to bar
-      const freqIdx = Math.floor(Math.abs(i - numWaveBars / 2) * (rawArray.length / (numWaveBars / 2)))
+      const freqIdx = Math.floor(
+        Math.abs(i - numWaveBars / 2) * (rawArray.length / (numWaveBars / 2))
+      )
       const rawVal = rawArray[Math.min(freqIdx, rawArray.length - 1)] || 0
 
       // Add harmonic ripple variation across bars
@@ -843,7 +848,12 @@ onUnmounted(() => {
   bottom: 24px;
   right: 24px;
   z-index: 9999;
-  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Outfit',
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   user-select: none;
 }
 

@@ -7,7 +7,6 @@ winner = ""
 brea = ""
 do = []
 
-
 for i in range(3):
     id= input()
     dot+=id.count(".")
@@ -25,26 +24,17 @@ for i in range(3):
     elif zero  == 3:
         winner += "0"
         brea+="0"
-idk = "".join(data)
-if  idk == "0X..X.0X0" :
-    print("illegal")
-    exit()
-if idk == "00XXX.00X":
-    print("first")
-    exit()
-if idk == "0X0.X0.X.":
-    print("illegal")
-    exit()
-if idk == "X0..0XX0X":
-    print("illegal")
-    exit()
-if idk == "X000XX.X0":
-    print("first")
-    exit()
-
+        
 if x>o+2:
     print("illegal")
     exit()
+if data[0][0] == data[1][0] == data[2][0] and data[2][0] != ".":
+    winner += data[2][0]
+if data[0][1] == data[1][1] == data[2][1] and data[2][1] != ".":
+    winner += data[2][1]
+if data[0][2] == data[1][2] == data[2][2] and data[2][2] != ".":
+    winner += data[2][2]
+
 if dot == 1:
     winne = ""
     bre = ""
@@ -89,12 +79,19 @@ if dot == 1:
     elif  res.count("X") == 3:
         winne += "X"
         bre+="X"
+    if data[0][0] == data[1][0] == data[2][0] and data[2][0] != ".":
+        winne += data[2][0]
+    if data[0][1] == data[1][1] == data[2][1] and data[2][1] != ".":
+        winne += data[2][1]
+    if data[0][2] == data[1][2] == data[2][2] and data[2][2] != ".":
+        winne += data[0][2]
 
     if winne and brea.count("0") <= 2 or brea.count("X") <=2 :
-        if x>o and winne=="X":
+
+        if x>o and winne[-1]=="X":
             print("the first player won")
             exit()
-        elif o%2 ==0 and x==o: 
+        elif o%2 ==0 and x==o and winne.count("0") != 0: 
             print("the second player won")
             exit()
     data[do[0]] = old
@@ -102,16 +99,7 @@ if dot == 1:
 dio = data[0][0] + data[1][1]+data[2][2]
 res = data[0][2] + data[1][1]+data[2][0]
 
-for i in range(3):
-    col = data[0][i] + data[1][i] + data[2][i]
 
-    if col.count("X") == 3:
-        winner += "X"
-        brea += "X"
-
-    elif col.count("0") == 3:
-        winner += "0"
-        brea += "0"
 
 if o>x or x>o+1:
     print("illegal")
@@ -154,20 +142,16 @@ elif x%2==1  and not winner:
         print("first")
 
 elif winner and brea.count("0") <= 2 or brea.count("X") <=2 :
-    if x>o and winner=="X":
+    if winner.count("X") == winner.count("0"):
+        print("illegal")
+        exit()
+    if x>o and winner[-1]=="X":
         print("the first player won")
-    elif o%2 ==0 and x==o: 
+    elif o%2 == 0 and x==o:
+        print("the second player won")
+    elif x==o and winner[-1]=="0":
         print("the second player won")
     else:
         print("illegal")
 else:
     print("illegal")
-
-
-
-
-
-
-# X.X
-# X.0
-# 0.0
