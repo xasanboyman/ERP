@@ -1412,7 +1412,8 @@ const loadAnalyticsData = async (silent = false) => {
       const mult = multipliers[idx]
       const mRev = parseFloat(((baseRevenue / 6) * mult).toFixed(2))
       const mCOGS = parseFloat((mRev * costRatio).toFixed(2))
-      const mStaff = baseRevenue > 0 ? parseFloat(((baseSalaries / 6) * (1 + idx * 0.02)).toFixed(2)) : 0
+      const mStaff =
+        baseRevenue > 0 ? parseFloat(((baseSalaries / 6) * (1 + idx * 0.02)).toFixed(2)) : 0
       const mShortTerm = baseRevenue > 0 ? parseFloat(((baseShortTerm / 6) * mult).toFixed(2)) : 0
       const mExpenses = parseFloat((mCOGS + mStaff + mShortTerm).toFixed(2))
       const mProfit = parseFloat(Math.max(0, mRev - mExpenses).toFixed(2))
