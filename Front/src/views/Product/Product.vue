@@ -285,9 +285,10 @@
                   v-if="scope.row.expiration_date"
                   type="info"
                   effect="plain"
-                  class="font-mono text-12px"
+                  class="font-mono text-12px inline-flex items-center gap-4px"
                 >
-                  📅 {{ scope.row.expiration_date }}
+                  <Icon icon="ep:calendar" class="text-12px text-gray-500" />
+                  <span>{{ scope.row.expiration_date }}</span>
                 </ElTag>
                 <span v-else class="text-muted">—</span>
               </span>
@@ -367,9 +368,14 @@
             class="flex items-center gap-6px px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold"
           >
             <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <Icon
+              :icon="classifierSearchMode === 'extended' ? 'ep:lightning' : 'ep:search'"
+              :class="classifierSearchMode === 'extended' ? 'text-amber-500' : 'text-blue-500'"
+              style="font-size: 13px"
+            />
             <span>{{
               classifierSearchMode === 'extended'
-                ? '⚡ Tasnif Soliq (440,000+ tovarlar)'
+                ? 'Tasnif Soliq (440,000+ tovarlar)'
                 : 'Oddiy qidiruv'
             }}</span>
           </div>
@@ -811,7 +817,7 @@
           class="bg-[var(--el-fill-color-light)] dark:bg-gray-900/90 rounded-14px p-16px border border-blue-500/40 shadow-sm space-y-10px"
         >
           <span class="text-14px font-bold text-blue-500 flex items-center gap-6px">
-            <Icon icon="ep:box" /> 📦 Qadoqlash va Paket Turlari (Ko'p Birlikda Sotuv Narxlari):
+            <Icon icon="ep:box" /> Qadoqlash va Paket Turlari (Ko'p Birlikda Sotuv Narxlari):
           </span>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10px">
             <div
