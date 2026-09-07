@@ -176,7 +176,10 @@
             <span v-if="row.total_debt > 0" class="debt-badge">
               ${{ formatMoney(row.total_debt) }}
             </span>
-            <span v-else class="settled-badge">{{ t('erp.settledBadge') }}</span>
+            <span v-else class="settled-badge inline-flex items-center gap-4px">
+              <Icon icon="ep:check" class="text-12px" />
+              <span>{{ t('erp.settledBadge') }}</span>
+            </span>
           </template>
         </ElTableColumn>
 
@@ -267,7 +270,7 @@
               <ElOption
                 v-for="d in debtorsList"
                 :key="d.name"
-                :label="`${d.name}${d.total_debt > 0 ? '  —  Qarz: $' + formatMoney(d.total_debt) : '  ✓'}`"
+                :label="`${d.name}${d.total_debt > 0 ? '  —  Qarz: $' + formatMoney(d.total_debt) : '  (To\'langan)'}`"
                 :value="d.name"
               />
             </ElSelect>
@@ -317,8 +320,18 @@
               ><span class="flabel">{{ t('erp.paymentMethodLabel') }}</span></template
             >
             <ElRadioGroup v-model="repayForm.payment_method" size="large" style="width: 100%">
-              <ElRadioButton value="naqd">💵 Naqd</ElRadioButton>
-              <ElRadioButton value="karta">💳 Karta</ElRadioButton>
+              <ElRadioButton value="naqd">
+                <span class="inline-flex items-center gap-4px">
+                  <Icon icon="ep:money" class="text-emerald-500" />
+                  <span>Naqd</span>
+                </span>
+              </ElRadioButton>
+              <ElRadioButton value="karta">
+                <span class="inline-flex items-center gap-4px">
+                  <Icon icon="ep:credit-card" class="text-blue-500" />
+                  <span>Karta</span>
+                </span>
+              </ElRadioButton>
               <ElRadioButton value="otkazma">{{ t('erp.transferPayment') }}</ElRadioButton>
             </ElRadioGroup>
           </ElFormItem>
@@ -422,8 +435,12 @@
           <ElTable :data="debtorDetail.sales" border stripe size="small" style="width: 100%">
             <ElTableColumn label="Chek #" min-width="195">
               <template #default="{ row }">
-                <span class="chk-link" @click="openSaleReceiptDetail(row.receipt_number)">
-                  🧾 {{ row.receipt_number }}
+                <span
+                  class="chk-link inline-flex items-center"
+                  @click="openSaleReceiptDetail(row.receipt_number)"
+                >
+                  <Icon icon="ep:tickets" class="text-blue-500 mr-4px" />
+                  <span>{{ row.receipt_number }}</span>
                 </span>
               </template>
             </ElTableColumn>
@@ -478,8 +495,12 @@
           >
             <ElTableColumn label="To'lov Chek #" min-width="215">
               <template #default="{ row }">
-                <span class="chk-link green" @click="openPaymentReceiptDetail(row.receipt_number)">
-                  💳 {{ row.receipt_number }}
+                <span
+                  class="chk-link green inline-flex items-center"
+                  @click="openPaymentReceiptDetail(row.receipt_number)"
+                >
+                  <Icon icon="ep:credit-card" class="text-emerald-500 mr-4px" />
+                  <span>{{ row.receipt_number }}</span>
                 </span>
               </template>
             </ElTableColumn>

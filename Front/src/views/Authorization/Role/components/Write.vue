@@ -315,7 +315,7 @@ const formSchema = ref<Array<FormSchema>>([
                     onClick={() => applyRoleTemplate('super_admin')}
                     class="!rounded-lg !text-12px !font-semibold"
                   >
-                    👑 Super Admin
+                    <Icon icon="ep:medal" class="mr-4px text-amber-500" /> Super Admin
                   </ElButton>
                   <ElButton
                     size="small"
@@ -324,7 +324,7 @@ const formSchema = ref<Array<FormSchema>>([
                     onClick={() => applyRoleTemplate('manager')}
                     class="!rounded-lg !text-12px !font-semibold"
                   >
-                    🏢 Menedjer
+                    <Icon icon="ep:office-building" class="mr-4px text-blue-500" /> Menedjer
                   </ElButton>
                   <ElButton
                     size="small"
@@ -333,7 +333,7 @@ const formSchema = ref<Array<FormSchema>>([
                     onClick={() => applyRoleTemplate('cashier')}
                     class="!rounded-lg !text-12px !font-semibold"
                   >
-                    💳 Kassir (POS)
+                    <Icon icon="ep:credit-card" class="mr-4px text-emerald-500" /> Kassir (POS)
                   </ElButton>
                   <ElButton
                     size="small"
@@ -342,7 +342,7 @@ const formSchema = ref<Array<FormSchema>>([
                     onClick={() => applyRoleTemplate('staff')}
                     class="!rounded-lg !text-12px !font-semibold"
                   >
-                    👤 Oddiy xodim
+                    <Icon icon="ep:user" class="mr-4px text-gray-500" /> Oddiy xodim
                   </ElButton>
                 </div>
                 <ElButton

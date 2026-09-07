@@ -3,6 +3,7 @@ import { useI18n } from '@/hooks/web/useI18n'
 const { t } = useI18n()
 import { ref, onMounted, computed, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Icon } from '@/components/Icon'
 import {
   ElButton,
   ElInput,
@@ -363,7 +364,7 @@ const addScannedItem = async () => {
     }
 
     const uLabel = pUnitName ? ` [${pUnitName}]` : ''
-    ElMessage.success(`✓ "${pName}"${uLabel} qo'shildi. Shtrix-kod: ${code}`)
+    ElMessage.success(`"${pName}"${uLabel} qo'shildi. Shtrix-kod: ${code}`)
     barcodeInput.value = ''
     quantityInput.value = 1
   } catch (e: any) {
@@ -396,7 +397,7 @@ const handlePushPcSale = async () => {
       deviceToken.value
     )) as any
     if (res && (res.code === 0 || res.push_id)) {
-      ElMessage.success('🚀 Kompyuter (Kassa) ga muvaffaqiyatli yuborildi!')
+      ElMessage.success('Kompyuter (Kassa) ga muvaffaqiyatli yuborildi!')
       cartItems.value = []
     }
   } catch (err: any) {
@@ -534,8 +535,11 @@ onBeforeUnmount(() => {
       v-else-if="deviceStatus === 'unpaired'"
       class="max-w-400px mx-auto mt-40px bg-white p-20px rounded-lg shadow-md"
     >
-      <div class="text-20px font-bold text-center text-red-600 mb-10px">
-        🔴 Qurilma Ulangan Emas
+      <div
+        class="text-20px font-bold text-center text-red-600 mb-10px flex items-center justify-center"
+      >
+        <Icon icon="ep:circle-close" class="text-red-500 mr-6px text-22px" />
+        <span>Qurilma Ulangan Emas</span>
       </div>
       <div class="text-14px text-gray-600 text-center mb-20px">
         Kompyuter ekranidagi QR kodni telefon kamerasi bilan skanerlang yoki ulash kodini kiriting.
@@ -578,19 +582,21 @@ onBeforeUnmount(() => {
             ></div>
           </div>
           <div
-            class="mt-8px text-12px text-white font-semibold bg-black/75 px-12px py-4px rounded-full backdrop-blur-md border border-white/20"
+            class="mt-8px text-12px text-white font-semibold bg-black/75 px-12px py-4px rounded-full backdrop-blur-md border border-white/20 inline-flex items-center gap-4px"
           >
-            🔍 QR-kodni ushbu ramkaga to'g'rilang
+            <Icon icon="ep:aim" />
+            <span>QR-kodni ushbu ramkaga to'g'rilang</span>
           </div>
         </div>
       </div>
 
       <ElButton
         :type="isCameraActive ? 'danger' : 'success'"
-        class="w-full mb-15px h-45px text-15px font-bold shadow-md"
+        class="w-full mb-15px h-45px text-15px font-bold shadow-md inline-flex items-center justify-center"
         @click="toggleCameraScanner"
       >
-        {{ isCameraActive ? '❌ Yopish' : '📷 QR Kod Bilan Ulanish' }}
+        <Icon :icon="isCameraActive ? 'ep:close' : 'ep:camera'" class="mr-6px" />
+        <span>{{ isCameraActive ? 'Yopish' : 'QR Kod Bilan Ulanish' }}</span>
       </ElButton>
 
       <ElForm label-position="top">
@@ -609,7 +615,10 @@ onBeforeUnmount(() => {
       >
         <div>
           <div class="text-12px opacity-80">Ulangan Qurilma:</div>
-          <div class="text-16px font-bold">🟢 {{ deviceName }}</div>
+          <div class="text-16px font-bold inline-flex items-center gap-6px">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+            <span>{{ deviceName }}</span>
+          </div>
         </div>
         <ElButton size="small" type="warning" plain @click="deviceStatus = 'unpaired'">
           Qayta ulash
@@ -619,10 +628,18 @@ onBeforeUnmount(() => {
       <!-- Mode Selector -->
       <div class="mb-15px flex justify-center">
         <ElRadioGroup v-model="currentMode" size="large">
-          <ElRadioButton label="pc" value="pc">💻 PC Sale (Kompyuterga yuborish)</ElRadioButton>
-          <ElRadioButton label="phone" value="phone"
-            >📱 Phone Sale (Telefondan sotuv)</ElRadioButton
-          >
+          <ElRadioButton label="pc" value="pc">
+            <span class="inline-flex items-center gap-4px">
+              <Icon icon="ep:monitor" />
+              <span>PC Sale (Kompyuterga yuborish)</span>
+            </span>
+          </ElRadioButton>
+          <ElRadioButton label="phone" value="phone">
+            <span class="inline-flex items-center gap-4px">
+              <Icon icon="ep:cellphone" />
+              <span>Phone Sale (Telefondan sotuv)</span>
+            </span>
+          </ElRadioButton>
         </ElRadioGroup>
       </div>
 
@@ -639,15 +656,17 @@ onBeforeUnmount(() => {
               @click="toggleTorch"
               title="Chiroq (Flashlight)"
             >
-              🔦
+              <Icon icon="ep:opportunity" />
             </ElButton>
             <ElButton
               :type="isCameraActive ? 'danger' : 'primary'"
               size="small"
               plain
+              class="inline-flex items-center gap-4px"
               @click="toggleCameraScanner"
             >
-              {{ isCameraActive ? '❌ Yopish' : '📷 Kamera' }}
+              <Icon :icon="isCameraActive ? 'ep:close' : 'ep:camera'" />
+              <span>{{ isCameraActive ? 'Yopish' : 'Kamera' }}</span>
             </ElButton>
           </div>
         </div>
@@ -689,9 +708,10 @@ onBeforeUnmount(() => {
               ></div>
             </div>
             <div
-              class="mt-8px text-12px text-white font-semibold bg-black/75 px-12px py-4px rounded-full backdrop-blur-md border border-white/20"
+              class="mt-8px text-12px text-white font-semibold bg-black/75 px-12px py-4px rounded-full backdrop-blur-md border border-white/20 inline-flex items-center gap-4px"
             >
-              🔍 Shtrix-kod yoki QR-kodni ramkaga tuting
+              <Icon icon="ep:aim" />
+              <span>Shtrix-kod yoki QR-kodni ramkaga tuting</span>
             </div>
           </div>
         </div>
@@ -796,7 +816,15 @@ onBeforeUnmount(() => {
               <span class="font-bold text-15px text-blue-600"
                 >${{ formatMoney(item.price * item.quantity) }}</span
               >
-              <ElButton type="danger" circle size="small" @click="removeItem(index)">✕</ElButton>
+              <ElButton
+                type="danger"
+                circle
+                size="small"
+                class="inline-flex items-center justify-center"
+                @click="removeItem(index)"
+              >
+                <Icon icon="ep:delete" />
+              </ElButton>
             </div>
           </div>
         </div>
@@ -807,12 +835,13 @@ onBeforeUnmount(() => {
         <ElButton
           type="success"
           size="large"
-          class="w-full h-50px text-18px font-bold shadow-md"
+          class="w-full h-50px text-18px font-bold shadow-md inline-flex items-center justify-center gap-6px"
           :loading="pcPushLoading"
           :disabled="cartItems.length === 0"
           @click="handlePushPcSale"
         >
-          🚀 Kompyuter (Kassa) ga Yuborish
+          <Icon icon="ep:position" class="text-20px" />
+          <span>Kompyuter (Kassa) ga Yuborish</span>
         </ElButton>
       </div>
 
@@ -820,29 +849,32 @@ onBeforeUnmount(() => {
         <ElButton
           type="success"
           size="large"
-          class="h-50px text-15px font-bold shadow-md !ml-0"
+          class="h-50px text-15px font-bold shadow-md !ml-0 inline-flex items-center justify-center gap-4px"
           :disabled="cartItems.length === 0"
           @click="openCheckout('naqd')"
         >
-          💵 Naqd
+          <Icon icon="ep:money" />
+          <span>Naqd</span>
         </ElButton>
         <ElButton
           type="primary"
           size="large"
-          class="h-50px text-15px font-bold shadow-md !ml-0"
+          class="h-50px text-15px font-bold shadow-md !ml-0 inline-flex items-center justify-center gap-4px"
           :disabled="cartItems.length === 0"
           @click="openCheckout('karta')"
         >
-          💳 Karta
+          <Icon icon="ep:credit-card" />
+          <span>Karta</span>
         </ElButton>
         <ElButton
           type="warning"
           size="large"
-          class="h-50px text-15px font-bold shadow-md !ml-0"
+          class="h-50px text-15px font-bold shadow-md !ml-0 inline-flex items-center justify-center gap-4px"
           :disabled="cartItems.length === 0"
           @click="openCheckout('nasiya')"
         >
-          📝 {{ t('erp.debt') }}
+          <Icon icon="ep:document" />
+          <span>{{ t('erp.debt') }}</span>
         </ElButton>
       </div>
     </div>
@@ -850,7 +882,7 @@ onBeforeUnmount(() => {
     <!-- Phone POS Checkout Dialog -->
     <ElDialog
       v-model="checkoutDialogVisible"
-      title="📱 Telefondan Sotuv Kassasi (POS)"
+      title="Telefondan Sotuv Kassasi (POS)"
       width="450px"
       append-to-body
     >
@@ -862,9 +894,24 @@ onBeforeUnmount(() => {
             class="w-full flex justify-between"
             @change="onPaymentTypeChange"
           >
-            <ElRadioButton label="naqd" value="naqd">💵 Naqd</ElRadioButton>
-            <ElRadioButton label="karta" value="karta">💳 Karta</ElRadioButton>
-            <ElRadioButton label="nasiya" value="nasiya">📝 {{ t('erp.debt') }}</ElRadioButton>
+            <ElRadioButton label="naqd" value="naqd">
+              <span class="inline-flex items-center gap-4px">
+                <Icon icon="ep:money" />
+                <span>Naqd</span>
+              </span>
+            </ElRadioButton>
+            <ElRadioButton label="karta" value="karta">
+              <span class="inline-flex items-center gap-4px">
+                <Icon icon="ep:credit-card" />
+                <span>Karta</span>
+              </span>
+            </ElRadioButton>
+            <ElRadioButton label="nasiya" value="nasiya">
+              <span class="inline-flex items-center gap-4px">
+                <Icon icon="ep:document" />
+                <span>{{ t('erp.debt') }}</span>
+              </span>
+            </ElRadioButton>
           </ElRadioGroup>
         </ElFormItem>
 

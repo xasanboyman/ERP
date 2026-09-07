@@ -363,7 +363,7 @@ const createFallbackReceiptData = (log: ActivityLogType, checkNum: string) => {
                 <span class="online-indicator" title="Tizimda faol"></span>
               </div>
               <div>
-                <div class="greeting-title"> {{ t('workplace.goodMorning') }}, Admin! 👋 </div>
+                <div class="greeting-title"> {{ t('workplace.goodMorning') }}, Admin! </div>
                 <div class="mt-6px greeting-sub">
                   {{ t('erp.heroSubtitle') }}
                 </div>
@@ -652,9 +652,10 @@ const createFallbackReceiptData = (log: ActivityLogType, checkNum: string) => {
             </div>
             <div
               v-else
-              class="text-center py-16px text-emerald-600 dark:text-emerald-400 text-13px font-medium"
+              class="text-center py-16px text-emerald-600 dark:text-emerald-400 text-13px font-medium flex items-center justify-center gap-6px"
             >
-              {{ t('workplace.allProductsSufficient') }}
+              <Icon icon="ep:circle-check" class="text-15px" />
+              <span>{{ t('workplace.allProductsSufficient') }}</span>
             </div>
           </ElSkeleton>
         </ElCard>

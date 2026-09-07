@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElDialog, ElButton, ElTag, ElMessage, ElTable, ElTableColumn } from 'element-plus'
 import { respondSalesPushApi, getPushPayloadApi } from '@/api/device'
 import { formatMoney } from '@/utils'
+import { Icon } from '@/components/Icon'
 
 const router = useRouter()
 
@@ -24,7 +25,7 @@ const handleAccept = async () => {
   try {
     loading.value = true
     await respondSalesPushApi(pushId, 'accept')
-    ElMessage.success("🚀 Telefon skaneri qabul qilindi! POS Kassaga o'tilmoqda...")
+    ElMessage.success("Telefon skaneri qabul qilindi! POS Kassaga o'tilmoqda...")
     dialogVisible.value = false
 
     // Fetch full payload and navigate to /sales/pos (Yangi Sotuv)
@@ -99,7 +100,7 @@ onUnmounted(() => {
 <template>
   <ElDialog
     v-model="dialogVisible"
-    title="📲 Telefonda Skanerlangan Mahsulotlar Qabul Qilindi!"
+    title="Telefonda Skanerlangan Mahsulotlar Qabul Qilindi"
     width="600px"
     :close-on-click-modal="false"
     :before-close="handleCloseDialog"
@@ -130,17 +131,25 @@ onUnmounted(() => {
 
     <template #footer>
       <div class="flex justify-end gap-10px">
-        <ElButton type="danger" size="large" :loading="loading" @click="handleDecline">
-          ✕ Rad etish (Decline)
+        <ElButton
+          type="danger"
+          size="large"
+          :loading="loading"
+          class="inline-flex items-center"
+          @click="handleDecline"
+        >
+          <Icon icon="ep:close" class="mr-4px" />
+          <span>Rad etish</span>
         </ElButton>
         <ElButton
           type="success"
           size="large"
-          class="font-bold"
+          class="font-bold inline-flex items-center"
           :loading="loading"
           @click="handleAccept"
         >
-          ✓ Qabul qilish & POS (Accept)
+          <Icon icon="ep:check" class="mr-4px" />
+          <span>Qabul qilish & POS</span>
         </ElButton>
       </div>
     </template>

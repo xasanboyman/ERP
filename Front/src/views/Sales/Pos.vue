@@ -252,7 +252,7 @@
     <!-- Branch Management & Selection Modal -->
     <ResizeDialog
       v-model="branchModalVisible"
-      title="🏢 Do'kon Filiallarini Boshqarish va Tahrirlash"
+      title="Do'kon Filiallarini Boshqarish va Tahrirlash"
       :init-width="dialogInitWidth"
       :init-height="dialogInitHeight"
       :min-resize-width="500"
@@ -347,7 +347,7 @@
     <!-- Built-in Employee Authentication & Switcher Modal -->
     <ResizeDialog
       v-model="authModalVisible"
-      title="🪪 Xodimlarni Autentifikatsiya Qilish va Almashtirish"
+      title="Xodimlarni Autentifikatsiya Qilish va Almashtirish"
       :init-width="dialogInitWidth"
       :init-height="dialogInitHeight"
       :min-resize-width="500"
@@ -425,11 +425,12 @@
             <ElButton
               type="primary"
               size="large"
-              class="w-full font-bold auth-btn"
+              class="w-full font-bold auth-btn inline-flex items-center justify-center"
               :loading="authenticating"
               @click="handleAuthSubmit"
             >
-              🔒 TIZIMGA KIRISH (LOGIN)
+              <Icon icon="ep:lock" class="mr-6px" />
+              <span>TIZIMGA KIRISH (LOGIN)</span>
             </ElButton>
           </ElForm>
         </div>
@@ -778,6 +779,7 @@
                       ]"
                       @click="setPaymentMethod(pm.key as any)"
                     >
+                      <Icon :icon="pm.icon" class="text-14px mr-4px" />
                       <span class="text-12px font-bold">{{ pm.label }}</span>
                     </div>
                   </div>
@@ -1158,9 +1160,9 @@ const categories = [
 ]
 
 const paymentMethods = computed(() => [
-  { key: 'naqd', label: `💵 ${t('erp.cash')}` },
-  { key: 'karta', label: `💳 ${t('erp.card')}` },
-  { key: 'nasiya', label: `📑 ${t('erp.debt')}` }
+  { key: 'naqd', label: t('erp.cash'), icon: 'ep:money' },
+  { key: 'karta', label: t('erp.card'), icon: 'ep:credit-card' },
+  { key: 'nasiya', label: t('erp.debt'), icon: 'ep:document' }
 ])
 
 const getPaymentLabel = (method?: string) => {
@@ -1306,12 +1308,12 @@ const showStockWarningModal = (
   const maxAllowedPackages =
     conversionFactor > 0 ? Math.floor(maxStock / conversionFactor) : Math.floor(maxStock)
   const unitInfo = unitName
-    ? `\n📦 Qadoq turi: ${unitName} (Koeffitsient: ${conversionFactor} ${baseUnit})`
+    ? `\n• Qadoq turi: ${unitName} (Koeffitsient: ${conversionFactor} ${baseUnit})`
     : ''
 
   ElMessageBox.alert(
-    `Omborda yetarli mahsulot mavjud emas!\n\n📦 Mahsulot: ${productName}${unitInfo}\n📊 Ombordagi mavjud ombor: ${maxStock} ${baseUnit}\n❌ Siz kiritgan talab: ${reqBaseQty} ${baseUnit} (${requestedQty} dona x ${conversionFactor} ${baseUnit})\n\nMiqdor avtomatik ravishda maksimal ${maxAllowedPackages} donaga (${maxAllowedPackages * conversionFactor} ${baseUnit}) o'zgartirildi.`,
-    '⚠️ OMBOR OGOHLANTIRISHI',
+    `Omborda yetarli mahsulot mavjud emas!\n\n• Mahsulot: ${productName}${unitInfo}\n• Ombordagi mavjud ombor: ${maxStock} ${baseUnit}\n• Siz kiritgan talab: ${reqBaseQty} ${baseUnit} (${requestedQty} dona x ${conversionFactor} ${baseUnit})\n\nMiqdor avtomatik ravishda maksimal ${maxAllowedPackages} donaga (${maxAllowedPackages * conversionFactor} ${baseUnit}) o'zgartirildi.`,
+    'OMBOR OGOHLANTIRISHI',
     {
       confirmButtonText: 'Tushundim',
       type: 'warning',

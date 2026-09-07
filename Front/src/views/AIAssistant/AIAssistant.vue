@@ -107,7 +107,7 @@
         <!-- Chat / Transcript Logs -->
         <div class="panel-body" ref="logsContainer">
           <div class="welcome-card" v-if="messages.length === 0">
-            <div class="welcome-icon">✨</div>
+            <div class="welcome-icon"><Icon icon="ep:magic-stick" style="font-size: 32px" /></div>
             <h3>Qanday yordam bera olaman?</h3>
             <p>
               ERP tizimi, mahsulotlar, qarzlar, kassa va xodimlarni boshqarish bo'yicha tezkor savol
@@ -119,10 +119,11 @@
               <button
                 v-for="chip in quickChips"
                 :key="chip.label"
-                class="chip-btn"
+                class="chip-btn inline-flex items-center gap-4px"
                 @click="sendQuickChip(chip.prompt)"
               >
-                {{ chip.label }}
+                <Icon :icon="chip.icon" />
+                <span>{{ chip.label }}</span>
               </button>
             </div>
           </div>
@@ -138,7 +139,10 @@
               <div v-if="msg.role === 'api'" class="api-log-card">
                 <div class="api-log-header">
                   <span class="api-pulse-dot"></span>
-                  <span class="api-tag-title">⚡ HTTP API REQUEST</span>
+                  <span class="api-tag-title"
+                    ><Icon icon="ep:lightning" class="mr-4px text-amber-400" />HTTP API
+                    REQUEST</span
+                  >
                 </div>
                 <div v-if="msg.requests && msg.requests.length" class="api-url-box">
                   <div v-for="(req, rIdx) in msg.requests" :key="rIdx" class="api-url-row">
@@ -179,14 +183,20 @@
               <span class="tone-badge">{{ activeToneLabel }}</span>
             </div>
             <div class="pitch-indicator">
-              <span class="pitch-tag" :class="{ 'is-high': currentFreqData.high > 25 }">
-                {{
+              <span
+                class="pitch-tag inline-flex items-center gap-4px"
+                :class="{ 'is-high': currentFreqData.high > 25 }"
+              >
+                <Icon v-if="currentFreqData.high > 25" icon="ep:lightning" />
+                <Icon v-else-if="currentFreqData.bass > 30" icon="ep:bell" />
+                <Icon v-else icon="ep:microphone" />
+                <span>{{
                   currentFreqData.high > 25
-                    ? '⚡ Yuqori Pitch'
+                    ? 'Yuqori Pitch'
                     : currentFreqData.bass > 30
-                      ? '🔊 Bas'
-                      : '🎙️ Normal'
-                }}
+                      ? 'Bas'
+                      : 'Normal'
+                }}</span>
               </span>
               <span class="db-meter">{{ Math.round(currentFreqData.level) }} dB</span>
             </div>
@@ -269,6 +279,7 @@ import { getProductListApi } from '@/api/product'
 import { getWorkerListApi } from '@/api/worker'
 import request from '@/axios'
 import { ElButton, ElInput } from 'element-plus'
+import { Icon } from '@/components/Icon'
 
 const isOpen = ref(false)
 const clientStatus = ref<'disconnected' | 'connecting' | 'connected'>('disconnected')
@@ -310,13 +321,22 @@ const activeToneLabel = computed(() => {
 
 const quickChips = [
   {
-    label: '🏆 Eng ko‘p sotilganlar',
-    prompt: 'Qaysi mahsulotlar eng ko‘p sotildi va eng ko‘p tushum keltirdi?'
+    icon: 'ep:trophy',
+    label: "Eng ko'p sotilganlar",
+    prompt: "Qaysi mahsulotlar eng ko'p sotildi va eng ko'p tushum keltirdi?"
   },
-  { label: '📊 Bugungi tushum', prompt: 'Bugungi tushum va savdolar qanday?' },
-  { label: '👥 Nasiyalar (Qarzlar)', prompt: 'Qarzdorlar ro‘yxati va jami qarz qancha?' },
-  { label: '📦 Ombor qoldiqlari', prompt: 'Ombordagi mahsulotlar qoldiqlari' },
-  { label: '👔 Xodimlar ro‘yxati', prompt: 'Xodimlar ro‘yxatini ko‘rsat' }
+  {
+    icon: 'ep:data-analysis',
+    label: 'Bugungi tushum',
+    prompt: 'Bugungi tushum va savdolar qanday?'
+  },
+  {
+    icon: 'ep:user',
+    label: 'Nasiyalar (Qarzlar)',
+    prompt: "Qarzdorlar ro'yxati va jami qarz qancha?"
+  },
+  { icon: 'ep:box', label: 'Ombor qoldiqlari', prompt: 'Ombordagi mahsulotlar qoldiqlari' },
+  { icon: 'ep:avatar', label: "Xodimlar ro'yxati", prompt: "Xodimlar ro'yxatini ko'rsat" }
 ]
 
 const client = new AIVoiceClient()
@@ -413,10 +433,9 @@ const handleTextSubmit = async () => {
         const topRes: any = await request.get({ url: '/sales/top-selling' })
         const topList = topRes?.data || []
         if (topList.length > 0) {
-          let text = `🏆 Eng Ko'p Sotilgan Mahsulotlar Reytingi (Top Tovarlar):\n\n`
+          let text = `Eng Ko'p Sotilgan Mahsulotlar Reytingi (Top Tovarlar):\n\n`
           topList.forEach((item: any, idx: number) => {
-            const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹'
-            text += `${medal} ${item.name}\n   Sotildi: ${item.quantity} dona | Jami tushum: $${Number(item.revenue || 0).toLocaleString()} (${item.orders_count} ta chekda)\n\n`
+            text += `#${idx + 1}. ${item.name}\n   Sotildi: ${item.quantity} dona | Jami tushum: $${Number(item.revenue || 0).toLocaleString()} (${item.orders_count} ta chekda)\n\n`
           })
           messages.value.push({ role: 'model', text: text.trim() })
         } else {
@@ -448,7 +467,7 @@ const handleTextSubmit = async () => {
           const list = debtRes.data.list || []
           const totalDebt = debtRes.data.total_debt || 0
           const activeCount = debtRes.data.active_debtors_count || 0
-          let text = `📌 Nasiyalar Hisoboti:\n• Jami faol qarz: $${totalDebt.toLocaleString()}\n• Faol qarzdorlar soni: ${activeCount} ta\n`
+          let text = `Nasiyalar Hisoboti:\n• Jami faol qarz: $${totalDebt.toLocaleString()}\n• Faol qarzdorlar soni: ${activeCount} ta\n`
           if (list.length > 0) {
             text += '\nAsosiy qarzdorlar:\n'
             list.slice(0, 5).forEach((d: any) => {
@@ -492,7 +511,7 @@ const handleTextSubmit = async () => {
             (sum: number, s: any) => sum + Number(s.total_items || 1),
             0
           )
-          const text = `📊 Savdo va Kassa Ma'lumotlari:\n• Jami qayd etilgan sotuvlar: ${list.length} ta chek\n• Sotilgan tovarlar soni: ${totalItems} dona\n• Umumiy tushum aylanmasi: $${totalRevenue.toLocaleString()}`
+          const text = `Savdo va Kassa Ma'lumotlari:\n• Jami qayd etilgan sotuvlar: ${list.length} ta chek\n• Sotilgan tovarlar soni: ${totalItems} dona\n• Umumiy tushum aylanmasi: $${totalRevenue.toLocaleString()}`
           messages.value.push({ role: 'model', text })
         }
       } catch {
@@ -517,7 +536,7 @@ const handleTextSubmit = async () => {
         const prodRes: any = await getProductListApi({ pageIndex: 1, pageSize: 20 })
         if (prodRes?.data) {
           const list = (prodRes.data as any).list || prodRes.data || []
-          let text = `📦 Ombordagi Mahsulotlar (Jami: ${list.length} ta ko'rsatilmoqda):\n`
+          let text = `Ombordagi Mahsulotlar (Jami: ${list.length} ta ko'rsatilmoqda):\n`
           list.slice(0, 8).forEach((p: any) => {
             text += `• ${p.productName || p.name}: ${p.quantityInStock || 0} ${p.unit || 'dona'} ($${p.price || 0})\n`
           })
@@ -540,7 +559,7 @@ const handleTextSubmit = async () => {
         const workerRes: any = await getWorkerListApi({ pageIndex: 1, pageSize: 50 })
         if (workerRes?.data) {
           const list = workerRes.data.list || workerRes.data || []
-          let text = `👔 Xodimlar Ro'yxati (Jami: ${list.length} nafar):\n`
+          let text = `Xodimlar Ro'yxati (Jami: ${list.length} nafar):\n`
           list.slice(0, 8).forEach((w: any) => {
             text += `• ${w.name || w.first_name + ' ' + w.last_name} — ${w.role || w.position || 'Xodim'}\n`
           })

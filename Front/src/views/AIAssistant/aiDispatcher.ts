@@ -163,7 +163,7 @@ const handleProductCreationOrUpdate = async (params: any, isAddStock = false) =>
 
     let pricePrompt = ''
     if (!finalPrice || finalPrice === 0) {
-      pricePrompt = `\n\n⚠️ DIQQAT: Mahsulot sotuv narxi ($0) yoki tannarxi ($0) ko'rsatilmadi! Iltimos, sotuv narxi, tannarxi va yaroqlilik muddatini (YYYY-MM-DD) kiriting!`
+      pricePrompt = `\n\nDIQQAT: Mahsulot sotuv narxi ($0) yoki tannarxi ($0) ko'rsatilmadi! Iltimos, sotuv narxi, tannarxi va yaroqlilik muddatini (YYYY-MM-DD) kiriting!`
     }
 
     return {
@@ -275,7 +275,7 @@ const handleProductCreationOrUpdate = async (params: any, isAddStock = false) =>
 
   let priceNotice = ''
   if (!finalPrice || finalPrice === 0) {
-    priceNotice = `\n\n⚠️ Sotuv narxi va tannarx kiritilmadi ($0). Iltimos, sotuv narxi, tannarxi va yaroqlilik muddatini (YYYY-MM-DD) ayting!`
+    priceNotice = `\n\nSotuv narxi va tannarx kiritilmadi ($0). Iltimos, sotuv narxi, tannarxi va yaroqlilik muddatini (YYYY-MM-DD) ayting!`
   }
 
   return {
@@ -1119,7 +1119,7 @@ async function _dispatchAIFunctionInternal(action: string, params: any): Promise
           .join('\n')
         return {
           code: 0,
-          message: `🏆 Eng ko'p sotilgan tovarlar:\n${summary || "Hozircha sotuvlar ma'lumoti yo'q."}`,
+          message: `Eng ko'p sotilgan tovarlar:\n${summary || "Hozircha sotuvlar ma'lumoti yo'q."}`,
           data: list,
           requests: ['GET /sales/top-selling']
         }
@@ -1130,7 +1130,7 @@ async function _dispatchAIFunctionInternal(action: string, params: any): Promise
         const data = res.data || {}
         return {
           code: 0,
-          message: `📊 Savdo tahlili: Jami ${data.total_sales || 0} ta sotuv, $${Number(data.total_revenue || 0).toLocaleString()} umumiy aylanma.`,
+          message: `Savdo tahlili: Jami ${data.total_sales || 0} ta sotuv, $${Number(data.total_revenue || 0).toLocaleString()} umumiy aylanma.`,
           data: data,
           requests: ['GET /sales/analytics']
         }
@@ -1141,7 +1141,7 @@ async function _dispatchAIFunctionInternal(action: string, params: any): Promise
         const d = res.data || {}
         return {
           code: 0,
-          message: `📌 Nasiyalar: Jami qarz $${Number(d.total_debt || 0).toLocaleString()}, faol qarzdorlar: ${d.active_debtors_count || 0} ta.`,
+          message: `Nasiyalar: Jami qarz $${Number(d.total_debt || 0).toLocaleString()}, faol qarzdorlar: ${d.active_debtors_count || 0} ta.`,
           data: d,
           requests: ['GET /sales/debtors']
         }

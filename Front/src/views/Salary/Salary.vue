@@ -35,8 +35,18 @@
               clearable
               style="width: 150px"
             >
-              <el-option :label="'✓ ' + t('erp.paid')" value="paid" />
-              <el-option :label="'⏳ ' + t('erp.pending')" value="unpaid" />
+              <el-option :label="t('erp.paid')" value="paid">
+                <span class="flex items-center gap-6px">
+                  <Icon icon="ep:circle-check" class="text-emerald-500" />
+                  <span>{{ t('erp.paid') }}</span>
+                </span>
+              </el-option>
+              <el-option :label="t('erp.pending')" value="unpaid">
+                <span class="flex items-center gap-6px">
+                  <Icon icon="ep:timer" class="text-amber-500" />
+                  <span>{{ t('erp.pending') }}</span>
+                </span>
+              </el-option>
             </el-select>
           </el-form-item>
           <el-form-item class="!mr-0">
@@ -116,9 +126,11 @@
                 >${{ formatMoney(scope.row.prevMonthPaid.netSalary) }}</div
               >
               <div
-                class="text-emerald-600 dark:text-emerald-400 text-[11px] font-medium leading-tight mt-1px"
-                >✓ {{ t('erp.paid') }}</div
+                class="text-emerald-600 dark:text-emerald-400 text-[11px] font-medium leading-tight mt-1px inline-flex items-center gap-3px"
               >
+                <Icon icon="ep:check" class="text-11px" />
+                <span>{{ t('erp.paid') }}</span>
+              </div>
             </div>
             <span v-else class="text-gray-400">—</span>
           </template>
@@ -189,9 +201,11 @@
                 >${{ formatMoney(scope.row.nextMonthPaid.netSalary) }}</div
               >
               <div
-                class="text-emerald-600 dark:text-emerald-400 font-medium text-[11px] leading-tight mt-1px"
-                >✓ {{ t('erp.inAdvance') }}</div
+                class="text-emerald-600 dark:text-emerald-400 font-medium text-[11px] leading-tight mt-1px inline-flex items-center gap-3px"
               >
+                <Icon icon="ep:check" class="text-11px" />
+                <span>{{ t('erp.inAdvance') }}</span>
+              </div>
             </div>
             <span v-else class="text-gray-400 font-normal whitespace-nowrap text-[12px]">{{
               t('erp.kutilmoqda')
@@ -565,9 +579,11 @@
                     v-if="scope.row.isAlreadyPaidForMonth"
                     type="success"
                     effect="dark"
-                    class="font-bold text-12px"
-                    >✓ {{ t('erp.paid') }}</el-tag
+                    class="font-bold text-12px inline-flex items-center gap-4px"
                   >
+                    <Icon icon="ep:check" class="text-12px" />
+                    <span>{{ t('erp.paid') }}</span>
+                  </el-tag>
                   <el-tag v-else type="warning" effect="plain" class="font-bold text-12px">
                     To'lanmagan
                   </el-tag>
