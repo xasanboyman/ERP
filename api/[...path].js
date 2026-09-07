@@ -278,6 +278,13 @@ async function ensureSchema(sql) {
       ON CONFLICT (id) DO NOTHING;
     `;
 
+    // Seed default admin user if empty
+    await sql`
+      INSERT INTO users (id, username, full_name, role, "roleId", permissions, "createTime")
+      VALUES (1, 'admin', 'Administrator', 'Super Administrator', '1', '["*.*.*"]'::jsonb, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
     schemaInitialized = true;
   } catch (err) {
     console.warn('ensureSchema warning:', err);
@@ -676,30 +683,47 @@ export default async function handler(req, res) {
       let user = userRows[0];
 
       if (!user) {
-        const workerRows = await sql`
-          SELECT * FROM workers WHERE account = ${username} OR employee_code = ${username} OR name = ${username} LIMIT 1
-        `;
-        const worker = workerRows[0];
-        if (worker) {
-          user = {
-            id: worker.id,
-            username: worker.account || `worker_${worker.id}`,
-            full_name: worker.name,
-            role: worker.role || 'Oddiy xodim',
-            roleId: '3',
-            avatar: worker.avatar || '',
-            permissions: []
-          };
+        try {
+          const workerRows = await sql`
+            SELECT * FROM workers WHERE username = ${username} OR worker_id = ${username} OR name = ${username} LIMIT 1
+          `;
+          const worker = workerRows[0];
+          if (worker) {
+            user = {
+              id: worker.id,
+              username: worker.username || worker.worker_id || `worker_${worker.id}`,
+              full_name: worker.name,
+              role: worker.role || 'Oddiy xodim',
+              roleId: '3',
+              avatar: worker.avatar || '',
+              permissions: []
+            };
+          }
+        } catch (wErr) {
+          console.warn('Worker lookup error:', wErr.message);
         }
       }
 
       if (!user) {
         if (username === 'admin') {
-          const ins = await sql`
-            INSERT INTO users (username, full_name, role, "roleId", permissions) 
-            VALUES ('admin', 'Administrator', 'Super Administrator', '1', ${JSON.stringify(['*.*.*'])}) RETURNING *
-          `;
-          user = ins[0];
+          try {
+            const ins = await sql`
+              INSERT INTO users (id, username, full_name, role, "roleId", permissions) 
+              VALUES (1, 'admin', 'Administrator', 'Super Administrator', '1', '["*.*.*"]'::jsonb) 
+              ON CONFLICT (id) DO UPDATE SET role = 'Super Administrator'
+              RETURNING *
+            `;
+            user = ins[0];
+          } catch (insErr) {
+            user = {
+              id: 1,
+              username: 'admin',
+              full_name: 'Administrator',
+              role: 'Super Administrator',
+              roleId: '1',
+              permissions: ['*.*.*']
+            };
+          }
         } else {
           return res.status(200).json({ code: 500, message: "Xodim topilmadi yoki parol noto'g'ri" });
         }
