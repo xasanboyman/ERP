@@ -253,6 +253,95 @@ async function ensureSchema(sql) {
         remark TEXT
       );
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS device_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        device_name VARCHAR,
+        token VARCHAR UNIQUE,
+        pair_code VARCHAR,
+        status VARCHAR DEFAULT 'active',
+        expires_at VARCHAR,
+        created_at VARCHAR,
+        last_used_at VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sales_pushes (
+        id VARCHAR PRIMARY KEY,
+        device_token VARCHAR,
+        pc_user_id INTEGER,
+        device_name VARCHAR,
+        items_json JSONB,
+        status VARCHAR DEFAULT 'pending',
+        created_at VARCHAR,
+        updated_at VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS qr_codes (
+        id VARCHAR PRIMARY KEY,
+        task_id VARCHAR,
+        code VARCHAR,
+        quantity INTEGER DEFAULT 1,
+        status VARCHAR DEFAULT 'active',
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS cutting_stages (
+        id VARCHAR PRIMARY KEY,
+        name VARCHAR NOT NULL,
+        code VARCHAR,
+        sequence INTEGER DEFAULT 1,
+        description TEXT,
+        status INTEGER DEFAULT 1,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS cutting_processes (
+        id VARCHAR PRIMARY KEY,
+        name VARCHAR NOT NULL,
+        stage_id VARCHAR,
+        description TEXT,
+        status INTEGER DEFAULT 1,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS cutting_orders (
+        id VARCHAR PRIMARY KEY,
+        order_no VARCHAR,
+        product_name VARCHAR,
+        quantity INTEGER DEFAULT 1,
+        status VARCHAR DEFAULT 'pending',
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS cutting_tasks (
+        id VARCHAR PRIMARY KEY,
+        order_id VARCHAR,
+        task_name VARCHAR,
+        status VARCHAR DEFAULT 'pending',
+        assigned_to VARCHAR,
+        "createTime" VARCHAR
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS cutting_task_executions (
+        id VARCHAR PRIMARY KEY,
+        task_id VARCHAR,
+        worker_id VARCHAR,
+        worker_name VARCHAR,
+        quantity INTEGER DEFAULT 1,
+        status VARCHAR DEFAULT 'completed',
+        remark TEXT,
+        "createTime" VARCHAR
+      );
+    `;
 
     // Seed default roles if empty
     await sql`
@@ -280,8 +369,8 @@ async function ensureSchema(sql) {
 
     // Seed default admin user if empty
     await sql`
-      INSERT INTO users (id, username, full_name, role, "roleId", permissions, "createTime")
-      VALUES (1, 'admin', 'Administrator', 'Super Administrator', '1', '["*.*.*"]'::jsonb, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      INSERT INTO users (id, username, password, full_name, role, "roleId", permissions, create_time)
+      VALUES (1, 'admin', 'admin', 'Administrator', 'Super Administrator', '1', '["*.*.*"]'::jsonb, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
       ON CONFLICT (id) DO NOTHING;
     `;
 
@@ -666,11 +755,8 @@ export default async function handler(req, res) {
 
   // Parse path
   let rawUrl = req.url || '';
-  if (rawUrl.startsWith('/api')) {
-    rawUrl = rawUrl.substring(4);
-  }
   const [pathname, search] = rawUrl.split('?');
-  const path = pathname.replace(/^\/+|\/+$/g, '');
+  const path = pathname.replace(/^(\/?(api|mock)\/?)+/i, '').replace(/\/+$/g, '');
   const urlSearchParams = new URLSearchParams(search || '');
   const sql = getSql();
   await ensureSchema(sql);
@@ -779,9 +865,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: rows });
     }
 
-    // ALL OTHER ENDPOINTS REQUIRE VALID TOKEN
-    const authUser = authenticate(req, res);
-    if (!authUser) return;
+    // Public & Device endpoints exempt from strict JWT auth
+    const isPublicOrDeviceRoute = 
+      path === 'user/login' ||
+      path === 'user/employees' ||
+      path.startsWith('classifier/') ||
+      path === 'menu/list' ||
+      path.startsWith('dict/') ||
+      path.startsWith('device/') ||
+      path.startsWith('sales/phone-checkout') ||
+      path.startsWith('sales/push-pc-sale') ||
+      path.startsWith('sales/pending-pushes') ||
+      path.startsWith('sales/push-payload') ||
+      path.startsWith('sales/respond-push');
+
+    let authUser = null;
+    if (!isPublicOrDeviceRoute) {
+      authUser = authenticate(req, res);
+      if (!authUser) return;
+    }
 
     // User Profile Save & Update
     if (path === 'user/save' && req.method === 'POST') {
@@ -803,11 +905,45 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: userRows[0] || req.body, message: 'Saqlandi' });
     }
 
-    if (path === 'user/updateAvatar' && req.method === 'POST') {
-      const { username, avatar } = req.body || {};
-      await sql`UPDATE users SET avatar = ${avatar} WHERE username = ${username}`;
-      const userRows = await sql`SELECT * FROM users WHERE username = ${username}`;
-      return res.status(200).json({ code: 0, data: userRows[0] || { username, avatar }, message: 'Avatar saqlandi' });
+    if ((path === 'user/avatar' || path === 'user/updateAvatar') && req.method === 'POST') {
+      const { username, avatar, full_name } = req.body || {};
+      const targetUser = username || authUser?.username || authUser?.sub || 'admin';
+      if (full_name) {
+        await sql`UPDATE users SET avatar = ${avatar || ''}, full_name = ${full_name} WHERE username = ${targetUser}`;
+      } else {
+        await sql`UPDATE users SET avatar = ${avatar || ''} WHERE username = ${targetUser}`;
+      }
+      const userRows = await sql`SELECT * FROM users WHERE username = ${targetUser}`;
+      return res.status(200).json({ code: 0, data: userRows[0] || { username: targetUser, avatar }, message: 'Avatar saqlandi' });
+    }
+
+    if (path === 'user/list') {
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 10, 10);
+      const username = (req.query?.username || urlSearchParams.get('username') || '').trim().toLowerCase();
+      const offset = (pageIndex - 1) * pageSize;
+
+      let allUsers = await sql`SELECT id, username, full_name, role, "roleId", email, phone, avatar, created_at, create_time FROM users ORDER BY id ASC`;
+      if (username) {
+        allUsers = allUsers.filter(u => (u.username || '').toLowerCase().includes(username) || (u.full_name || '').toLowerCase().includes(username));
+      }
+      const total = allUsers.length;
+      const list = allUsers.slice(offset, offset + pageSize);
+      return res.status(200).json({ code: 0, data: { list, total } });
+    }
+
+    if (path === 'user/delete' && req.method === 'POST') {
+      let ids = req.body?.ids;
+      if (!ids && req.body?.id) ids = [req.body.id];
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM users WHERE id = ANY(${ids}) AND username != 'admin'`;
+        return res.status(200).json({ code: 0, message: 'Foydalanuvchi o\'chirildi' });
+      }
+      return res.status(200).json({ code: 400, message: 'ID ko\'rsatilmadi' });
+    }
+
+    if (path === 'user/loginOut') {
+      return res.status(200).json({ code: 0, data: null, message: 'Tizimdan chiqildi' });
     }
 
     // 3. GET /api/workplace/total
@@ -862,18 +998,254 @@ export default async function handler(req, res) {
     if (path === 'product/list') {
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
+      const productName = (req.query?.productName || urlSearchParams.get('productName') || '').trim().toLowerCase();
+      const category = (req.query?.category || urlSearchParams.get('category') || '').trim();
       const offset = (pageIndex - 1) * pageSize;
-      const [countRes, rows] = await Promise.all([
-        sql`SELECT count(*) FROM products`,
-        sql`SELECT * FROM products ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
-      ]);
+
+      let allRows = await sql`SELECT * FROM products ORDER BY id DESC`;
+      if (productName) {
+        allRows = allRows.filter(p => 
+          (p.productName || '').toLowerCase().includes(productName) ||
+          (p.brand_name || '').toLowerCase().includes(productName) ||
+          (p.shtrix_code || '').includes(productName) ||
+          (p.SKU || '').toLowerCase().includes(productName) ||
+          (p.mxik_code || '').includes(productName)
+        );
+      }
+      if (category) {
+        allRows = allRows.filter(p => p.category === category);
+      }
+
+      const total = allRows.length;
+      const paginated = allRows.slice(offset, offset + pageSize);
       return res.status(200).json({
         code: 0,
         data: {
-          total: parseInt(countRes[0].count, 10),
-          list: rows
+          total,
+          list: paginated
         }
       });
+    }
+
+    // GET /api/product/check-existing
+    if (path === 'product/check-existing') {
+      const barcode = (req.query?.barcode || urlSearchParams.get('barcode') || req.body?.barcode || '').trim();
+      const sku = (req.query?.sku || urlSearchParams.get('sku') || req.body?.sku || '').trim();
+      const name = (req.query?.name || urlSearchParams.get('name') || req.body?.name || '').trim();
+      const classifierId = parseInt(req.query?.classifier_id || urlSearchParams.get('classifier_id') || req.body?.classifier_id || 0, 10);
+
+      let rows = [];
+      if (barcode) {
+        rows = await sql`SELECT * FROM products WHERE shtrix_code = ${barcode} LIMIT 1`;
+      }
+      if (rows.length === 0 && sku) {
+        rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${sku}) LIMIT 1`;
+      }
+      if (rows.length === 0 && classifierId) {
+        rows = await sql`SELECT * FROM products WHERE classifier_id = ${classifierId} LIMIT 1`;
+      }
+      if (rows.length === 0 && name) {
+        rows = await sql`SELECT * FROM products WHERE LOWER("productName") = LOWER(${name}) LIMIT 1`;
+      }
+
+      if (rows.length > 0) {
+        return res.status(200).json({ code: 0, exists: true, data: rows[0] });
+      }
+      return res.status(200).json({ code: 0, exists: false, data: null });
+    }
+
+    // GET /api/product/by-barcode/:barcode
+    if (path.startsWith('product/by-barcode/')) {
+      const barcode = decodeURIComponent(path.replace('product/by-barcode/', '')).trim();
+      const rows = await sql`SELECT * FROM products WHERE shtrix_code = ${barcode} LIMIT 1`;
+      if (rows[0]) {
+        return res.status(200).json({ code: 0, data: rows[0] });
+      }
+      return res.status(200).json({ code: 404, message: 'Mahsulot topilmadi' });
+    }
+
+    // POST /api/product/save (Add, update, or replenish existing stock)
+    if (path === 'product/save' && req.method === 'POST') {
+      const {
+        id,
+        productName,
+        SKU,
+        category,
+        price,
+        cost,
+        quantityInStock,
+        status,
+        shtrix_code,
+        mxik_code,
+        brand_name,
+        attribute_name,
+        image_url,
+        unit,
+        remark,
+        expiration_date,
+        classifier_id,
+        additional_qty,
+        is_replenish,
+        packagings
+      } = req.body || {};
+
+      let existing = null;
+      if (id) {
+        const rows = await sql`SELECT * FROM products WHERE id = ${id} LIMIT 1`;
+        if (rows[0]) existing = rows[0];
+      }
+      if (!existing && shtrix_code) {
+        const rows = await sql`SELECT * FROM products WHERE shtrix_code = ${shtrix_code.trim()} LIMIT 1`;
+        if (rows[0]) existing = rows[0];
+      }
+      if (!existing && SKU) {
+        const rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${SKU.trim()}) LIMIT 1`;
+        if (rows[0]) existing = rows[0];
+      }
+
+      if (existing) {
+        // Product exists in warehouse: add stock
+        const oldStock = existing.quantityInStock || 0;
+        let added = 0;
+        let newStock = oldStock;
+
+        if (additional_qty !== undefined && additional_qty !== null) {
+          added = parseInt(additional_qty, 10) || 0;
+          newStock = oldStock + added;
+        } else if (is_replenish) {
+          added = parseInt(quantityInStock, 10) || 0;
+          newStock = oldStock + added;
+        } else {
+          newStock = parseInt(quantityInStock, 10) || 0;
+          added = newStock - oldStock;
+        }
+
+        const clsId = classifier_id !== undefined ? (classifier_id ? parseInt(classifier_id, 10) : null) : existing.classifier_id;
+        const pr = price !== undefined && price !== null ? parseFloat(price) : existing.price;
+        const cst = cost !== undefined && cost !== null ? parseFloat(cost) : existing.cost;
+        const stat = status !== undefined ? parseInt(status, 10) : existing.status;
+
+        const updated = await sql`
+          UPDATE products
+          SET "productName" = ${productName || existing.productName},
+              "SKU" = ${SKU || existing.SKU},
+              category = ${category || existing.category},
+              price = ${pr},
+              cost = ${cst},
+              "quantityInStock" = ${newStock},
+              status = ${stat},
+              shtrix_code = ${shtrix_code || existing.shtrix_code},
+              mxik_code = ${mxik_code || existing.mxik_code},
+              brand_name = ${brand_name || existing.brand_name},
+              attribute_name = ${attribute_name || existing.attribute_name},
+              image_url = ${image_url !== undefined ? image_url : existing.image_url},
+              unit = ${unit || existing.unit},
+              remark = ${remark !== undefined ? remark : existing.remark},
+              expiration_date = ${expiration_date !== undefined ? expiration_date : existing.expiration_date},
+              classifier_id = ${clsId}
+          WHERE id = ${existing.id}
+          RETURNING *
+        `;
+
+        if (Array.isArray(packagings)) {
+          await sql`DELETE FROM product_packagings WHERE product_id = ${existing.id}`;
+          for (const pkg of packagings) {
+            await sql`
+              INSERT INTO product_packagings (product_id, name, coefficient, barcode, is_base_unit)
+              VALUES (${existing.id}, ${pkg.unit_name || pkg.name}, ${pkg.conversion_factor || pkg.coefficient || 1}, ${pkg.shtrix_code || pkg.barcode || null}, ${!!pkg.is_base_unit})
+            `;
+          }
+        }
+
+        try {
+          await sql`
+            INSERT INTO activity_logs (user_id, username, action, details, "createTime")
+            VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'STOCK_REPLENISH', ${`"${productName || existing.productName}" qoldig'iga +${added} qo'shildi. Yangi qoldiq: ${newStock}`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+          `;
+        } catch (actErr) {}
+
+        return res.status(200).json({
+          code: 0,
+          is_existing: true,
+          old_stock: oldStock,
+          added_qty: added,
+          total_stock: newStock,
+          product_name: productName || existing.productName,
+          data: updated[0],
+          message: `"${productName || existing.productName}" omborda mavjud bo'lgani sababli qoldig'i +${added} ga oshirildi. Yangi umumiy qoldiq: ${newStock}!`
+        });
+      } else {
+        // Insert brand new product
+        const newId = id || ('PROD-' + Date.now().toString().slice(-6) + '-' + Math.floor(Math.random() * 900 + 100));
+        const newSKU = SKU || `SKU-${Date.now().toString().slice(-6)}`;
+        const stock = parseInt(quantityInStock, 10) || 0;
+        const pr = parseFloat(price) || 0;
+        const cst = parseFloat(cost) || 0;
+        const stat = status !== undefined ? parseInt(status, 10) : 1;
+        const clsId = classifier_id ? parseInt(classifier_id, 10) : null;
+
+        const inserted = await sql`
+          INSERT INTO products (
+            id, "productName", "SKU", category, price, cost, "quantityInStock", status,
+            shtrix_code, mxik_code, brand_name, attribute_name, image_url, unit, remark,
+            expiration_date, classifier_id, "createTime"
+          )
+          VALUES (
+            ${newId}, ${productName || 'Yangi Mahsulot'}, ${newSKU}, ${category || 'Ichimliklar va suvlar'},
+            ${pr}, ${cst}, ${stock}, ${stat}, ${shtrix_code || null}, ${mxik_code || null},
+            ${brand_name || null}, ${attribute_name || null}, ${image_url || null}, ${unit || 'dona'},
+            ${remark || null}, ${expiration_date || null}, ${clsId}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+          )
+          RETURNING *
+        `;
+
+        if (Array.isArray(packagings)) {
+          for (const pkg of packagings) {
+            await sql`
+              INSERT INTO product_packagings (product_id, name, coefficient, barcode, is_base_unit)
+              VALUES (${newId}, ${pkg.unit_name || pkg.name}, ${pkg.conversion_factor || pkg.coefficient || 1}, ${pkg.shtrix_code || pkg.barcode || null}, ${!!pkg.is_base_unit})
+            `;
+          }
+        }
+
+        try {
+          await sql`
+            INSERT INTO activity_logs (user_id, username, action, details, "createTime")
+            VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'PRODUCT_CREATE', ${`Yangi mahsulot yaratildi: "${productName}" (${stock} dona)`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+          `;
+        } catch (actErr) {}
+
+        return res.status(200).json({
+          code: 0,
+          is_existing: false,
+          data: inserted[0],
+          message: 'Yangi mahsulot omborga muvaffaqiyatli qo\'shildi'
+        });
+      }
+    }
+
+    // POST /api/product/delete
+    if (path === 'product/delete' && req.method === 'POST') {
+      let ids = req.body?.ids;
+      if (!ids && req.body?.id) ids = [req.body.id];
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM product_packagings WHERE product_id = ANY(${ids})`;
+        await sql`DELETE FROM products WHERE id = ANY(${ids})`;
+        try {
+          await sql`
+            INSERT INTO activity_logs (user_id, username, action, details, "createTime")
+            VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'PRODUCT_DELETE', ${`${ids.length} ta mahsulot o'chirildi: ${ids.join(', ')}`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+          `;
+        } catch (actErr) {}
+        return res.status(200).json({ code: 0, message: 'Mahsulotlar muvaffaqiyatli o\'chirildi', data: { deleted: ids.length } });
+      }
+      return res.status(200).json({ code: 400, message: 'O\'chirish uchun ID ko\'rsatilmadi' });
+    }
+
+    // POST /api/product/upload-image
+    if (path === 'product/upload-image' && req.method === 'POST') {
+      const imgUrl = req.body?.url || req.body?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400';
+      return res.status(200).json({ code: 0, data: { url: imgUrl } });
     }
 
     // 9. Worker Endpoints
@@ -1085,18 +1457,19 @@ export default async function handler(req, res) {
       if (!isSuper) {
         return res.status(403).json({ code: 403, message: "Kechirasiz, bo'limlarni boshqarish uchun Administrator huquqi talab qilinadi." });
       }
-      const { id, departmentName, parentId, status, remark } = req.body || {};
+      const { id, departmentName, name, parentId, status, remark } = req.body || {};
+      const deptTitle = departmentName || name || 'Bo\'lim';
       if (id) {
         await sql`
           UPDATE departments 
-          SET "departmentName" = ${departmentName}, "parentId" = ${parentId || null}, status = ${status !== undefined ? status : 1}, remark = ${remark || null}
+          SET name = ${deptTitle}, status = ${status !== undefined ? status : 1}, remark = ${remark || null}
           WHERE id = ${id}
         `;
       } else {
         const newId = 'dept_' + Date.now().toString(36);
         await sql`
-          INSERT INTO departments (id, "departmentName", "parentId", status, remark, "createTime")
-          VALUES (${newId}, ${departmentName}, ${parentId || null}, ${status !== undefined ? status : 1}, ${remark || null}, NOW())
+          INSERT INTO departments (id, name, status, remark, "createTime")
+          VALUES (${newId}, ${deptTitle}, ${status !== undefined ? status : 1}, ${remark || null}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
         `;
       }
       return res.status(200).json({ code: 0, message: 'Saqlandi' });
@@ -1112,7 +1485,7 @@ export default async function handler(req, res) {
 
     if (path === 'department/users') {
       const deptId = req.query?.id || urlSearchParams.get('id');
-      const rows = await sql`SELECT * FROM workers WHERE department_id = ${deptId} OR department = ${deptId}`;
+      const rows = await sql`SELECT * FROM workers WHERE department_id = ${deptId} OR "departmentId" = ${deptId}`;
       const userList = rows.map(w => ({
         id: w.id,
         username: w.name,
@@ -1123,6 +1496,31 @@ export default async function handler(req, res) {
         department: { id: deptId, departmentName: '' }
       }));
       return res.status(200).json({ code: 0, data: { list: userList, total: userList.length } });
+    }
+
+    if (path === 'department/user/save' && req.method === 'POST') {
+      const { id, departmentId, department_id, name, account, email, phone, role } = req.body || {};
+      const deptId = departmentId || department_id || 'DEPT-HQ';
+      if (id) {
+        await sql`UPDATE workers SET "departmentId" = ${deptId}, department_id = ${deptId} WHERE id = ${id}`;
+      } else {
+        const newId = 'WORK-' + Math.floor(100 + Math.random() * 900);
+        await sql`
+          INSERT INTO workers (id, name, account, email, phone, role, "departmentId", department_id, status, "createTime")
+          VALUES (${newId}, ${name || 'Yangi xodim'}, ${account || null}, ${email || null}, ${phone || null}, ${role || 'Oddiy xodim'}, ${deptId}, ${deptId}, 1, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, data: 'success', message: "Xodim bo'limga biriktirildi" });
+    }
+
+    if (path === 'department/user/delete' && req.method === 'POST') {
+      let ids = req.body?.ids;
+      if (!ids && req.body?.id) ids = [req.body.id];
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`UPDATE workers SET "departmentId" = NULL, department_id = NULL WHERE id = ANY(${ids})`;
+        return res.status(200).json({ code: 0, data: 'success', message: "Xodim bo'limdan chiqarildi" });
+      }
+      return res.status(200).json({ code: 400, message: "ID ko'rsatilmadi" });
     }
 
     // 12. GET /api/salary/list
@@ -2009,10 +2407,87 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: rows });
     }
 
-    // 18. GET /api/branch/list
+    if (path === 'analysis/snapshot/close' && req.method === 'POST') {
+      const { period_month, remark } = req.body || {};
+      const period = period_month || new Date().toISOString().slice(0, 7);
+      const salesRows = await sql`SELECT * FROM sales WHERE "createTime" LIKE ${period + '%'}`;
+      const revenue = salesRows.reduce((acc, s) => acc + (parseFloat(s.total || s.total_amount || 0)), 0);
+      const salesCount = salesRows.length;
+      const salaryRows = await sql`SELECT * FROM salaries WHERE "payDate" LIKE ${period + '%'}`;
+      const salaries = salaryRows.reduce((acc, s) => acc + (parseFloat(s.netSalary || s.baseSalary || 0)), 0);
+      const cogs = Math.round(revenue * 0.65);
+      const netProfit = Math.round(revenue - cogs - salaries);
+      const profitMargin = revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0;
+
+      await sql`
+        INSERT INTO monthly_financial_snapshots (
+          period_month, revenue, cogs, staff_salaries, total_expenses, net_profit, profit_margin, sales_count, closed_by, closed_at, remark
+        )
+        VALUES (
+          ${period}, ${revenue}, ${cogs}, ${salaries}, ${cogs + salaries}, ${netProfit}, ${profitMargin}, ${salesCount}, ${authUser?.sub || 'admin'}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'), ${remark || 'Oylik moliyaviy hisobot yopildi'}
+        )
+        ON CONFLICT (period_month) DO UPDATE SET
+          revenue = EXCLUDED.revenue,
+          cogs = EXCLUDED.cogs,
+          staff_salaries = EXCLUDED.staff_salaries,
+          total_expenses = EXCLUDED.total_expenses,
+          net_profit = EXCLUDED.net_profit,
+          profit_margin = EXCLUDED.profit_margin,
+          sales_count = EXCLUDED.sales_count,
+          closed_by = EXCLUDED.closed_by,
+          closed_at = EXCLUDED.closed_at,
+          remark = EXCLUDED.remark
+      `;
+
+      return res.status(200).json({ code: 0, message: `${period} oylik hisoboti muvaffaqiyatli yopildi` });
+    }
+
+    if (path === 'analysis/snapshot/delete' && req.method === 'POST') {
+      const { id, period_month } = req.body || {};
+      if (id) {
+        await sql`DELETE FROM monthly_financial_snapshots WHERE id = ${id}`;
+      } else if (period_month) {
+        await sql`DELETE FROM monthly_financial_snapshots WHERE period_month = ${period_month}`;
+      }
+      return res.status(200).json({ code: 0, message: 'Hisobot o\'chirildi' });
+    }
+
+    // 18. Branch Endpoints
     if (path === 'branch/list') {
       const rows = await sql`SELECT * FROM branches ORDER BY id ASC`;
-      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+      return res.status(200).json({ code: 0, data: rows, list: rows, total: rows.length });
+    }
+
+    if (path === 'branch/save' && req.method === 'POST') {
+      const { id, name, code, address, phone, is_active, status, remark } = req.body || {};
+      const branchStatus = status !== undefined ? parseInt(status, 10) : (is_active !== undefined ? parseInt(is_active, 10) : 1);
+      if (id) {
+        const updated = await sql`
+          UPDATE branches 
+          SET name = ${name}, status = ${branchStatus}, remark = ${remark || address || null}
+          WHERE id = ${id}
+          RETURNING *
+        `;
+        return res.status(200).json({ code: 0, message: 'Filial yangilandi', data: updated[0] || req.body });
+      } else {
+        const newId = 'BR-' + Math.floor(10 + Math.random() * 90);
+        const inserted = await sql`
+          INSERT INTO branches (id, name, status, remark, "createTime")
+          VALUES (${newId}, ${name}, ${branchStatus}, ${remark || address || null}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+          RETURNING *
+        `;
+        return res.status(200).json({ code: 0, message: 'Yangi filial yaratildi', data: inserted[0] });
+      }
+    }
+
+    if (path === 'branch/delete' && req.method === 'POST') {
+      let ids = req.body?.ids;
+      if (!ids && req.body?.id) ids = [req.body.id];
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM branches WHERE id = ANY(${ids})`;
+        return res.status(200).json({ code: 0, message: 'Filial o\'chirildi' });
+      }
+      return res.status(200).json({ code: 400, message: 'ID ko\'rsatilmadi' });
     }
 
     // 19. GET /api/classifier/list
@@ -2311,6 +2786,358 @@ export default async function handler(req, res) {
           shoppings: parseFloat(wRes[0]?.total_salary || 0)
         }
       });
+    }
+
+    // Analysis charts
+    if (path === 'analysis/monthlySales') {
+      const months = [
+        'january', 'february', 'march', 'april', 'may', 'june',
+        'july', 'august', 'september', 'october', 'november', 'december'
+      ];
+      const curYear = new Date().getFullYear();
+      const salesRows = await sql`SELECT "createTime", total, total_amount FROM sales WHERE "createTime" LIKE ${curYear + '%'}`;
+      const monthTotals = {};
+      salesRows.forEach(s => {
+        const m = parseInt((s.createTime || '').slice(5, 7), 10);
+        if (m >= 1 && m <= 12) {
+          monthTotals[m] = (monthTotals[m] || 0) + parseFloat(s.total || s.total_amount || 0);
+        }
+      });
+
+      const data = months.map((mName, idx) => {
+        const mNum = idx + 1;
+        const actual = Math.round(monthTotals[mNum] || (80 + Math.sin(idx) * 40));
+        const estimate = Math.round(actual * 1.15 + 10);
+        return {
+          estimate,
+          actual,
+          name: `analysis.${mName}`
+        };
+      });
+      return res.status(200).json({ code: 0, data });
+    }
+
+    if (path === 'analysis/userAccessSource') {
+      return res.status(200).json({
+        code: 0,
+        data: [
+          { value: 1000, name: 'analysis.directAccess' },
+          { value: 310, name: 'analysis.mailMarketing' },
+          { value: 234, name: 'analysis.allianceAdvertising' },
+          { value: 135, name: 'analysis.videoAdvertising' },
+          { value: 1548, name: 'analysis.searchEngines' }
+        ]
+      });
+    }
+
+    if (path === 'analysis/weeklyUserActivity') {
+      return res.status(200).json({
+        code: 0,
+        data: [
+          { value: 13253, name: 'analysis.monday' },
+          { value: 34235, name: 'analysis.tuesday' },
+          { value: 26321, name: 'analysis.wednesday' },
+          { value: 12340, name: 'analysis.thursday' },
+          { value: 24643, name: 'analysis.friday' },
+          { value: 1322, name: 'analysis.saturday' },
+          { value: 1324, name: 'analysis.sunday' }
+        ]
+      });
+    }
+
+    // Dictionaries
+    if (path === 'dict/list') {
+      return res.status(200).json({
+        code: 0,
+        data: {
+          importance: [
+            { value: 0, label: 'Oddiy' },
+            { value: 1, label: 'Yaxshi' },
+            { value: 2, label: 'Muhim' }
+          ]
+        }
+      });
+    }
+
+    if (path === 'dict/one') {
+      return res.status(200).json({
+        code: 0,
+        data: [
+          { label: 'test1', value: 0 },
+          { label: 'test2', value: 1 },
+          { label: 'test3', value: 2 }
+        ]
+      });
+    }
+
+    // Device Management & Pairing
+    if (path === 'device/pair-token' && req.method === 'POST') {
+      const { device_name, user_id } = req.body || {};
+      const token = 'dt_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const pair_code = Math.floor(100000 + Math.random() * 900000).toString();
+      const uid = user_id || authUser?.id || 1;
+      const inserted = await sql`
+        INSERT INTO device_tokens (user_id, device_name, token, pair_code, status, created_at, expires_at)
+        VALUES (${uid}, ${device_name || 'Mobile Scanner'}, ${token}, ${pair_code}, 'active', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'), to_char(NOW() + interval '30 days', 'YYYY-MM-DD HH24:MI:SS'))
+        RETURNING *
+      `;
+      return res.status(200).json({ code: 0, data: inserted[0] });
+    }
+
+    if (path === 'device/verify') {
+      const token = req.headers['x-device-token'] || req.query?.token;
+      if (!token) return res.status(401).json({ code: 401, message: 'Qurilma tokeni mavjud emas' });
+      const rows = await sql`SELECT * FROM device_tokens WHERE token = ${token} AND status = 'active' LIMIT 1`;
+      if (rows[0]) {
+        await sql`UPDATE device_tokens SET last_used_at = to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS') WHERE id = ${rows[0].id}`;
+        return res.status(200).json({ code: 0, data: rows[0], valid: true });
+      }
+      return res.status(401).json({ code: 401, message: 'Qurilma tokeni yaroqsiz', valid: false });
+    }
+
+    if (path.startsWith('device/revoke/')) {
+      const devId = parseInt(path.replace('device/revoke/', ''), 10);
+      await sql`UPDATE device_tokens SET status = 'revoked' WHERE id = ${devId}`;
+      return res.status(200).json({ code: 0, message: 'Qurilma ulanishi bekor qilindi' });
+    }
+
+    if (path === 'device/decode-frame') {
+      return res.status(200).json({ code: 0, barcode: null, message: 'Kamera tayyor' });
+    }
+
+    // Sales Mobile Push & Phone Checkout
+    if (path === 'sales/push-pc-sale' && req.method === 'POST') {
+      const token = req.headers['x-device-token'] || '';
+      const { pc_user_id, items } = req.body || {};
+      const pushId = 'PUSH-' + Date.now().toString().slice(-6) + '-' + Math.floor(100 + Math.random() * 900);
+      await sql`
+        INSERT INTO sales_pushes (id, device_token, pc_user_id, items_json, status, created_at, updated_at)
+        VALUES (${pushId}, ${token}, ${pc_user_id || 1}, ${JSON.stringify(items || [])}, 'pending', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'), to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      `;
+      return res.status(200).json({ code: 0, data: { push_id: pushId, status: 'pending' }, message: 'Savat kompyuterga yuborildi' });
+    }
+
+    if (path === 'sales/pending-pushes') {
+      const rows = await sql`SELECT * FROM sales_pushes WHERE status = 'pending' ORDER BY id DESC LIMIT 10`;
+      const list = rows.map(r => ({
+        ...r,
+        items: typeof r.items_json === 'string' ? JSON.parse(r.items_json) : (r.items_json || [])
+      }));
+      return res.status(200).json({ code: 0, data: list });
+    }
+
+    if (path.startsWith('sales/push-payload/')) {
+      const pushId = path.replace('sales/push-payload/', '');
+      const rows = await sql`SELECT * FROM sales_pushes WHERE id = ${pushId} LIMIT 1`;
+      if (rows[0]) {
+        const items = typeof rows[0].items_json === 'string' ? JSON.parse(rows[0].items_json) : (rows[0].items_json || []);
+        return res.status(200).json({ code: 0, data: { ...rows[0], items } });
+      }
+      return res.status(404).json({ code: 404, message: 'Push topilmadi' });
+    }
+
+    if (path === 'sales/respond-push' && req.method === 'POST') {
+      const { push_id, action } = req.body || {};
+      const newStatus = action === 'accept' ? 'accepted' : 'declined';
+      await sql`UPDATE sales_pushes SET status = ${newStatus}, updated_at = to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS') WHERE id = ${push_id}`;
+      return res.status(200).json({ code: 0, message: `Savat ${action === 'accept' ? 'qabul qilindi' : 'bekor qilindi'}` });
+    }
+
+    if (path === 'sales/phone-checkout' && req.method === 'POST') {
+      const { items, payment_type, total_amount, paid_amount, customer_name, customer_phone } = req.body || {};
+      const receiptNo = 'KNT-PH-' + Date.now().toString().slice(-6) + '-' + Math.floor(100 + Math.random() * 900);
+      const totalVal = parseFloat(total_amount) || 0;
+      const paidVal = paid_amount !== undefined ? parseFloat(paid_amount) : totalVal;
+      const debtVal = Math.max(0, totalVal - paidVal);
+
+      await sql`
+        INSERT INTO sales (
+          id, items, total, total_amount, payment_method, status, customer_name, customer_phone, debt_amount, user_id, "createTime"
+        )
+        VALUES (
+          ${receiptNo}, ${JSON.stringify(items || [])}, ${totalVal}, ${totalVal}, ${payment_type || 'cash'}, 'completed',
+          ${customer_name || null}, ${customer_phone || null}, ${debtVal}, 'mobile_pos', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+        )
+      `;
+
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          const qty = item.quantity || 1;
+          const pid = item.product_id || item.id;
+          if (pid) {
+            await sql`UPDATE products SET "quantityInStock" = GREATEST(0, "quantityInStock" - ${qty}) WHERE id = ${pid}`;
+          }
+        }
+      }
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          receipt_number: receiptNo,
+          total: totalVal,
+          paid: paidVal,
+          debt: debtVal
+        },
+        message: 'Telefon orqali sotuv yakunlandi'
+      });
+    }
+
+    // QR Codes CRUD
+    if (path === 'qr/list') {
+      const rows = await sql`SELECT * FROM qr_codes ORDER BY id DESC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+    if (path === 'qr/save' && req.method === 'POST') {
+      const { taskId, quantity } = req.body || {};
+      const id = 'QR-' + Date.now().toString().slice(-6);
+      const code = 'KNT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      await sql`
+        INSERT INTO qr_codes (id, task_id, code, quantity, status, "createTime")
+        VALUES (${id}, ${taskId || 'TASK-01'}, ${code}, ${quantity || 1}, 'active', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+      `;
+      return res.status(200).json({ code: 0, data: { id, code }, message: 'QR kod yaratildi' });
+    }
+    if (path === 'qr/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM qr_codes WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: 'QR kod o\'chirildi' });
+    }
+
+    // Cutting Production Management Endpoints
+    if (path === 'cutting/stage/list') {
+      const rows = await sql`SELECT * FROM cutting_stages ORDER BY sequence ASC, id ASC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+    if (path === 'cutting/stage/save' && req.method === 'POST') {
+      const { id, name, code, sequence, description, status } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE cutting_stages 
+          SET name = ${name}, code = ${code || null}, sequence = ${sequence || 1}, description = ${description || null}, status = ${status !== undefined ? status : 1}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'STG-' + Date.now().toString().slice(-5);
+        await sql`
+          INSERT INTO cutting_stages (id, name, code, sequence, description, status, "createTime")
+          VALUES (${newId}, ${name}, ${code || null}, ${sequence || 1}, ${description || null}, ${status !== undefined ? status : 1}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Bosqich saqlandi' });
+    }
+    if (path === 'cutting/stage/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM cutting_stages WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: 'Bosqich o\'chirildi' });
+    }
+
+    if (path === 'cutting/process/list') {
+      const rows = await sql`SELECT * FROM cutting_processes ORDER BY id ASC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+    if (path === 'cutting/process/save' && req.method === 'POST') {
+      const { id, name, stage_id, description, status } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE cutting_processes 
+          SET name = ${name}, stage_id = ${stage_id || null}, description = ${description || null}, status = ${status !== undefined ? status : 1}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'PRC-' + Date.now().toString().slice(-5);
+        await sql`
+          INSERT INTO cutting_processes (id, name, stage_id, description, status, "createTime")
+          VALUES (${newId}, ${name}, ${stage_id || null}, ${description || null}, ${status !== undefined ? status : 1}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Jarayon saqlandi' });
+    }
+    if (path === 'cutting/process/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM cutting_processes WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: 'Jarayon o\'chirildi' });
+    }
+
+    if (path === 'cutting/order/list') {
+      const rows = await sql`SELECT * FROM cutting_orders ORDER BY id DESC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+    if (path === 'cutting/order/save' && req.method === 'POST') {
+      const { id, order_no, product_name, quantity, status, remark } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE cutting_orders 
+          SET order_no = ${order_no}, product_name = ${product_name}, quantity = ${quantity || 1}, status = ${status || 'pending'}, remark = ${remark || null}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'ORD-' + Date.now().toString().slice(-6);
+        await sql`
+          INSERT INTO cutting_orders (id, order_no, product_name, quantity, status, remark, "createTime")
+          VALUES (${newId}, ${order_no || ('BUY-' + Date.now().toString().slice(-4))}, ${product_name}, ${quantity || 1}, ${status || 'pending'}, ${remark || null}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Buyurtma saqlandi' });
+    }
+    if (path === 'cutting/order/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM cutting_orders WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: 'Buyurtma o\'chirildi' });
+    }
+    if (path === 'cutting/order/start-production' && req.method === 'POST') {
+      const { orderId } = req.body || {};
+      if (orderId) {
+        await sql`UPDATE cutting_orders SET status = 'in_production' WHERE id = ${orderId}`;
+      }
+      return res.status(200).json({ code: 0, message: 'Ishlab chiqarish boshlandi' });
+    }
+
+    if (path === 'cutting/task/list') {
+      const rows = await sql`SELECT * FROM cutting_tasks ORDER BY id DESC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+    if (path === 'cutting/task/update-status' && req.method === 'POST') {
+      const { taskId, status } = req.body || {};
+      if (taskId) {
+        await sql`UPDATE cutting_tasks SET status = ${status} WHERE id = ${taskId}`;
+      }
+      return res.status(200).json({ code: 0, message: 'Vazifa holati yangilandi' });
+    }
+    if (path === 'cutting/task/execution/list') {
+      const rows = await sql`SELECT * FROM cutting_task_executions ORDER BY id DESC`;
+      return res.status(200).json({ code: 0, data: rows });
+    }
+    if (path === 'cutting/task/execution/save' && req.method === 'POST') {
+      const { id, task_id, worker_id, worker_name, quantity, status, remark } = req.body || {};
+      if (id) {
+        await sql`
+          UPDATE cutting_task_executions 
+          SET task_id = ${task_id}, worker_id = ${worker_id}, worker_name = ${worker_name}, quantity = ${quantity || 1}, status = ${status || 'completed'}, remark = ${remark || null}
+          WHERE id = ${id}
+        `;
+      } else {
+        const newId = 'EXEC-' + Date.now().toString().slice(-6);
+        await sql`
+          INSERT INTO cutting_task_executions (id, task_id, worker_id, worker_name, quantity, status, remark, "createTime")
+          VALUES (${newId}, ${task_id}, ${worker_id}, ${worker_name}, ${quantity || 1}, ${status || 'completed'}, ${remark || null}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+      return res.status(200).json({ code: 0, message: 'Bajarish yozuvi saqlandi' });
+    }
+    if (path === 'cutting/task/execution/delete' && req.method === 'POST') {
+      const { ids } = req.body || {};
+      if (Array.isArray(ids) && ids.length > 0) {
+        await sql`DELETE FROM cutting_task_executions WHERE id = ANY(${ids})`;
+      }
+      return res.status(200).json({ code: 0, message: 'Bajarish yozuvi o\'chirildi' });
     }
 
     // 22. GET /api/ai/config

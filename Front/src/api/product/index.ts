@@ -30,6 +30,8 @@ export interface ProductType {
   expiration_date?: string
   remark?: string
   createTime?: string
+  additional_qty?: number
+  is_replenish?: boolean
   packagings?: ProductPackagingType[]
   selected_packaging?: ProductPackagingType
 }
@@ -47,6 +49,19 @@ export const saveProductApi = (data: ProductType) => {
 
 export const deleteProductApi = (data: { ids: string[] }) => {
   return request.post({ url: '/product/delete', data })
+}
+
+export const checkExistingProductApi = (params: {
+  barcode?: string
+  sku?: string
+  name?: string
+  classifier_id?: number
+}) => {
+  return request.get<{
+    code: number
+    exists: boolean
+    data?: ProductType
+  }>({ url: '/product/check-existing', params })
 }
 
 export const uploadProductImageApi = (file: File) => {

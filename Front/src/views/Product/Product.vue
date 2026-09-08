@@ -498,6 +498,87 @@
         </div>
       </div>
 
+      <!-- Existing Product Detection Alert Banner -->
+      <transition name="el-zoom-in-top">
+        <div
+          v-if="dialogType === 'add' && existingProduct"
+          class="existing-product-card mb-20px p-16px rounded-12px bg-amber-500/10 dark:bg-amber-500/15 border-2 border-amber-500/40 shadow-md"
+        >
+          <div
+            class="flex items-center justify-between flex-wrap gap-2 mb-12px pb-8px border-b border-amber-500/20"
+          >
+            <div class="flex items-center gap-8px text-amber-500 font-bold text-base">
+              <Icon icon="ep:warning-filled" class="text-20px animate-bounce" />
+              <span>Omborda Mavjud Mahsulot Topildi!</span>
+            </div>
+            <ElTag type="warning" effect="dark" size="default" class="font-bold">
+              <Icon icon="ep:box" class="mr-4px inline" />
+              Bazada Mavjud
+            </ElTag>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-10px mb-12px text-xs">
+            <div
+              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
+            >
+              <span class="text-gray-500 dark:text-gray-400 block mb-3px"
+                >Hozirgi Ombor Qoldig'i:</span
+              >
+              <span class="font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
+                {{ formatMoney(existingProduct.quantityInStock) }}
+                {{ existingProduct.unit || 'dona' }}
+              </span>
+            </div>
+            <div
+              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
+            >
+              <span class="text-gray-500 dark:text-gray-400 block mb-3px">Eski Tannarxi:</span>
+              <span class="font-mono font-bold text-base text-amber-600 dark:text-amber-400">
+                ${{ formatMoney(existingProduct.cost) }}
+              </span>
+            </div>
+            <div
+              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
+            >
+              <span class="text-gray-500 dark:text-gray-400 block mb-3px">Eski Sotish Narxi:</span>
+              <span class="font-mono font-bold text-base text-blue-600 dark:text-blue-400">
+                ${{ formatMoney(existingProduct.price) }}
+              </span>
+            </div>
+            <div
+              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
+            >
+              <span class="text-gray-500 dark:text-gray-400 block mb-3px">Kategoriyasi:</span>
+              <span class="font-semibold text-sm text-gray-800 dark:text-gray-200 truncate block">
+                {{ existingProduct.category || 'Boshqalar' }}
+              </span>
+            </div>
+          </div>
+
+          <div
+            class="stock-calc-banner p-10px rounded-8px bg-amber-500/20 dark:bg-amber-950/50 border border-amber-500/30 flex items-center justify-between flex-wrap gap-2 text-xs"
+          >
+            <div class="flex items-center gap-6px text-amber-900 dark:text-amber-200">
+              <Icon icon="ep:info-filled" class="text-14px" />
+              <span>Yangi kirim sonini kiriting. U avtomatik tarzda eski qoldiqqa qo'shiladi:</span>
+            </div>
+            <div
+              class="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 bg-white/80 dark:bg-black/40 px-10px py-4px rounded-6px border border-emerald-500/30"
+            >
+              Eski ({{ formatMoney(existingProduct.quantityInStock) }}) + Yangi ({{
+                formatMoney(form.quantityInStock || 0)
+              }}) = Jami
+              {{
+                formatMoney(
+                  (existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0)
+                )
+              }}
+              {{ form.unit || 'dona' }}
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <ElForm ref="formRef" :model="form" :rules="rules" label-width="140px" class="modal-form">
         <ElRow :gutter="16">
           <ElCol :span="12">
@@ -506,6 +587,7 @@
                 v-model="form.shtrix_code"
                 placeholder="Faqat raqamlar: 4780014680073"
                 @input="(val: string) => (form.shtrix_code = val.replace(/\D/g, ''))"
+                @blur="onShtrixCodeBlur"
               />
             </ElFormItem>
           </ElCol>
@@ -548,13 +630,26 @@
 
         <ElRow :gutter="16">
           <ElCol :span="8">
-            <ElFormItem label="Ombordagi Soni" prop="quantityInStock">
+            <ElFormItem
+              :label="
+                dialogType === 'add' && existingProduct ? 'Yangi Kirim Soni' : 'Ombordagi Soni'
+              "
+              prop="quantityInStock"
+            >
               <ElInputNumber
                 v-model="form.quantityInStock"
-                :min="0"
+                :min="1"
                 :step="1"
                 style="width: 100%"
               />
+              <div
+                v-if="dialogType === 'add' && existingProduct"
+                class="text-11px text-emerald-500 font-mono mt-4px font-bold"
+              >
+                +{{ form.quantityInStock || 0 }} qo'shiladi -> Jami:
+                {{ (existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0) }}
+                dona
+              </div>
             </ElFormItem>
           </ElCol>
           <ElCol :span="8">
@@ -564,6 +659,12 @@
                 placeholder="0"
                 class="custom-price-input cost-input"
               />
+              <div
+                v-if="dialogType === 'add' && existingProduct"
+                class="text-10px text-gray-400 mt-2px"
+              >
+                Eski tannarx: ${{ formatMoney(existingProduct.cost) }}
+              </div>
             </ElFormItem>
           </ElCol>
           <ElCol :span="8">
@@ -573,6 +674,12 @@
                 placeholder="0"
                 class="custom-price-input sell-input"
               />
+              <div
+                v-if="dialogType === 'add' && existingProduct"
+                class="text-10px text-gray-400 mt-2px"
+              >
+                Eski sotuv: ${{ formatMoney(existingProduct.price) }}
+              </div>
             </ElFormItem>
           </ElCol>
         </ElRow>
@@ -990,6 +1097,7 @@ import {
   getProductListApi,
   saveProductApi,
   deleteProductApi,
+  checkExistingProductApi,
   uploadProductImageApi,
   searchClassifierApi,
   getClassifierByBarcodeApi,
@@ -1059,6 +1167,8 @@ const classifierSearchMode = ref<'extended' | 'simple'>('extended')
 const lastClassifierQuery = ref('')
 const classifierOptions = ref<any[]>([])
 const selectedClassifierId = ref<number | string | undefined>(undefined)
+const existingProduct = ref<ProductType | null>(null)
+const checkingExistingLoading = ref(false)
 
 const form = reactive<ProductType>({
   id: '',
@@ -1300,7 +1410,89 @@ const remoteSearchClassifier = (query: string) => {
   }, 150)
 }
 
-const applyClassifierToForm = (item: any) => {
+const checkAndApplyExistingProduct = async (criteria: {
+  barcode?: string
+  sku?: string
+  name?: string
+  classifierId?: number
+}): Promise<ProductType | null> => {
+  const barcode = (criteria.barcode || '').trim()
+  const sku = (criteria.sku || '').trim()
+  const name = (criteria.name || '').trim()
+  const classifierId = criteria.classifierId
+
+  if (!barcode && !sku && !name && !classifierId) {
+    return null
+  }
+
+  // 1. Fast check in current loaded tableData
+  let found: ProductType | undefined = tableData.value.find((p) => {
+    if (barcode && p.shtrix_code && p.shtrix_code === barcode) return true
+    if (sku && p.SKU && p.SKU.toLowerCase() === sku.toLowerCase()) return true
+    if (classifierId && p.classifier_id && p.classifier_id === classifierId) return true
+    if (name && p.productName && p.productName.toLowerCase() === name.toLowerCase()) return true
+    return false
+  })
+
+  // 2. If not found in loaded tableData, query backend endpoint
+  if (!found) {
+    try {
+      checkingExistingLoading.value = true
+      const res: any = await checkExistingProductApi({
+        barcode: barcode || undefined,
+        sku: sku || undefined,
+        name: name || undefined,
+        classifier_id: classifierId || undefined
+      })
+      const info = res?.data?.data || (res?.data?.exists !== undefined ? res?.data : res)
+      if (info && (info.exists || info.id) && (info.data || info.id)) {
+        found = info.data || info
+      }
+    } catch (e) {
+      console.warn('checkExistingProductApi warning:', e)
+    } finally {
+      checkingExistingLoading.value = false
+    }
+  }
+
+  if (found) {
+    existingProduct.value = found
+    form.id = found.id || ''
+    form.cost = found.cost || 0
+    form.price = found.price || 0
+    form.category = found.category || form.category || 'Ichimliklar va suvlar'
+    form.unit = found.unit || 'dona'
+    form.productName = found.productName || form.productName
+    form.shtrix_code = found.shtrix_code || form.shtrix_code || barcode
+    form.SKU = found.SKU || form.SKU || (barcode ? `SKU-${barcode}` : '')
+    form.brand_name = found.brand_name || form.brand_name
+    form.attribute_name = found.attribute_name || form.attribute_name
+    form.mxik_code = found.mxik_code || form.mxik_code
+    form.image_url = found.image_url || form.image_url
+    form.remark = found.remark || form.remark
+    // Default the quantity field to 1 (new batch count)
+    form.quantityInStock = 1
+
+    ElNotification({
+      title: 'Omborda mavjud mahsulot topildi!',
+      message: `"${found.productName}" mahsuloti omborda mavjud. Hozirgi ombor qoldig'i: ${formatMoney(found.quantityInStock)} ${found.unit || 'dona'}. Eski tannarxi: $${formatMoney(found.cost)}, Eski sotish narxi: $${formatMoney(found.price)}. Yangi kirim sonini kiriting.`,
+      type: 'warning',
+      duration: 7000
+    })
+
+    return found
+  }
+
+  return null
+}
+
+const onShtrixCodeBlur = async () => {
+  if (dialogType.value === 'add' && form.shtrix_code && form.shtrix_code.length >= 4) {
+    await checkAndApplyExistingProduct({ barcode: form.shtrix_code })
+  }
+}
+
+const applyClassifierToForm = async (item: any) => {
   if (!item) return
   form.classifier_id = item.id
   form.productName = item.mxik_name || ''
@@ -1325,7 +1517,18 @@ const applyClassifierToForm = (item: any) => {
 
   form.remark = descParts.length > 0 ? descParts.join(' | ') : item.mxik_name || ''
 
-  ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
+  // Check if this product already exists in warehouse:
+  const existing = await checkAndApplyExistingProduct({
+    barcode: item.shtrix_code,
+    sku: form.SKU,
+    name: item.mxik_name,
+    classifierId: item.id
+  })
+
+  if (!existing) {
+    existingProduct.value = null
+    ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
+  }
 }
 
 const handleClassifierSelect = (val: number | string) => {
@@ -1345,15 +1548,28 @@ const handleBarcodeScan = async () => {
   }
   barcodeLoading.value = true
   try {
+    // 1. First check if barcode already exists in warehouse!
+    const existing = await checkAndApplyExistingProduct({ barcode: code })
+    if (existing) {
+      barcodeSearch.value = ''
+      nextTick(() => {
+        barcodeInputRef.value?.focus?.()
+      })
+      return
+    }
+
+    // 2. If not in warehouse, search Tasnif classifier
     const res = await getClassifierByBarcodeApi(code)
     if (res && res.data) {
-      applyClassifierToForm(res.data)
+      await applyClassifierToForm(res.data)
       barcodeSearch.value = ''
       nextTick(() => {
         barcodeInputRef.value?.focus?.()
       })
     } else {
       ElMessage.warning("Ushbu shtrix-kod bo'yicha klassifikator topilmadi")
+      form.shtrix_code = code
+      form.SKU = `SKU-${code}`
       barcodeSearch.value = ''
       nextTick(() => {
         barcodeInputRef.value?.focus?.()
@@ -1367,6 +1583,7 @@ const handleBarcodeScan = async () => {
 }
 
 const resetForm = () => {
+  existingProduct.value = null
   form.id = ''
   form.productName = ''
   form.SKU = ''
@@ -1431,13 +1648,21 @@ const handleSubmit = async () => {
         if (!form.SKU) {
           form.SKU = `SKU-${Date.now().toString().slice(-6)}`
         }
-        const res: any = await saveProductApi(form)
 
-        if (res && res.is_existing) {
+        const payload: any = { ...form }
+        if (dialogType.value === 'add' && existingProduct.value) {
+          payload.id = existingProduct.value.id
+          payload.is_replenish = true
+          payload.additional_qty = Number(form.quantityInStock) || 0
+        }
+
+        const res: any = await saveProductApi(payload)
+
+        if (res && (res.is_existing || res.added_qty !== undefined)) {
           ElNotification({
-            title: 'Omborda mavjud mahsulot!',
-            message: `"${res.product_name || form.productName}" mahsuloti omborda mavjud bo'lgani uchun uning soniga +${res.added_qty || form.quantityInStock} dona qo'shildi. Jami ombordagi soni: ${formatMoney(res.total_stock)} dona!`,
-            type: 'warning',
+            title: 'Ombor muvaffaqiyatli yangilandi!',
+            message: `"${res.product_name || form.productName}" mahsulotiga +${res.added_qty || form.quantityInStock} dona qo'shildi. Ombordagi yangi umumiy qoldiq: ${formatMoney(res.total_stock)} dona!`,
+            type: 'success',
             duration: 8000
           })
         } else {
