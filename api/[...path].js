@@ -342,6 +342,19 @@ async function ensureSchema(sql) {
         "createTime" VARCHAR
       );
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS debt_payments (
+        id VARCHAR(64) PRIMARY KEY,
+        receipt_number VARCHAR(64),
+        customer_name VARCHAR(255),
+        customer_phone VARCHAR(64),
+        amount NUMERIC(15, 2) DEFAULT 0,
+        payment_method VARCHAR(64) DEFAULT 'naqd',
+        cashier_name VARCHAR(255),
+        remark TEXT,
+        created_at VARCHAR(64)
+      );
+    `;
 
     // Seed default roles if empty
     await sql`
@@ -1628,168 +1641,228 @@ export default async function handler(req, res) {
 
     // GET /api/sales/debtors
     if (path === 'sales/debtors') {
-      const search = (req.query?.search || urlSearchParams.get('search') || '').toLowerCase().trim();
-      const statusFilter = req.query?.status || urlSearchParams.get('status');
+      try {
+        const search = (req.query?.search || urlSearchParams.get('search') || '').toLowerCase().trim();
+        const statusFilter = req.query?.status || urlSearchParams.get('status');
 
-      const [debtSales, payments] = await Promise.all([
-        sql`SELECT * FROM sales WHERE payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0) ORDER BY created_at DESC`,
-        sql`SELECT * FROM debt_payments ORDER BY created_at DESC`
-      ]);
+        let debtSales = [];
+        let payments = [];
 
-      const debtorMap = {};
+        try {
+          debtSales = await sql`SELECT * FROM sales WHERE payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0) ORDER BY created_at DESC`;
+        } catch (sErr) {
+          console.warn('debtSales query warning:', sErr.message);
+          debtSales = [];
+        }
 
-      for (const s of debtSales) {
-        const name = s.customer_name?.trim() || ('Qarzdor (' + (s.receipt_number || '').slice(-4) + ')');
-        if (!debtorMap[name]) {
-          debtorMap[name] = {
-            name: name,
-            phone: s.customer_phone || '',
-            total_initial_debt: 0,
-            total_repaid: 0,
-            total_debt: 0,
-            status: 'active',
-            deals_count: 0,
-            last_sale_date: s.created_at || ''
+        try {
+          payments = await sql`SELECT * FROM debt_payments ORDER BY created_at DESC`;
+        } catch (pErr) {
+          console.warn('payments query warning:', pErr.message);
+          payments = [];
+        }
+
+        const debtorMap = {};
+
+        for (const s of debtSales) {
+          const name = s.customer_name?.trim() || ('Qarzdor (' + (s.receipt_number || '').slice(-4) + ')');
+          if (!debtorMap[name]) {
+            debtorMap[name] = {
+              name: name,
+              phone: s.customer_phone || '',
+              total_initial_debt: 0,
+              total_repaid: 0,
+              total_debt: 0,
+              status: 'active',
+              deals_count: 0,
+              last_sale_date: s.created_at || ''
+            };
+          }
+          const debtVal = parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0);
+          debtorMap[name].total_initial_debt += debtVal;
+          debtorMap[name].deals_count += 1;
+          if (!debtorMap[name].phone && s.customer_phone) {
+            debtorMap[name].phone = s.customer_phone;
+          }
+          if (s.created_at && (!debtorMap[name].last_sale_date || s.created_at > debtorMap[name].last_sale_date)) {
+            debtorMap[name].last_sale_date = s.created_at;
+          }
+        }
+
+        for (const p of payments) {
+          const name = p.customer_name?.trim();
+          if (name && debtorMap[name]) {
+            debtorMap[name].total_repaid += parseFloat(p.amount || 0);
+          }
+        }
+
+        let list = Object.values(debtorMap).map(d => {
+          const currentDebt = Math.max(0, d.total_initial_debt - d.total_repaid);
+          return {
+            name: d.name,
+            phone: d.phone,
+            total_initial_debt: d.total_initial_debt,
+            total_repaid: d.total_repaid,
+            total_debt: currentDebt,
+            current_balance: currentDebt,
+            status: currentDebt <= 0 ? 'settled' : 'active',
+            sales_count: d.deals_count,
+            deals_count: d.deals_count,
+            last_sale_date: d.last_sale_date
           };
+        });
+
+        if (search) {
+          list = list.filter(d => d.name.toLowerCase().includes(search) || (d.phone && d.phone.includes(search)));
         }
-        const debtVal = parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0);
-        debtorMap[name].total_initial_debt += debtVal;
-        debtorMap[name].deals_count += 1;
-        if (!debtorMap[name].phone && s.customer_phone) {
-          debtorMap[name].phone = s.customer_phone;
+
+        if (statusFilter && statusFilter !== 'all') {
+          list = list.filter(d => d.status === statusFilter);
         }
-        if (s.created_at && (!debtorMap[name].last_sale_date || s.created_at > debtorMap[name].last_sale_date)) {
-          debtorMap[name].last_sale_date = s.created_at;
-        }
+
+        const total_debt = list.reduce((acc, d) => acc + d.total_debt, 0);
+        const total_repaid = list.reduce((acc, d) => acc + d.total_repaid, 0);
+        const active_debtors_count = list.filter(d => d.total_debt > 0).length;
+
+        return res.status(200).json({
+          code: 0,
+          data: {
+            list,
+            total_debt,
+            total_repaid,
+            active_debtors_count,
+            total: list.length
+          }
+        });
+      } catch (err) {
+        console.error('sales/debtors error:', err);
+        return res.status(200).json({
+          code: 0,
+          data: {
+            list: [],
+            total_debt: 0,
+            total_repaid: 0,
+            active_debtors_count: 0,
+            total: 0
+          }
+        });
       }
-
-      for (const p of payments) {
-        const name = p.customer_name?.trim();
-        if (name && debtorMap[name]) {
-          debtorMap[name].total_repaid += parseFloat(p.amount || 0);
-        }
-      }
-
-      let list = Object.values(debtorMap).map(d => {
-        const currentDebt = Math.max(0, d.total_initial_debt - d.total_repaid);
-        return {
-          name: d.name,
-          phone: d.phone,
-          total_initial_debt: d.total_initial_debt,
-          total_repaid: d.total_repaid,
-          total_debt: currentDebt,
-          current_balance: currentDebt,
-          status: currentDebt <= 0 ? 'settled' : 'active',
-          sales_count: d.deals_count,
-          deals_count: d.deals_count,
-          last_sale_date: d.last_sale_date
-        };
-      });
-
-      if (search) {
-        list = list.filter(d => d.name.toLowerCase().includes(search) || (d.phone && d.phone.includes(search)));
-      }
-
-      if (statusFilter && statusFilter !== 'all') {
-        list = list.filter(d => d.status === statusFilter);
-      }
-
-      const total_debt = list.reduce((acc, d) => acc + d.total_debt, 0);
-      const total_repaid = list.reduce((acc, d) => acc + d.total_repaid, 0);
-      const active_debtors_count = list.filter(d => d.total_debt > 0).length;
-
-      return res.status(200).json({
-        code: 0,
-        data: {
-          list,
-          total_debt,
-          total_repaid,
-          active_debtors_count,
-          total: list.length
-        }
-      });
     }
 
     // GET /api/sales/debtor-detail
     if (path === 'sales/debtor-detail') {
-      const name = req.query?.name || urlSearchParams.get('name');
-      if (!name) {
+      try {
+        const name = req.query?.name || urlSearchParams.get('name');
+        if (!name) {
+          return res.status(200).json({ code: 0, data: null });
+        }
+
+        let debtSales = [];
+        let payments = [];
+
+        try {
+          debtSales = await sql`
+            SELECT * FROM sales 
+            WHERE (customer_name = ${name} OR receipt_number LIKE ${'%' + name + '%'}) 
+              AND (payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0))
+            ORDER BY created_at DESC
+          `;
+        } catch (sErr) {
+          console.warn('debtor-detail debtSales error:', sErr.message);
+          debtSales = [];
+        }
+
+        try {
+          payments = await sql`
+            SELECT * FROM debt_payments 
+            WHERE customer_name = ${name}
+            ORDER BY created_at DESC
+          `;
+        } catch (pErr) {
+          console.warn('debtor-detail payments error:', pErr.message);
+          payments = [];
+        }
+
+        const phone = debtSales[0]?.customer_phone || payments[0]?.customer_phone || '';
+        const total_debt = debtSales.reduce((acc, s) => acc + parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0), 0);
+        const total_repaid = payments.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0);
+        const current_balance = Math.max(0, total_debt - total_repaid);
+
+        return res.status(200).json({
+          code: 0,
+          data: {
+            customer_name: name,
+            phone: phone,
+            total_debt: current_balance,
+            total_repaid: total_repaid,
+            initial_debt: total_debt,
+            status: current_balance <= 0 ? 'settled' : 'active',
+            sales: debtSales,
+            payments: payments
+          }
+        });
+      } catch (err) {
+        console.error('sales/debtor-detail error:', err);
         return res.status(200).json({ code: 0, data: null });
       }
-
-      const [debtSales, payments] = await Promise.all([
-        sql`
-          SELECT * FROM sales 
-          WHERE (customer_name = ${name} OR receipt_number LIKE ${'%' + name + '%'}) 
-            AND (payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0))
-          ORDER BY created_at DESC
-        `,
-        sql`
-          SELECT * FROM debt_payments 
-          WHERE customer_name = ${name}
-          ORDER BY created_at DESC
-        `
-      ]);
-
-      const phone = debtSales[0]?.customer_phone || payments[0]?.customer_phone || '';
-      const total_debt = debtSales.reduce((acc, s) => acc + parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0), 0);
-      const total_repaid = payments.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0);
-      const current_balance = Math.max(0, total_debt - total_repaid);
-
-      return res.status(200).json({
-        code: 0,
-        data: {
-          customer_name: name,
-          phone: phone,
-          total_debt: current_balance,
-          total_repaid: total_repaid,
-          initial_debt: total_debt,
-          status: current_balance <= 0 ? 'settled' : 'active',
-          sales: debtSales,
-          payments: payments
-        }
-      });
     }
 
     // POST /api/sales/repay-debt
     if (path === 'sales/repay-debt' && req.method === 'POST') {
-      const { customer_name, customer_phone, amount, payment_method, cashier_name, remark } = req.body || {};
-      const numAmount = parseFloat(amount) || 0;
-      const receipt_number = 'PAY-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
-      const paymentId = 'PMT-' + Date.now().toString(36);
-      const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      try {
+        const { customer_name, customer_phone, amount, payment_method, cashier_name, remark } = req.body || {};
+        const numAmount = parseFloat(amount) || 0;
+        const receipt_number = 'PAY-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(1000 + Math.random() * 9000);
+        const paymentId = 'PMT-' + Date.now().toString(36);
+        const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-      await sql`
-        INSERT INTO debt_payments (id, receipt_number, customer_name, customer_phone, amount, payment_method, cashier_name, remark, created_at)
-        VALUES (${paymentId}, ${receipt_number}, ${customer_name}, ${customer_phone || null}, ${numAmount}, ${payment_method || 'naqd'}, ${cashier_name || 'admin'}, ${remark || null}, ${nowStr})
-      `;
+        try {
+          await sql`
+            INSERT INTO debt_payments (id, receipt_number, customer_name, customer_phone, amount, payment_method, cashier_name, remark, created_at)
+            VALUES (${paymentId}, ${receipt_number}, ${customer_name}, ${customer_phone || null}, ${numAmount}, ${payment_method || 'naqd'}, ${cashier_name || 'admin'}, ${remark || null}, ${nowStr})
+          `;
+        } catch (insErr) {
+          console.warn('repay-debt insert warning:', insErr.message);
+        }
 
-      const debtSales = await sql`
-        SELECT * FROM sales 
-        WHERE (customer_name = ${customer_name}) 
-          AND (payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0))
-      `;
-      const allPayments = await sql`SELECT * FROM debt_payments WHERE customer_name = ${customer_name}`;
-      const totalInitial = debtSales.reduce((acc, s) => acc + parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0), 0);
-      const totalPaid = allPayments.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0);
-      const remaining_debt = Math.max(0, totalInitial - totalPaid);
+        let debtSales = [];
+        let allPayments = [];
 
-      return res.status(200).json({
-        code: 0,
-        data: {
-          id: paymentId,
-          receipt_number: receipt_number,
-          customer_name: customer_name,
-          customer_phone: customer_phone,
-          amount: numAmount,
-          payment_method: payment_method || 'naqd',
-          cashier_name: cashier_name || 'admin',
-          remark: remark,
-          created_at: nowStr,
-          remaining_debt: remaining_debt
-        },
-        message: "Qarz to'lovi muvaffaqiyatli qabul qilindi"
-      });
+        try {
+          debtSales = await sql`
+            SELECT * FROM sales 
+            WHERE (customer_name = ${customer_name}) 
+              AND (payment_method = 'nasiya' OR (debt_amount IS NOT NULL AND debt_amount > 0))
+          `;
+          allPayments = await sql`SELECT * FROM debt_payments WHERE customer_name = ${customer_name}`;
+        } catch (qErr) {
+          console.warn('repay-debt recalculate warning:', qErr.message);
+        }
+
+        const totalInitial = debtSales.reduce((acc, s) => acc + parseFloat(s.debt_amount || (s.total_amount - (s.paid_amount || 0)) || 0), 0);
+        const totalPaid = allPayments.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0);
+        const remaining_debt = Math.max(0, totalInitial - totalPaid);
+
+        return res.status(200).json({
+          code: 0,
+          data: {
+            id: paymentId,
+            receipt_number: receipt_number,
+            customer_name: customer_name,
+            customer_phone: customer_phone,
+            amount: numAmount,
+            payment_method: payment_method || 'naqd',
+            cashier_name: cashier_name || 'admin',
+            remark: remark,
+            created_at: nowStr,
+            remaining_debt: remaining_debt
+          },
+          message: "Qarz to'lovi muvaffaqiyatli qabul qilindi"
+        });
+      } catch (err) {
+        console.error('sales/repay-debt error:', err);
+        return res.status(500).json({ code: 500, message: "Qarz to'lovini saqlashda xatolik yuz berdi" });
+      }
     }
 
     // POST /api/sales/checkout

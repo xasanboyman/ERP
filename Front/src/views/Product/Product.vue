@@ -364,20 +364,31 @@
               </span>
             </div>
           </div>
-          <div
-            class="flex items-center gap-6px px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold"
-          >
-            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <Icon
-              :icon="classifierSearchMode === 'extended' ? 'ep:lightning' : 'ep:search'"
-              :class="classifierSearchMode === 'extended' ? 'text-amber-500' : 'text-blue-500'"
-              style="font-size: 13px"
-            />
-            <span>{{
-              classifierSearchMode === 'extended'
-                ? 'Tasnif Soliq (440,000+ tovarlar)'
-                : 'Oddiy qidiruv'
-            }}</span>
+          <div class="flex items-center gap-10px">
+            <div
+              class="flex items-center gap-6px px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold"
+            >
+              <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <Icon
+                :icon="classifierSearchMode === 'extended' ? 'ep:lightning' : 'ep:search'"
+                :class="classifierSearchMode === 'extended' ? 'text-amber-500' : 'text-blue-500'"
+                style="font-size: 13px"
+              />
+              <span>{{
+                classifierSearchMode === 'extended'
+                  ? 'Tasnif Soliq (440,000+ tovarlar)'
+                  : 'Oddiy qidiruv'
+              }}</span>
+            </div>
+            <ElButton
+              size="small"
+              type="danger"
+              plain
+              class="!px-10px !text-xs font-medium"
+              @click="resetForm"
+            >
+              <Icon icon="ep:refresh-right" class="mr-4px" /> Formani tozalash
+            </ElButton>
           </div>
         </div>
 
@@ -736,6 +747,9 @@
         <ElFormItem :label="t('erp.category')" prop="category">
           <ElSelect
             v-model="form.category"
+            filterable
+            allow-create
+            default-first-option
             :placeholder="t('erp.kategoriyaniTanlang')"
             style="width: 100%"
           >
@@ -744,6 +758,10 @@
             <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
             <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
             <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
+            <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
+            <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
+            <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
+            <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
             <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
           </ElSelect>
         </ElFormItem>
@@ -1532,7 +1550,134 @@ const checkAndApplyExistingProduct = async (criteria: {
     return found
   }
 
+  // Not found in warehouse: ensure product is treated as a clean new item
+  existingProduct.value = null
+  form.id = ''
+  form.cost = 0
+  form.price = 0
+  form.quantityInStock = 1
+
   return null
+}
+
+const clearProductFields = () => {
+  existingProduct.value = null
+  form.id = ''
+  form.productName = ''
+  form.SKU = ''
+  form.category = 'Boshqalar'
+  form.price = 0
+  form.cost = 0
+  form.quantityInStock = 1
+  form.status = 1
+  form.classifier_id = undefined
+  form.shtrix_code = ''
+  form.mxik_code = ''
+  form.brand_name = ''
+  form.attribute_name = ''
+  form.unit = 'dona'
+  form.image_url = ''
+  form.expiration_date = ''
+  form.remark = ''
+  form.packagings = []
+}
+
+const detectCategory = (item: any): string => {
+  if (!item) return 'Boshqalar'
+  const text = `${item.category_name || ''} ${item.group_name || ''} ${item.class_name || ''} ${item.position_name || ''} ${item.mxik_name || ''}`.toLowerCase()
+  if (
+    text.includes('ichimlik') ||
+    text.includes('suv') ||
+    text.includes('sok') ||
+    text.includes('sharbat') ||
+    text.includes('choy') ||
+    text.includes('kofe') ||
+    text.includes('napitk') ||
+    text.includes('cola') ||
+    text.includes('pepsi')
+  ) {
+    return 'Ichimliklar va suvlar'
+  }
+  if (
+    text.includes('sut') ||
+    text.includes('qatiq') ||
+    text.includes('pishloq') ||
+    text.includes('tvorog') ||
+    text.includes('kefir') ||
+    text.includes('yogurt') ||
+    text.includes('qaymoq') ||
+    text.includes('sariyog')
+  ) {
+    return 'Sut va sut mahsulotlari'
+  }
+  if (
+    text.includes('tuz') ||
+    text.includes('ziravor') ||
+    text.includes('qalampir') ||
+    text.includes('murch') ||
+    text.includes('sous') ||
+    text.includes('sirka')
+  ) {
+    return 'Tuz va ziravorlar'
+  }
+  if (
+    text.includes('plast') ||
+    text.includes('idish') ||
+    text.includes('paket') ||
+    text.includes('quti') ||
+    text.includes('upakovka')
+  ) {
+    return 'Plastmassa va idishlar'
+  }
+  if (
+    text.includes('oziq') ||
+    text.includes('non') ||
+    text.includes('un') ||
+    text.includes('shakar') ||
+    text.includes('shokolad') ||
+    text.includes('konfet') ||
+    text.includes("go'sht") ||
+    text.includes('kolbasa') ||
+    text.includes('makaron') ||
+    text.includes("yog'")
+  ) {
+    return 'Oziq-ovqat mahsulotlari'
+  }
+  if (
+    text.includes('elektr') ||
+    text.includes('plita') ||
+    text.includes('pech') ||
+    text.includes('muzlat') ||
+    text.includes('kir yuv') ||
+    text.includes('televizor') ||
+    text.includes('telefon') ||
+    text.includes('gaz')
+  ) {
+    return 'Maishiy texnika va elektronika'
+  }
+  if (
+    text.includes('kiyim') ||
+    text.includes('poyabzal') ||
+    text.includes('shim') ||
+    text.includes('kofta') ||
+    text.includes('kurtka')
+  ) {
+    return 'Kiyim-kechak va poyabzal'
+  }
+  if (
+    text.includes('qurilish') ||
+    text.includes('sement') ||
+    text.includes("bo'yoq") ||
+    text.includes('mix') ||
+    text.includes('truba')
+  ) {
+    return "Qurilish va ta'mirlash"
+  }
+  if (item.category_name && item.category_name.trim()) return item.category_name.trim()
+  if (item.group_name && item.group_name.trim()) return item.group_name.trim()
+  if (item.class_name && item.class_name.trim()) return item.class_name.trim()
+  if (item.position_name && item.position_name.trim()) return item.position_name.trim()
+  return 'Boshqalar'
 }
 
 const onShtrixCodeBlur = async () => {
@@ -1543,6 +1688,11 @@ const onShtrixCodeBlur = async () => {
 
 const applyClassifierToForm = async (item: any) => {
   if (!item) return
+
+  // 1. Reset previous product data first so old prices/ids don't linger
+  clearProductFields()
+
+  // 2. Populate classifier attributes
   form.classifier_id = item.id ? String(item.id) : (item.mxik_code ? String(item.mxik_code) : '')
   form.productName = item.mxik_name || ''
   form.brand_name = item.brand_name || ''
@@ -1550,6 +1700,7 @@ const applyClassifierToForm = async (item: any) => {
   form.shtrix_code = item.shtrix_code || ''
   form.attribute_name = item.attribute_name || ''
   form.unit = item.unit || 'dona'
+  form.category = detectCategory(item)
   if (item.shtrix_code) {
     form.SKU = `SKU-${item.shtrix_code}`
   } else if (item.mxik_code) {
@@ -1566,7 +1717,11 @@ const applyClassifierToForm = async (item: any) => {
 
   form.remark = descParts.length > 0 ? descParts.join(' | ') : item.mxik_name || ''
 
-  // Check if this product already exists in warehouse:
+  // 3. Clear search inputs
+  barcodeSearch.value = ''
+  selectedClassifierId.value = undefined
+
+  // 4. Check if this product already exists in warehouse:
   const existing = await checkAndApplyExistingProduct({
     barcode: item.shtrix_code,
     sku: form.SKU,
@@ -1576,6 +1731,10 @@ const applyClassifierToForm = async (item: any) => {
 
   if (!existing) {
     existingProduct.value = null
+    form.id = ''
+    form.cost = 0
+    form.price = 0
+    form.quantityInStock = 1
     ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
   }
 }
@@ -1602,7 +1761,10 @@ const handleBarcodeScan = async () => {
   }
   barcodeLoading.value = true
   try {
-    // 1. First check if barcode already exists in warehouse!
+    // 1. Reset old product fields before scanning new barcode
+    clearProductFields()
+
+    // 2. First check if barcode already exists in warehouse!
     const existing = await checkAndApplyExistingProduct({ barcode: code })
     if (existing) {
       barcodeSearch.value = ''
@@ -1612,7 +1774,7 @@ const handleBarcodeScan = async () => {
       return
     }
 
-    // 2. If not in warehouse, search Tasnif classifier
+    // 3. If not in warehouse, search Tasnif classifier
     const res = await getClassifierByBarcodeApi(code)
     if (res && res.data) {
       await applyClassifierToForm(res.data)
@@ -1624,6 +1786,7 @@ const handleBarcodeScan = async () => {
       ElMessage.warning("Ushbu shtrix-kod bo'yicha klassifikator topilmadi")
       form.shtrix_code = code
       form.SKU = `SKU-${code}`
+      form.category = 'Boshqalar'
       barcodeSearch.value = ''
       nextTick(() => {
         barcodeInputRef.value?.focus?.()
@@ -1637,25 +1800,7 @@ const handleBarcodeScan = async () => {
 }
 
 const resetForm = () => {
-  existingProduct.value = null
-  form.id = ''
-  form.productName = ''
-  form.SKU = ''
-  form.category = 'Ichimliklar va suvlar'
-  form.price = 0
-  form.cost = 0
-  form.quantityInStock = 1
-  form.status = 1
-  form.classifier_id = undefined
-  form.shtrix_code = ''
-  form.mxik_code = ''
-  form.brand_name = ''
-  form.attribute_name = ''
-  form.unit = 'dona'
-  form.image_url = ''
-  form.expiration_date = ''
-  form.remark = ''
-  form.packagings = []
+  clearProductFields()
   barcodeSearch.value = ''
   selectedClassifierId.value = undefined
   classifierOptions.value = []
