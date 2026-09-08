@@ -161,7 +161,9 @@ export const getClassifierByBarcodeApi = async (barcode: string) => {
           } as any
         }
       }
-    } catch (e) {}
+    } catch (_e) {
+      // Ignore Tasnif barcode fetch error
+    }
   }
 
   return request.get<{
