@@ -1029,29 +1029,35 @@ export default async function handler(req, res) {
 
     // GET /api/product/check-existing
     if (path === 'product/check-existing') {
-      const barcode = (req.query?.barcode || urlSearchParams.get('barcode') || req.body?.barcode || '').trim();
-      const sku = (req.query?.sku || urlSearchParams.get('sku') || req.body?.sku || '').trim();
-      const name = (req.query?.name || urlSearchParams.get('name') || req.body?.name || '').trim();
-      const classifierId = parseInt(req.query?.classifier_id || urlSearchParams.get('classifier_id') || req.body?.classifier_id || 0, 10);
+      try {
+        const barcode = (req.query?.barcode || urlSearchParams.get('barcode') || req.body?.barcode || '').trim();
+        const sku = (req.query?.sku || urlSearchParams.get('sku') || req.body?.sku || '').trim();
+        const name = (req.query?.name || urlSearchParams.get('name') || req.body?.name || '').trim();
+        const rawClsId = req.query?.classifier_id || urlSearchParams.get('classifier_id') || req.body?.classifier_id;
+        const classifierIdStr = rawClsId !== undefined && rawClsId !== null ? String(rawClsId).trim() : '';
 
-      let rows = [];
-      if (barcode) {
-        rows = await sql`SELECT * FROM products WHERE shtrix_code = ${barcode} LIMIT 1`;
-      }
-      if (rows.length === 0 && sku) {
-        rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${sku}) LIMIT 1`;
-      }
-      if (rows.length === 0 && classifierId) {
-        rows = await sql`SELECT * FROM products WHERE classifier_id = ${classifierId} LIMIT 1`;
-      }
-      if (rows.length === 0 && name) {
-        rows = await sql`SELECT * FROM products WHERE LOWER("productName") = LOWER(${name}) LIMIT 1`;
-      }
+        let rows = [];
+        if (barcode) {
+          rows = await sql`SELECT * FROM products WHERE shtrix_code = ${barcode} LIMIT 1`;
+        }
+        if (rows.length === 0 && sku) {
+          rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${sku}) LIMIT 1`;
+        }
+        if (rows.length === 0 && classifierIdStr) {
+          rows = await sql`SELECT * FROM products WHERE classifier_id::text = ${classifierIdStr} OR mxik_code = ${classifierIdStr} LIMIT 1`;
+        }
+        if (rows.length === 0 && name) {
+          rows = await sql`SELECT * FROM products WHERE LOWER("productName") = LOWER(${name}) LIMIT 1`;
+        }
 
-      if (rows.length > 0) {
-        return res.status(200).json({ code: 0, exists: true, data: rows[0] });
+        if (rows.length > 0) {
+          return res.status(200).json({ code: 0, exists: true, data: rows[0] });
+        }
+        return res.status(200).json({ code: 0, exists: false, data: null });
+      } catch (err) {
+        console.error('check-existing error:', err);
+        return res.status(200).json({ code: 0, exists: false, data: null });
       }
-      return res.status(200).json({ code: 0, exists: false, data: null });
     }
 
     // GET /api/product/by-barcode/:barcode
@@ -1066,161 +1072,166 @@ export default async function handler(req, res) {
 
     // POST /api/product/save (Add, update, or replenish existing stock)
     if (path === 'product/save' && req.method === 'POST') {
-      const {
-        id,
-        productName,
-        SKU,
-        category,
-        price,
-        cost,
-        quantityInStock,
-        status,
-        shtrix_code,
-        mxik_code,
-        brand_name,
-        attribute_name,
-        image_url,
-        unit,
-        remark,
-        expiration_date,
-        classifier_id,
-        additional_qty,
-        is_replenish,
-        packagings
-      } = req.body || {};
+      try {
+        const {
+          id,
+          productName,
+          SKU,
+          category,
+          price,
+          cost,
+          quantityInStock,
+          status,
+          shtrix_code,
+          mxik_code,
+          brand_name,
+          attribute_name,
+          image_url,
+          unit,
+          remark,
+          expiration_date,
+          classifier_id,
+          additional_qty,
+          is_replenish,
+          packagings
+        } = req.body || {};
 
-      let existing = null;
-      if (id) {
-        const rows = await sql`SELECT * FROM products WHERE id = ${id} LIMIT 1`;
-        if (rows[0]) existing = rows[0];
-      }
-      if (!existing && shtrix_code) {
-        const rows = await sql`SELECT * FROM products WHERE shtrix_code = ${shtrix_code.trim()} LIMIT 1`;
-        if (rows[0]) existing = rows[0];
-      }
-      if (!existing && SKU) {
-        const rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${SKU.trim()}) LIMIT 1`;
-        if (rows[0]) existing = rows[0];
-      }
+        let existing = null;
+        if (id) {
+          const rows = await sql`SELECT * FROM products WHERE id = ${id} LIMIT 1`;
+          if (rows[0]) existing = rows[0];
+        }
+        if (!existing && shtrix_code) {
+          const rows = await sql`SELECT * FROM products WHERE shtrix_code = ${shtrix_code.trim()} LIMIT 1`;
+          if (rows[0]) existing = rows[0];
+        }
+        if (!existing && SKU) {
+          const rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${SKU.trim()}) LIMIT 1`;
+          if (rows[0]) existing = rows[0];
+        }
 
-      if (existing) {
-        // Product exists in warehouse: add stock
-        const oldStock = existing.quantityInStock || 0;
-        let added = 0;
-        let newStock = oldStock;
+        const clsId = classifier_id !== undefined && classifier_id !== null && String(classifier_id).trim() !== '' ? String(classifier_id).trim() : (existing ? existing.classifier_id : null);
 
-        if (additional_qty !== undefined && additional_qty !== null) {
-          added = parseInt(additional_qty, 10) || 0;
-          newStock = oldStock + added;
-        } else if (is_replenish) {
-          added = parseInt(quantityInStock, 10) || 0;
-          newStock = oldStock + added;
+        if (existing) {
+          // Product exists in warehouse: add stock
+          const oldStock = existing.quantityInStock || 0;
+          let added = 0;
+          let newStock = oldStock;
+
+          if (additional_qty !== undefined && additional_qty !== null) {
+            added = parseInt(additional_qty, 10) || 0;
+            newStock = oldStock + added;
+          } else if (is_replenish) {
+            added = parseInt(quantityInStock, 10) || 0;
+            newStock = oldStock + added;
+          } else {
+            newStock = parseInt(quantityInStock, 10) || 0;
+            added = newStock - oldStock;
+          }
+
+          const pr = price !== undefined && price !== null ? parseFloat(price) : existing.price;
+          const cst = cost !== undefined && cost !== null ? parseFloat(cost) : existing.cost;
+          const stat = status !== undefined ? parseInt(status, 10) : existing.status;
+
+          const updated = await sql`
+            UPDATE products
+            SET "productName" = ${productName || existing.productName},
+                "SKU" = ${SKU || existing.SKU},
+                category = ${category || existing.category},
+                price = ${pr},
+                cost = ${cst},
+                "quantityInStock" = ${newStock},
+                status = ${stat},
+                shtrix_code = ${shtrix_code || existing.shtrix_code},
+                mxik_code = ${mxik_code || existing.mxik_code},
+                brand_name = ${brand_name || existing.brand_name},
+                attribute_name = ${attribute_name || existing.attribute_name},
+                image_url = ${image_url !== undefined ? image_url : existing.image_url},
+                unit = ${unit || existing.unit},
+                remark = ${remark !== undefined ? remark : existing.remark},
+                expiration_date = ${expiration_date !== undefined ? expiration_date : existing.expiration_date},
+                classifier_id = ${clsId}
+            WHERE id = ${existing.id}
+            RETURNING *
+          `;
+
+          if (Array.isArray(packagings)) {
+            await sql`DELETE FROM product_packagings WHERE product_id = ${existing.id}`;
+            for (const pkg of packagings) {
+              await sql`
+                INSERT INTO product_packagings (product_id, name, coefficient, barcode, is_base_unit)
+                VALUES (${existing.id}, ${pkg.unit_name || pkg.name}, ${pkg.conversion_factor || pkg.coefficient || 1}, ${pkg.shtrix_code || pkg.barcode || null}, ${!!pkg.is_base_unit})
+              `;
+            }
+          }
+
+          try {
+            await sql`
+              INSERT INTO activity_logs (user_id, username, action, details, "createTime")
+              VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'STOCK_REPLENISH', ${`"${productName || existing.productName}" qoldig'iga +${added} qo'shildi. Yangi qoldiq: ${newStock}`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+            `;
+          } catch (actErr) {}
+
+          return res.status(200).json({
+            code: 0,
+            is_existing: true,
+            old_stock: oldStock,
+            added_qty: added,
+            total_stock: newStock,
+            product_name: productName || existing.productName,
+            data: updated[0],
+            message: `"${productName || existing.productName}" omborda mavjud bo'lgani sababli qoldig'i +${added} ga oshirildi. Yangi umumiy qoldiq: ${newStock}!`
+          });
         } else {
-          newStock = parseInt(quantityInStock, 10) || 0;
-          added = newStock - oldStock;
-        }
+          // Insert brand new product
+          const newId = id || ('PROD-' + Date.now().toString().slice(-6) + '-' + Math.floor(Math.random() * 900 + 100));
+          const newSKU = SKU || `SKU-${Date.now().toString().slice(-6)}`;
+          const stock = parseInt(quantityInStock, 10) || 0;
+          const pr = parseFloat(price) || 0;
+          const cst = parseFloat(cost) || 0;
+          const stat = status !== undefined ? parseInt(status, 10) : 1;
 
-        const clsId = classifier_id !== undefined ? (classifier_id ? parseInt(classifier_id, 10) : null) : existing.classifier_id;
-        const pr = price !== undefined && price !== null ? parseFloat(price) : existing.price;
-        const cst = cost !== undefined && cost !== null ? parseFloat(cost) : existing.cost;
-        const stat = status !== undefined ? parseInt(status, 10) : existing.status;
-
-        const updated = await sql`
-          UPDATE products
-          SET "productName" = ${productName || existing.productName},
-              "SKU" = ${SKU || existing.SKU},
-              category = ${category || existing.category},
-              price = ${pr},
-              cost = ${cst},
-              "quantityInStock" = ${newStock},
-              status = ${stat},
-              shtrix_code = ${shtrix_code || existing.shtrix_code},
-              mxik_code = ${mxik_code || existing.mxik_code},
-              brand_name = ${brand_name || existing.brand_name},
-              attribute_name = ${attribute_name || existing.attribute_name},
-              image_url = ${image_url !== undefined ? image_url : existing.image_url},
-              unit = ${unit || existing.unit},
-              remark = ${remark !== undefined ? remark : existing.remark},
-              expiration_date = ${expiration_date !== undefined ? expiration_date : existing.expiration_date},
-              classifier_id = ${clsId}
-          WHERE id = ${existing.id}
-          RETURNING *
-        `;
-
-        if (Array.isArray(packagings)) {
-          await sql`DELETE FROM product_packagings WHERE product_id = ${existing.id}`;
-          for (const pkg of packagings) {
-            await sql`
-              INSERT INTO product_packagings (product_id, name, coefficient, barcode, is_base_unit)
-              VALUES (${existing.id}, ${pkg.unit_name || pkg.name}, ${pkg.conversion_factor || pkg.coefficient || 1}, ${pkg.shtrix_code || pkg.barcode || null}, ${!!pkg.is_base_unit})
-            `;
-          }
-        }
-
-        try {
-          await sql`
-            INSERT INTO activity_logs (user_id, username, action, details, "createTime")
-            VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'STOCK_REPLENISH', ${`"${productName || existing.productName}" qoldig'iga +${added} qo'shildi. Yangi qoldiq: ${newStock}`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+          const inserted = await sql`
+            INSERT INTO products (
+              id, "productName", "SKU", category, price, cost, "quantityInStock", status,
+              shtrix_code, mxik_code, brand_name, attribute_name, image_url, unit, remark,
+              expiration_date, classifier_id, "createTime"
+            )
+            VALUES (
+              ${newId}, ${productName || 'Yangi Mahsulot'}, ${newSKU}, ${category || 'Ichimliklar va suvlar'},
+              ${pr}, ${cst}, ${stock}, ${stat}, ${shtrix_code || null}, ${mxik_code || null},
+              ${brand_name || null}, ${attribute_name || null}, ${image_url || null}, ${unit || 'dona'},
+              ${remark || null}, ${expiration_date || null}, ${clsId}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+            )
+            RETURNING *
           `;
-        } catch (actErr) {}
 
-        return res.status(200).json({
-          code: 0,
-          is_existing: true,
-          old_stock: oldStock,
-          added_qty: added,
-          total_stock: newStock,
-          product_name: productName || existing.productName,
-          data: updated[0],
-          message: `"${productName || existing.productName}" omborda mavjud bo'lgani sababli qoldig'i +${added} ga oshirildi. Yangi umumiy qoldiq: ${newStock}!`
-        });
-      } else {
-        // Insert brand new product
-        const newId = id || ('PROD-' + Date.now().toString().slice(-6) + '-' + Math.floor(Math.random() * 900 + 100));
-        const newSKU = SKU || `SKU-${Date.now().toString().slice(-6)}`;
-        const stock = parseInt(quantityInStock, 10) || 0;
-        const pr = parseFloat(price) || 0;
-        const cst = parseFloat(cost) || 0;
-        const stat = status !== undefined ? parseInt(status, 10) : 1;
-        const clsId = classifier_id ? parseInt(classifier_id, 10) : null;
-
-        const inserted = await sql`
-          INSERT INTO products (
-            id, "productName", "SKU", category, price, cost, "quantityInStock", status,
-            shtrix_code, mxik_code, brand_name, attribute_name, image_url, unit, remark,
-            expiration_date, classifier_id, "createTime"
-          )
-          VALUES (
-            ${newId}, ${productName || 'Yangi Mahsulot'}, ${newSKU}, ${category || 'Ichimliklar va suvlar'},
-            ${pr}, ${cst}, ${stock}, ${stat}, ${shtrix_code || null}, ${mxik_code || null},
-            ${brand_name || null}, ${attribute_name || null}, ${image_url || null}, ${unit || 'dona'},
-            ${remark || null}, ${expiration_date || null}, ${clsId}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
-          )
-          RETURNING *
-        `;
-
-        if (Array.isArray(packagings)) {
-          for (const pkg of packagings) {
-            await sql`
-              INSERT INTO product_packagings (product_id, name, coefficient, barcode, is_base_unit)
-              VALUES (${newId}, ${pkg.unit_name || pkg.name}, ${pkg.conversion_factor || pkg.coefficient || 1}, ${pkg.shtrix_code || pkg.barcode || null}, ${!!pkg.is_base_unit})
-            `;
+          if (Array.isArray(packagings)) {
+            for (const pkg of packagings) {
+              await sql`
+                INSERT INTO product_packagings (product_id, name, coefficient, barcode, is_base_unit)
+                VALUES (${newId}, ${pkg.unit_name || pkg.name}, ${pkg.conversion_factor || pkg.coefficient || 1}, ${pkg.shtrix_code || pkg.barcode || null}, ${!!pkg.is_base_unit})
+              `;
+            }
           }
+
+          try {
+            await sql`
+              INSERT INTO activity_logs (user_id, username, action, details, "createTime")
+              VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'PRODUCT_CREATE', ${`Yangi mahsulot yaratildi: "${productName}" (${stock} dona)`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+            `;
+          } catch (actErr) {}
+
+          return res.status(200).json({
+            code: 0,
+            is_existing: false,
+            data: inserted[0],
+            message: 'Yangi mahsulot omborga muvaffaqiyatli qo\'shildi'
+          });
         }
-
-        try {
-          await sql`
-            INSERT INTO activity_logs (user_id, username, action, details, "createTime")
-            VALUES (${authUser?.id || 1}, ${authUser?.sub || 'admin'}, 'PRODUCT_CREATE', ${`Yangi mahsulot yaratildi: "${productName}" (${stock} dona)`}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
-          `;
-        } catch (actErr) {}
-
-        return res.status(200).json({
-          code: 0,
-          is_existing: false,
-          data: inserted[0],
-          message: 'Yangi mahsulot omborga muvaffaqiyatli qo\'shildi'
-        });
+      } catch (err) {
+        console.error('product/save error:', err);
+        return res.status(500).json({ code: 500, message: 'Mahsulotni saqlashda xatolik: ' + err.message });
       }
     }
 

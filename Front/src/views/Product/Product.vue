@@ -439,6 +439,7 @@
             remote
             reserve-keyword
             clearable
+            :fit-input-width="true"
             popper-class="classifier-select-popper"
             size="large"
             :placeholder="
@@ -485,13 +486,26 @@
               </div>
             </ElOption>
             <template #empty>
-              <div class="p-16px text-center text-gray-400 text-xs">
-                <Icon icon="ep:info-filled" class="mr-4px text-blue-400 align-middle" />
-                <span v-if="classifierLoading">Qidirilmoqda...</span>
-                <span v-else
-                  >Tovar nomi yoki brendini qidirish uchun kamida 2 ta harf yozing (masalan: Pepsi,
-                  Cola, Dinay)</span
-                >
+              <div
+                v-if="classifierLoading"
+                class="p-16px text-center text-blue-400 text-xs flex items-center justify-center gap-6px"
+              >
+                <Icon icon="ep:loading" class="animate-spin text-14px" />
+                <span>Tasnif bazasidan mahsulotlar qidirilmoqda...</span>
+              </div>
+              <div
+                v-else-if="!lastClassifierQuery || lastClassifierQuery.length < 2"
+                class="p-14px text-center text-gray-400 text-xs flex items-center justify-center gap-6px"
+              >
+                <Icon icon="ep:info-filled" class="text-blue-400 text-14px" />
+                <span>Tovar nomi yoki brendini qidirish uchun kamida 2 ta harf yozing (masalan: Pepsi, Cola, Dinay)</span>
+              </div>
+              <div
+                v-else
+                class="p-16px text-center text-gray-400 text-xs flex items-center justify-center gap-6px"
+              >
+                <Icon icon="ep:warning" class="text-amber-400 text-14px" />
+                <span>"{{ lastClassifierQuery }}" bo'yicha hech qanday mahsulot topilmadi</span>
               </div>
             </template>
           </ElSelect>
@@ -579,6 +593,27 @@
         </div>
       </transition>
 
+      <!-- Section 2: Form Header -->
+      <div
+        class="form-section-divider flex items-center justify-between py-10px mb-16px border-b border-gray-200/80 dark:border-gray-700/60"
+      >
+        <div class="flex items-center gap-8px text-sm font-bold text-gray-800 dark:text-gray-200">
+          <div
+            class="w-24px h-24px rounded-md bg-emerald-500/15 text-emerald-500 flex items-center justify-center"
+          >
+            <Icon icon="ep:tickets" style="font-size: 13px" />
+          </div>
+          <span>2. Mahsulot Tafsilotlari va Narxlari</span>
+        </div>
+        <span class="text-xs text-gray-400">
+          {{
+            existingProduct
+              ? "Omborda mavjud mahsulot topildi, ma'lumotlar avtomatik to'ldirildi"
+              : "Kerakli maydonlarni to'ldiring yoki klassifikatordan tanlang"
+          }}
+        </span>
+      </div>
+
       <ElForm ref="formRef" :model="form" :rules="rules" label-width="140px" class="modal-form">
         <ElRow :gutter="16">
           <ElCol :span="12">
@@ -628,61 +663,126 @@
           </ElCol>
         </ElRow>
 
-        <ElRow :gutter="16">
-          <ElCol :span="8">
-            <ElFormItem
-              :label="
-                dialogType === 'add' && existingProduct ? 'Yangi Kirim Soni' : 'Ombordagi Soni'
-              "
-              prop="quantityInStock"
+        <!-- Stock and Pricing: When existingProduct vs New Product -->
+        <template v-if="dialogType === 'add' && existingProduct">
+          <ElRow :gutter="16" class="items-start">
+            <!-- UNEDITABLE Existing Stock in Database -->
+            <ElCol :span="6">
+              <ElFormItem label="Omborda Bor Qoldiq">
+                <div
+                  class="uneditable-stock-box p-8px rounded-6px bg-gray-100 dark:bg-gray-800/80 border border-gray-300 dark:border-gray-700 flex items-center justify-between w-full shadow-inner"
+                >
+                  <div
+                    class="flex items-center gap-6px text-gray-700 dark:text-gray-200 font-bold font-mono text-14px"
+                  >
+                    <Icon icon="ep:lock" class="text-amber-500 text-14px" />
+                    <span>{{ formatMoney(existingProduct.quantityInStock) }} {{ existingProduct.unit || 'dona' }}</span>
+                  </div>
+                  <ElTag size="small" type="info" effect="plain" class="text-10px font-semibold">
+                    Bazada bor
+                  </ElTag>
+                </div>
+                <div class="text-10px text-gray-400 mt-2px flex items-center gap-4px">
+                  <Icon icon="ep:info-filled" class="text-10px text-amber-500" />
+                  <span>O'zgartirib bo'lmaydi</span>
+                </div>
+              </ElFormItem>
+            </ElCol>
+
+            <!-- NEW Input for Incoming Product Quantity -->
+            <ElCol :span="6">
+              <ElFormItem label="Yangi Kirim Soni (+)" prop="quantityInStock">
+                <ElInputNumber
+                  v-model="form.quantityInStock"
+                  :min="1"
+                  :step="1"
+                  style="width: 100%"
+                  placeholder="Kirim soni"
+                />
+                <div class="text-10px text-emerald-500 font-mono mt-2px font-bold">
+                  +{{ form.quantityInStock || 0 }} qo'shiladi
+                </div>
+              </ElFormItem>
+            </ElCol>
+
+            <!-- Cost Price (Tannarx) -->
+            <ElCol :span="6">
+              <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
+                <ElInput
+                  v-model="displayCost"
+                  placeholder="0"
+                  class="custom-price-input cost-input"
+                />
+                <div class="text-10px text-amber-500/90 font-mono mt-2px font-semibold">
+                  Eski tannarx: ${{ formatMoney(existingProduct.cost) }}
+                </div>
+              </ElFormItem>
+            </ElCol>
+
+            <!-- Selling Price (Sotish narxi) -->
+            <ElCol :span="6">
+              <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
+                <ElInput
+                  v-model="displayPrice"
+                  placeholder="0"
+                  class="custom-price-input sell-input"
+                />
+                <div class="text-10px text-emerald-500/90 font-mono mt-2px font-semibold">
+                  Eski sotuv: ${{ formatMoney(existingProduct.price) }}
+                </div>
+              </ElFormItem>
+            </ElCol>
+          </ElRow>
+
+          <!-- Dynamic Sum Calculation Banner -->
+          <div
+            class="stock-summary-calc mb-16px p-10px rounded-8px bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-between flex-wrap gap-2 text-xs"
+          >
+            <div class="flex items-center gap-6px text-emerald-900 dark:text-emerald-200 font-medium">
+              <Icon icon="ep:circle-check" class="text-15px text-emerald-500" />
+              <span>Yangi umumiy qoldiq hisobi:</span>
+            </div>
+            <div
+              class="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 bg-white/70 dark:bg-black/40 px-10px py-3px rounded-6px border border-emerald-500/30"
             >
-              <ElInputNumber
-                v-model="form.quantityInStock"
-                :min="1"
-                :step="1"
-                style="width: 100%"
-              />
-              <div
-                v-if="dialogType === 'add' && existingProduct"
-                class="text-11px text-emerald-500 font-mono mt-4px font-bold"
-              >
-                +{{ form.quantityInStock || 0 }} qo'shiladi -> Jami:
-                {{ (existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0) }}
-                dona
-              </div>
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="8">
-            <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
-              <ElInput
-                v-model="displayCost"
-                placeholder="0"
-                class="custom-price-input cost-input"
-              />
-              <div
-                v-if="dialogType === 'add' && existingProduct"
-                class="text-10px text-gray-400 mt-2px"
-              >
-                Eski tannarx: ${{ formatMoney(existingProduct.cost) }}
-              </div>
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="8">
-            <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
-              <ElInput
-                v-model="displayPrice"
-                placeholder="0"
-                class="custom-price-input sell-input"
-              />
-              <div
-                v-if="dialogType === 'add' && existingProduct"
-                class="text-10px text-gray-400 mt-2px"
-              >
-                Eski sotuv: ${{ formatMoney(existingProduct.price) }}
-              </div>
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
+              Bazada mavjud ({{ formatMoney(existingProduct.quantityInStock) }}) + Yangi kirim ({{
+                formatMoney(form.quantityInStock || 0)
+              }}) = Jami {{ formatMoney((existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0)) }} {{ form.unit || 'dona' }}
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <ElRow :gutter="16">
+            <ElCol :span="8">
+              <ElFormItem :label="t('erp.quantityInStock')" prop="quantityInStock">
+                <ElInputNumber
+                  v-model="form.quantityInStock"
+                  :min="1"
+                  :step="1"
+                  style="width: 100%"
+                />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="8">
+              <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
+                <ElInput
+                  v-model="displayCost"
+                  placeholder="0"
+                  class="custom-price-input cost-input"
+                />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="8">
+              <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
+                <ElInput
+                  v-model="displayPrice"
+                  placeholder="0"
+                  class="custom-price-input sell-input"
+                />
+              </ElFormItem>
+            </ElCol>
+          </ElRow>
+        </template>
 
         <ElFormItem :label="t('erp.category')" prop="category">
           <ElSelect
@@ -1414,12 +1514,12 @@ const checkAndApplyExistingProduct = async (criteria: {
   barcode?: string
   sku?: string
   name?: string
-  classifierId?: number
+  classifierId?: string | number
 }): Promise<ProductType | null> => {
   const barcode = (criteria.barcode || '').trim()
   const sku = (criteria.sku || '').trim()
   const name = (criteria.name || '').trim()
-  const classifierId = criteria.classifierId
+  const classifierId = criteria.classifierId ? String(criteria.classifierId).trim() : ''
 
   if (!barcode && !sku && !name && !classifierId) {
     return null
@@ -1427,9 +1527,9 @@ const checkAndApplyExistingProduct = async (criteria: {
 
   // 1. Fast check in current loaded tableData
   let found: ProductType | undefined = tableData.value.find((p) => {
-    if (barcode && p.shtrix_code && p.shtrix_code === barcode) return true
+    if (barcode && p.shtrix_code && String(p.shtrix_code).trim() === barcode) return true
     if (sku && p.SKU && p.SKU.toLowerCase() === sku.toLowerCase()) return true
-    if (classifierId && p.classifier_id && p.classifier_id === classifierId) return true
+    if (classifierId && p.classifier_id && String(p.classifier_id) === classifierId) return true
     if (name && p.productName && p.productName.toLowerCase() === name.toLowerCase()) return true
     return false
   })
@@ -1494,7 +1594,7 @@ const onShtrixCodeBlur = async () => {
 
 const applyClassifierToForm = async (item: any) => {
   if (!item) return
-  form.classifier_id = item.id
+  form.classifier_id = item.id ? String(item.id) : (item.mxik_code ? String(item.mxik_code) : '')
   form.productName = item.mxik_name || ''
   form.brand_name = item.brand_name || ''
   form.mxik_code = item.mxik_code || ''
@@ -1522,7 +1622,7 @@ const applyClassifierToForm = async (item: any) => {
     barcode: item.shtrix_code,
     sku: form.SKU,
     name: item.mxik_name,
-    classifierId: item.id
+    classifierId: form.classifier_id
   })
 
   if (!existing) {
@@ -1532,12 +1632,17 @@ const applyClassifierToForm = async (item: any) => {
 }
 
 const handleClassifierSelect = (val: number | string) => {
+  if (!val) return
   const found = classifierOptions.value.find(
-    (c) => c.id === val || c.mxik_code === val || c.shtrix_code === val
+    (c) =>
+      String(c.id) === String(val) ||
+      String(c.mxik_code) === String(val) ||
+      String(c.shtrix_code) === String(val)
   )
   if (found) {
     applyClassifierToForm(found)
   }
+  selectedClassifierId.value = undefined
 }
 
 const handleBarcodeScan = async () => {
@@ -2076,22 +2181,41 @@ const deleteFromDetail = () => {
       letter-spacing: 0.5px;
     }
   }
+
+  .uneditable-stock-box {
+    transition: all 0.2s ease;
+    user-select: none;
+    cursor: not-allowed;
+  }
+
+  .stock-summary-calc {
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+  }
 }
 </style>
 
 <!-- Teleported Classifier Dropdown Popper Styling (Unscoped for document.body teleports) -->
 <style lang="less">
 .classifier-select-popper {
-  max-width: 820px !important;
+  width: var(--el-select-input-width, 100%) !important;
+  min-width: 620px !important;
+  max-width: 950px !important;
   border-radius: 12px !important;
   box-shadow:
     0 16px 36px -4px rgba(0, 0, 0, 0.16),
     0 4px 12px -2px rgba(0, 0, 0, 0.08) !important;
   border: 1px solid #e2e8f0 !important;
   overflow: hidden !important;
+  z-index: 9999 !important;
 
   .el-select-dropdown__wrap {
     max-height: 420px !important;
+  }
+
+  .el-select-dropdown__empty {
+    padding: 16px 20px !important;
+    white-space: normal !important;
+    line-height: 1.5 !important;
   }
 
   .el-select-dropdown__list {

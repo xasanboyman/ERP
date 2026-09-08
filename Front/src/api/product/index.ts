@@ -20,7 +20,7 @@ export interface ProductType {
   cost: number
   quantityInStock: number
   status?: number
-  classifier_id?: number
+  classifier_id?: string | number
   shtrix_code?: string
   mxik_code?: string
   brand_name?: string
@@ -55,7 +55,7 @@ export const checkExistingProductApi = (params: {
   barcode?: string
   sku?: string
   name?: string
-  classifier_id?: number
+  classifier_id?: string | number
 }) => {
   return request.get<{
     code: number
