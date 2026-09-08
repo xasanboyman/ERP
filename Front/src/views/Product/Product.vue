@@ -1630,6 +1630,22 @@ const detectCategory = (item: any): string => {
     return 'Plastmassa va idishlar'
   }
   if (
+    text.includes('elektr') ||
+    text.includes('plita') ||
+    text.includes('pech') ||
+    text.includes('muzlat') ||
+    text.includes('kir yuv') ||
+    text.includes('televizor') ||
+    text.includes('telefon') ||
+    text.includes('gaz') ||
+    text.includes('gefest') ||
+    text.includes('artel') ||
+    text.includes('konditsioner') ||
+    text.includes('changyutgich')
+  ) {
+    return 'Maishiy texnika va elektronika'
+  }
+  if (
     text.includes('oziq') ||
     text.includes('non') ||
     text.includes('un') ||
@@ -1642,18 +1658,6 @@ const detectCategory = (item: any): string => {
     text.includes("yog'")
   ) {
     return 'Oziq-ovqat mahsulotlari'
-  }
-  if (
-    text.includes('elektr') ||
-    text.includes('plita') ||
-    text.includes('pech') ||
-    text.includes('muzlat') ||
-    text.includes('kir yuv') ||
-    text.includes('televizor') ||
-    text.includes('telefon') ||
-    text.includes('gaz')
-  ) {
-    return 'Maishiy texnika va elektronika'
   }
   if (
     text.includes('kiyim') ||
