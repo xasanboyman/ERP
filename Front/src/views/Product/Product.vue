@@ -512,83 +512,32 @@
         </div>
       </div>
 
-      <!-- Existing Product Detection Alert Banner -->
+      <!-- Existing Product Detection Compact Smart Banner -->
       <transition name="el-zoom-in-top">
         <div
           v-if="dialogType === 'add' && existingProduct"
-          class="existing-product-card mb-20px p-16px rounded-12px bg-amber-500/10 dark:bg-amber-500/15 border-2 border-amber-500/40 shadow-md"
+          class="existing-product-alert mb-14px px-14px py-10px rounded-10px bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/35 flex items-center justify-between flex-wrap gap-2 text-xs"
         >
-          <div
-            class="flex items-center justify-between flex-wrap gap-2 mb-12px pb-8px border-b border-amber-500/20"
-          >
-            <div class="flex items-center gap-8px text-amber-500 font-bold text-base">
-              <Icon icon="ep:warning-filled" class="text-20px animate-bounce" />
-              <span>Omborda Mavjud Mahsulot Topildi!</span>
-            </div>
-            <ElTag type="warning" effect="dark" size="default" class="font-bold">
-              <Icon icon="ep:box" class="mr-4px inline" />
-              Bazada Mavjud
-            </ElTag>
-          </div>
-
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-10px mb-12px text-xs">
-            <div
-              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
-            >
-              <span class="text-gray-500 dark:text-gray-400 block mb-3px"
-                >Hozirgi Ombor Qoldig'i:</span
-              >
-              <span class="font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
-                {{ formatMoney(existingProduct.quantityInStock) }}
-                {{ existingProduct.unit || 'dona' }}
-              </span>
-            </div>
-            <div
-              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
-            >
-              <span class="text-gray-500 dark:text-gray-400 block mb-3px">Eski Tannarxi:</span>
-              <span class="font-mono font-bold text-base text-amber-600 dark:text-amber-400">
-                ${{ formatMoney(existingProduct.cost) }}
-              </span>
-            </div>
-            <div
-              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
-            >
-              <span class="text-gray-500 dark:text-gray-400 block mb-3px">Eski Sotish Narxi:</span>
-              <span class="font-mono font-bold text-base text-blue-600 dark:text-blue-400">
-                ${{ formatMoney(existingProduct.price) }}
-              </span>
-            </div>
-            <div
-              class="stat-pill bg-white dark:bg-gray-800 p-10px rounded-8px border border-amber-300 dark:border-amber-800 shadow-sm"
-            >
-              <span class="text-gray-500 dark:text-gray-400 block mb-3px">Kategoriyasi:</span>
-              <span class="font-semibold text-sm text-gray-800 dark:text-gray-200 truncate block">
-                {{ existingProduct.category || 'Boshqalar' }}
-              </span>
-            </div>
+          <div class="flex items-center gap-8px text-amber-600 dark:text-amber-400 font-semibold">
+            <span class="flex h-2.5 w-2.5 relative">
+              <span
+                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"
+              ></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+            </span>
+            <Icon icon="ep:box" class="text-15px text-amber-500" />
+            <span>
+              <strong>Omborda mavjud tovar:</strong> Ma'lumotlar va narxlar avtomatik to'ldirildi. Yangi kirim sonini kiriting.
+            </span>
           </div>
 
           <div
-            class="stock-calc-banner p-10px rounded-8px bg-amber-500/20 dark:bg-amber-950/50 border border-amber-500/30 flex items-center justify-between flex-wrap gap-2 text-xs"
+            class="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-white/80 dark:bg-black/50 px-10px py-4px rounded-6px border border-emerald-500/30 flex items-center gap-6px"
           >
-            <div class="flex items-center gap-6px text-amber-900 dark:text-amber-200">
-              <Icon icon="ep:info-filled" class="text-14px" />
-              <span>Yangi kirim sonini kiriting. U avtomatik tarzda eski qoldiqqa qo'shiladi:</span>
-            </div>
-            <div
-              class="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 bg-white/80 dark:bg-black/40 px-10px py-4px rounded-6px border border-emerald-500/30"
-            >
-              Eski ({{ formatMoney(existingProduct.quantityInStock) }}) + Yangi ({{
-                formatMoney(form.quantityInStock || 0)
-              }}) = Jami
-              {{
-                formatMoney(
-                  (existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0)
-                )
-              }}
-              {{ form.unit || 'dona' }}
-            </div>
+            <Icon icon="ep:circle-check" class="text-14px text-emerald-500" />
+            <span>
+              Hozirgi qoldiq: {{ formatMoney(existingProduct.quantityInStock) }} {{ existingProduct.unit || 'dona' }}
+            </span>
           </div>
         </div>
       </transition>

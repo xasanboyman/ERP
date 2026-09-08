@@ -68,8 +68,8 @@ const dialogStyle = computed(() => {
     }
   }
   return {
-    maxHeight: unref(computedMaxHeight),
-    height: 'auto',
+    maxHeight: '100%',
+    height: '100%',
     width: '100%'
   }
 })
@@ -193,7 +193,7 @@ const dialogStyle = computed(() => {
   }
 
   &__body {
-    flex: 1 1 auto !important;
+    flex: 1 1 0% !important;
     min-height: 0 !important;
     padding: 16px 20px !important;
     background-color: var(--el-bg-color-overlay, #ffffff) !important;
@@ -204,13 +204,21 @@ const dialogStyle = computed(() => {
     box-sizing: border-box !important;
 
     > .el-scrollbar {
-      flex: 1 1 auto !important;
+      flex: 1 1 0% !important;
+      display: flex !important;
+      flex-direction: column !important;
       width: 100% !important;
-      height: auto !important;
+      height: 100% !important;
+      min-height: 0 !important;
 
       > .el-scrollbar__wrap {
+        flex: 1 1 0% !important;
+        width: 100% !important;
+        height: 100% !important;
         max-height: 100% !important;
-        height: auto !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
 
         > .el-scrollbar__view {
           min-height: 100% !important;
@@ -259,13 +267,19 @@ const dialogStyle = computed(() => {
   }
 }
 
-/* Hide scrollbar track visually while keeping 100% scrollability */
+/* Stylish, visible scrollbar for all dialogs */
 .el-scrollbar__bar {
-  opacity: 0 !important;
+  opacity: 0.6 !important;
   transition: opacity 0.3s !important;
+  z-index: 20 !important;
 }
 
 .el-scrollbar:hover .el-scrollbar__bar {
-  opacity: 0.5 !important;
+  opacity: 1 !important;
+}
+
+.el-scrollbar__thumb {
+  background-color: rgba(148, 163, 184, 0.6) !important;
+  border-radius: 4px !important;
 }
 </style>
