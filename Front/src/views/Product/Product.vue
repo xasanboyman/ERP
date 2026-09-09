@@ -674,34 +674,77 @@
               >
                 <span class="flex items-center gap-6px">
                   <Icon icon="ep:picture" class="text-blue-500" /> Mahsulot Rasmi
+                  <span
+                    v-if="imageFetching"
+                    class="text-[10px] text-blue-500 flex items-center gap-3px font-normal"
+                  >
+                    <Icon icon="ep:loading" class="animate-spin" /> Qidirilmoqda...
+                  </span>
+                  <span
+                    v-else-if="form.image_url"
+                    class="text-[10px] text-emerald-500 font-medium ml-2px"
+                  >
+                    (Bazada mavjud)
+                  </span>
                 </span>
                 <span
                   v-if="form.image_url"
-                  class="text-[11px] text-red-500 cursor-pointer hover:underline"
-                  @click="form.image_url = ''"
+                  class="text-[11px] text-red-500 cursor-pointer hover:underline flex items-center gap-2px"
+                  @click="removeProductImage"
                 >
-                  Rasmni o'chirish
+                  <Icon icon="ep:delete" class="text-11px" /> Rasmni o'chirish
                 </span>
               </div>
               <div class="flex items-center gap-12px">
+                <!-- If image URL is present -->
                 <div
                   v-if="form.image_url"
-                  class="relative w-64px h-64px rounded-8px overflow-hidden border border-gray-300 dark:border-gray-700 flex-shrink-0 group shadow-xs"
+                  class="relative w-64px h-64px rounded-8px overflow-hidden border border-emerald-500/40 dark:border-emerald-600/50 flex-shrink-0 group shadow-xs bg-slate-900 flex items-center justify-center"
                 >
-                  <img :src="form.image_url" class="w-full h-full object-cover" />
+                  <img
+                    :src="form.image_url"
+                    class="w-full h-full object-cover"
+                    @error="handleImageError($event, form.productName)"
+                  />
                   <div
                     class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-                    @click="form.image_url = ''"
+                    title="Rasmni o'chirish"
+                    @click="removeProductImage"
                   >
                     <Icon icon="ep:delete" class="text-white text-16px" />
                   </div>
                 </div>
+
+                <!-- Loading while fetching -->
+                <div
+                  v-else-if="imageFetching"
+                  class="w-64px h-64px rounded-8px border border-blue-400/40 bg-blue-500/10 flex items-center justify-center flex-shrink-0 text-blue-500"
+                >
+                  <Icon icon="ep:loading" class="text-22px animate-spin" />
+                </div>
+
+                <!-- Fallback Letters Avatar ("latters") when product name/brand exists -->
+                <div
+                  v-else-if="form.productName || form.brand_name"
+                  class="relative w-64px h-64px rounded-8px overflow-hidden border border-blue-400/30 dark:border-blue-700/50 flex-shrink-0 shadow-xs flex items-center justify-center bg-slate-900 select-none"
+                  :title="form.productName"
+                >
+                  <img
+                    :src="getProductFallbackAvatar(form.productName || form.brand_name)"
+                    :alt="form.productName"
+                    class="w-full h-full object-cover"
+                    @error="handleImageError($event, form.productName)"
+                  />
+                </div>
+
+                <!-- Default empty state before any search -->
                 <div
                   v-else
                   class="w-64px h-64px rounded-8px border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center flex-shrink-0 text-gray-400"
                 >
                   <Icon icon="ep:picture" class="text-22px opacity-40" />
                 </div>
+
                 <div class="flex flex-col gap-4px flex-1">
                   <ElUpload
                     action="#"
@@ -715,7 +758,15 @@
                       {{ form.image_url ? "O'zgartirish" : 'Rasm yuklash' }}
                     </ElButton>
                   </ElUpload>
-                  <span class="text-[10px] text-gray-400">JPG, PNG, WEBP (maks 5MB)</span>
+                  <span class="text-[10px] text-gray-400">
+                    {{
+                      form.image_url
+                        ? 'Boshqa rasm yuklash mumkin'
+                        : form.productName
+                          ? 'Harfli belgi (yangi rasm yuklash mumkin)'
+                          : 'JPG, PNG, WEBP (maks 5MB)'
+                    }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -767,7 +818,11 @@
                   </ElCol>
                   <ElCol :span="8">
                     <ElFormItem :label="t('erp.mxikCode')" prop="mxik_code" class="!mb-8px">
-                      <ElInput v-model="form.mxik_code" placeholder="02201001001001002" />
+                      <ElInput
+                        v-model="form.mxik_code"
+                        placeholder="02201001001001002"
+                        @blur="onMxikCodeBlur"
+                      />
                     </ElFormItem>
                   </ElCol>
                 </ElRow>
@@ -972,34 +1027,77 @@
               >
                 <span class="flex items-center gap-6px">
                   <Icon icon="ep:picture" class="text-blue-500" /> Mahsulot Rasmi
+                  <span
+                    v-if="imageFetching"
+                    class="text-[10px] text-blue-500 flex items-center gap-3px font-normal"
+                  >
+                    <Icon icon="ep:loading" class="animate-spin" />
+                  </span>
+                  <span
+                    v-else-if="form.image_url"
+                    class="text-[10px] text-emerald-500 font-medium ml-2px"
+                  >
+                    (Bazada mavjud)
+                  </span>
                 </span>
                 <span
                   v-if="form.image_url"
-                  class="text-[11px] text-red-500 cursor-pointer hover:underline"
-                  @click="form.image_url = ''"
+                  class="text-[11px] text-red-500 cursor-pointer hover:underline flex items-center gap-2px"
+                  @click="removeProductImage"
                 >
-                  O'chirish
+                  <Icon icon="ep:delete" class="text-11px" /> O'chirish
                 </span>
               </div>
               <div class="flex flex-col items-center gap-10px">
+                <!-- If image URL is present -->
                 <div
                   v-if="form.image_url"
-                  class="relative w-140px h-140px rounded-12px overflow-hidden border border-gray-300 dark:border-gray-700 group shadow-md"
+                  class="relative w-140px h-140px rounded-12px overflow-hidden border border-emerald-500/40 dark:border-emerald-600/50 group shadow-md bg-slate-900 flex items-center justify-center"
                 >
-                  <img :src="form.image_url" class="w-full h-full object-cover" />
+                  <img
+                    :src="form.image_url"
+                    class="w-full h-full object-cover"
+                    @error="handleImageError($event, form.productName)"
+                  />
                   <div
                     class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-                    @click="form.image_url = ''"
+                    title="Rasmni o'chirish"
+                    @click="removeProductImage"
                   >
                     <Icon icon="ep:delete" class="text-white text-20px" />
                   </div>
                 </div>
+
+                <!-- Loading state -->
+                <div
+                  v-else-if="imageFetching"
+                  class="w-140px h-140px rounded-12px border border-blue-400/40 bg-blue-500/10 flex items-center justify-center text-blue-500"
+                >
+                  <Icon icon="ep:loading" class="text-36px animate-spin" />
+                </div>
+
+                <!-- Letters avatar ("latters") when product name/brand exists -->
+                <div
+                  v-else-if="form.productName || form.brand_name"
+                  class="relative w-140px h-140px rounded-12px overflow-hidden border border-blue-400/30 dark:border-blue-700/50 shadow-md flex items-center justify-center bg-slate-900 select-none"
+                  :title="form.productName"
+                >
+                  <img
+                    :src="getProductFallbackAvatar(form.productName || form.brand_name)"
+                    :alt="form.productName"
+                    class="w-full h-full object-cover"
+                    @error="handleImageError($event, form.productName)"
+                  />
+                </div>
+
+                <!-- Default empty state -->
                 <div
                   v-else
                   class="w-140px h-140px rounded-12px border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-400"
                 >
                   <Icon icon="ep:picture" class="text-36px opacity-40" />
                 </div>
+
                 <ElUpload
                   action="#"
                   :auto-upload="false"
@@ -1067,6 +1165,7 @@
                     <ElInput
                       v-model="form.shtrix_code"
                       @input="(val: string) => (form.shtrix_code = val.replace(/\D/g, ''))"
+                      @blur="onShtrixCodeBlur"
                     />
                   </ElFormItem>
                 </ElCol>
@@ -1077,7 +1176,7 @@
                 </ElCol>
                 <ElCol :span="8">
                   <ElFormItem :label="t('erp.mxikCode')" prop="mxik_code" class="!mb-8px">
-                    <ElInput v-model="form.mxik_code" />
+                    <ElInput v-model="form.mxik_code" @blur="onMxikCodeBlur" />
                   </ElFormItem>
                 </ElCol>
               </ElRow>
@@ -1590,6 +1689,9 @@ import {
   getProductMainImage,
   getProductImageGallery,
   fetchTasnifPictureNames,
+  getProductFallbackAvatar,
+  getProductInitials,
+  getTasnifFileUrl,
   handleImageError
 } from '@/utils/productImages'
 
@@ -1652,6 +1754,13 @@ const classifierOptions = ref<any[]>([])
 const selectedClassifierId = ref<number | string | undefined>(undefined)
 const existingProduct = ref<ProductType | null>(null)
 const checkingExistingLoading = ref(false)
+const imageFetching = ref(false)
+const userRemovedImage = ref(false)
+
+const removeProductImage = () => {
+  form.image_url = ''
+  userRemovedImage.value = true
+}
 
 const form = reactive<ProductType>({
   id: '',
@@ -1953,6 +2062,96 @@ const remoteSearchClassifier = (query: string) => {
   }, 150)
 }
 
+const autoFetchProductImage = async (criteria: {
+  image_url?: string
+  mxik_code?: string
+  shtrix_code?: string
+  productName?: string
+  brand_name?: string
+  id?: string
+}) => {
+  if (userRemovedImage.value) return
+
+  // 1. If explicit valid image_url already passed, use it
+  if (criteria.image_url && criteria.image_url.trim()) {
+    form.image_url = criteria.image_url.trim()
+    return
+  }
+
+  imageFetching.value = true
+  try {
+    const barcode = (criteria.shtrix_code || form.shtrix_code || '').trim()
+    const mxik = (criteria.mxik_code || form.mxik_code || '').trim()
+    const name = (criteria.productName || form.productName || '').trim()
+
+    // 2. Check loaded tableData (in-memory fast check)
+    const matchInTable = tableData.value.find((p) => {
+      if (p.image_url && p.image_url.trim()) {
+        if (barcode && p.shtrix_code && String(p.shtrix_code).trim() === barcode) return true
+        if (mxik && p.mxik_code && String(p.mxik_code).trim() === mxik) return true
+        if (name && p.productName && p.productName.toLowerCase() === name.toLowerCase()) return true
+      }
+      return false
+    })
+
+    if (matchInTable && matchInTable.image_url && matchInTable.image_url.trim()) {
+      form.image_url = matchInTable.image_url.trim()
+      return
+    }
+
+    // 3. Check database products via checkExistingProductApi (even if stock is 0)
+    if (barcode || mxik || name) {
+      try {
+        const res: any = await checkExistingProductApi({
+          barcode: barcode || undefined,
+          sku: barcode ? `SKU-${barcode}` : undefined,
+          name: name || undefined,
+          classifier_id: mxik || undefined
+        })
+        const info = res?.data?.data || (res?.data?.exists !== undefined ? res?.data : res)
+        const prod = info?.data || info
+        if (prod && prod.image_url && prod.image_url.trim()) {
+          form.image_url = prod.image_url.trim()
+          return
+        }
+      } catch (e) {
+        // Fall through to Tasnif
+      }
+    }
+
+    // 4. Check Tasnif Soliq API by mxik_code
+    if (mxik) {
+      const pictures = await fetchTasnifPictureNames(mxik)
+      if (pictures && pictures.length > 0) {
+        form.image_url = getTasnifFileUrl(pictures[0])
+        return
+      }
+    }
+
+    // 5. If mxik_code wasn't provided or didn't return pictures, but we have a barcode:
+    if (barcode && barcode.length >= 6) {
+      try {
+        const clsRes = await getClassifierByBarcodeApi(barcode)
+        const clsData = clsRes?.data
+        if (clsData && clsData.mxik_code) {
+          if (!form.mxik_code) form.mxik_code = clsData.mxik_code
+          const pictures = await fetchTasnifPictureNames(clsData.mxik_code)
+          if (pictures && pictures.length > 0) {
+            form.image_url = getTasnifFileUrl(pictures[0])
+            return
+          }
+        }
+      } catch (e) {
+        // Fall through
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to auto-fetch product image:', err)
+  } finally {
+    imageFetching.value = false
+  }
+}
+
 const checkAndApplyExistingProduct = async (criteria: {
   barcode?: string
   sku?: string
@@ -2011,13 +2210,27 @@ const checkAndApplyExistingProduct = async (criteria: {
     form.brand_name = found.brand_name || form.brand_name
     form.attribute_name = found.attribute_name || form.attribute_name
     form.mxik_code = found.mxik_code || form.mxik_code
-    form.image_url = found.image_url || form.image_url
+    form.image_url = found.image_url || form.image_url || ''
     form.remark = found.remark || form.remark
     form.min_stock =
       found.min_stock !== undefined && found.min_stock !== null ? found.min_stock : 10
     form.expiration_date = found.expiration_date || ''
     // Default the quantity field to 1 (new batch count)
     form.quantityInStock = 1
+
+    if (
+      !form.image_url &&
+      !userRemovedImage.value &&
+      (form.mxik_code || form.shtrix_code || form.productName)
+    ) {
+      autoFetchProductImage({
+        image_url: form.image_url,
+        mxik_code: form.mxik_code,
+        shtrix_code: form.shtrix_code,
+        productName: form.productName,
+        brand_name: form.brand_name
+      })
+    }
 
     ElNotification({
       title: 'Omborda mavjud mahsulot topildi!',
@@ -2062,6 +2275,7 @@ const clearProductFields = () => {
   form.expiration_date = ''
   form.remark = ''
   form.packagings = []
+  userRemovedImage.value = false
 }
 
 const detectCategory = (item: any): string => {
@@ -2095,20 +2309,19 @@ const detectCategory = (item: any): string => {
   }
   if (
     text.includes('tuz') ||
-    text.includes('ziravor') ||
-    text.includes('qalampir') ||
     text.includes('murch') ||
-    text.includes('sous') ||
-    text.includes('sirka')
+    text.includes('ziravor') ||
+    text.includes('dori-darmon')
   ) {
     return 'Tuz va ziravorlar'
   }
   if (
-    text.includes('plast') ||
+    text.includes('plastmassa') ||
     text.includes('idish') ||
+    text.includes('tarelka') ||
+    text.includes('stakan') ||
     text.includes('paket') ||
-    text.includes('quti') ||
-    text.includes('upakovka')
+    text.includes('meshok')
   ) {
     return 'Plastmassa va idishlar'
   }
@@ -2131,8 +2344,9 @@ const detectCategory = (item: any): string => {
   if (
     text.includes('oziq') ||
     text.includes('non') ||
-    text.includes('un') ||
     text.includes('shakar') ||
+    text.includes('un') ||
+    text.includes('guruch') ||
     text.includes('shokolad') ||
     text.includes('konfet') ||
     text.includes("go'sht") ||
@@ -2168,8 +2382,35 @@ const detectCategory = (item: any): string => {
 }
 
 const onShtrixCodeBlur = async () => {
-  if (dialogType.value === 'add' && form.shtrix_code && form.shtrix_code.length >= 4) {
-    await checkAndApplyExistingProduct({ barcode: form.shtrix_code })
+  if (form.shtrix_code && form.shtrix_code.length >= 4) {
+    if (dialogType.value === 'add') {
+      const existing = await checkAndApplyExistingProduct({ barcode: form.shtrix_code })
+      if (!existing && !form.productName) {
+        const res = await getClassifierByBarcodeApi(form.shtrix_code)
+        if (res && res.data) {
+          await applyClassifierToForm(res.data)
+        }
+      }
+    }
+    if (!form.image_url && !userRemovedImage.value) {
+      await autoFetchProductImage({
+        shtrix_code: form.shtrix_code,
+        mxik_code: form.mxik_code,
+        productName: form.productName,
+        brand_name: form.brand_name
+      })
+    }
+  }
+}
+
+const onMxikCodeBlur = async () => {
+  if (form.mxik_code && form.mxik_code.length >= 8 && !form.image_url && !userRemovedImage.value) {
+    await autoFetchProductImage({
+      mxik_code: form.mxik_code,
+      shtrix_code: form.shtrix_code,
+      productName: form.productName,
+      brand_name: form.brand_name
+    })
   }
 }
 
@@ -2178,6 +2419,7 @@ const applyClassifierToForm = async (item: any) => {
 
   // 1. Reset previous product data first so old prices/ids don't linger
   clearProductFields()
+  userRemovedImage.value = false
 
   // 2. Populate classifier attributes
   form.classifier_id = item.id ? String(item.id) : item.mxik_code ? String(item.mxik_code) : ''
@@ -2224,6 +2466,17 @@ const applyClassifierToForm = async (item: any) => {
     form.quantityInStock = 1
     ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
   }
+
+  // 5. Auto-fetch real product image from database or Tasnif Soliq (even if not in warehouse stock!)
+  if (!userRemovedImage.value) {
+    await autoFetchProductImage({
+      image_url: item.image_url || (existing ? existing.image_url : undefined),
+      mxik_code: item.mxik_code || form.mxik_code,
+      shtrix_code: item.shtrix_code || form.shtrix_code,
+      productName: item.mxik_name || form.productName,
+      brand_name: item.brand_name || form.brand_name
+    })
+  }
 }
 
 const handleClassifierSelect = (val: number | string) => {
@@ -2250,6 +2503,7 @@ const handleBarcodeScan = async () => {
   try {
     // 1. Reset old product fields before scanning new barcode
     clearProductFields()
+    userRemovedImage.value = false
 
     // 2. First check if barcode already exists in warehouse!
     const existing = await checkAndApplyExistingProduct({ barcode: code })
@@ -2275,6 +2529,9 @@ const handleBarcodeScan = async () => {
       form.SKU = `SKU-${code}`
       form.category = 'Boshqalar'
       barcodeSearch.value = ''
+      if (!userRemovedImage.value) {
+        await autoFetchProductImage({ shtrix_code: code })
+      }
       nextTick(() => {
         barcodeInputRef.value?.focus?.()
       })
@@ -2297,20 +2554,25 @@ const handleImageChange = async (uploadFile: any) => {
   const file = uploadFile.raw
   if (!file) return
   try {
+    imageFetching.value = true
     const res = await uploadProductImageApi(file)
     if (res && res.data && res.data.url) {
       form.image_url = res.data.url
+      userRemovedImage.value = false
       ElMessage.success('Rasm muvaffaqiyatli yuklandi')
     }
   } catch (error) {
     console.error('Failed to upload image:', error)
     ElMessage.error('Rasm yuklashda xatolik yuz berdi')
+  } finally {
+    imageFetching.value = false
   }
 }
 
 const openAddDialog = () => {
   dialogType.value = 'add'
   resetForm()
+  userRemovedImage.value = false
   dialogVisible.value = true
   nextTick(() => {
     barcodeInputRef.value?.focus?.()
@@ -2320,11 +2582,23 @@ const openAddDialog = () => {
 const openEditDialog = (row: ProductType) => {
   dialogType.value = 'edit'
   resetForm()
+  userRemovedImage.value = false
   Object.assign(form, row)
   form.min_stock = row.min_stock !== undefined && row.min_stock !== null ? row.min_stock : 10
   form.expiration_date = row.expiration_date || ''
   form.packagings = row.packagings ? JSON.parse(JSON.stringify(row.packagings)) : []
   dialogVisible.value = true
+
+  // If no explicit image_url saved in product row, auto-fetch from Tasnif or related products in DB
+  if (!form.image_url && (row.mxik_code || row.shtrix_code || row.productName)) {
+    autoFetchProductImage({
+      image_url: row.image_url,
+      mxik_code: row.mxik_code,
+      shtrix_code: row.shtrix_code,
+      productName: row.productName,
+      brand_name: row.brand_name
+    })
+  }
 }
 
 const handleSubmit = async () => {

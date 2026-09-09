@@ -5,9 +5,26 @@ import { reactive } from 'vue'
  * Fetches real picture filenames from Tasnif Soliq API with Vue reactivity & caching.
  */
 
-const TASNIF_FILE_CDN = 'https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/file/'
-const TASNIF_PICS_API =
+export const TASNIF_FILE_CDN =
+  'https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/file/'
+export const TASNIF_PICS_API =
   'https://tasnif.soliq.uz/api/cls-api/integration-mxik/references/get/mxik/picture-names?mxik_code='
+
+export const getTasnifFileUrl = (fileName: string): string => {
+  if (!fileName) return ''
+  return fileName.startsWith('http') ? fileName : `${TASNIF_FILE_CDN}${fileName}`
+}
+
+export const getProductInitials = (productName?: string): string => {
+  if (!productName || !productName.trim()) return '?'
+  const parts = productName
+    .trim()
+    .split(/[\s,._-]+/)
+    .filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
 
 // Vue reactive in-memory cache for picture name arrays per MXIK code
 const pictureCache = reactive<Record<string, string[]>>({})
