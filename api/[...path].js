@@ -124,8 +124,16 @@ async function ensureSchema(sql) {
         image_url TEXT,
         unit VARCHAR,
         remark TEXT,
+        min_stock INTEGER DEFAULT 10,
+        expiration_date VARCHAR,
         "createTime" VARCHAR
       );
+    `;
+    await sql`
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS min_stock INTEGER DEFAULT 10;
+    `;
+    await sql`
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS expiration_date VARCHAR;
     `;
     await sql`
       CREATE TABLE IF NOT EXISTS product_packagings (
@@ -1062,6 +1070,25 @@ export default async function handler(req, res) {
         if (rows.length === 0 && name) {
           rows = await sql`SELECT * FROM products WHERE LOWER("productName") = LOWER(${name}) LIMIT 1`;
         }
+        if (rows.length === 0 && name && name.length >= 4) {
+          const cleanName = name.toLowerCase();
+          const allProducts = await sql`SELECT * FROM products LIMIT 500`;
+          const matched = allProducts.find(p => {
+            const pName = (p.productName || '').toLowerCase();
+            if (pName === cleanName) return true;
+            if (pName.includes(cleanName) || cleanName.includes(pName)) return true;
+            if (p.brand_name && cleanName.includes(p.brand_name.toLowerCase())) {
+              const sizes = ['1,0', '1.0', '1l', '1,5', '1.5', '1.5l', '0,5', '0.5', '2,0', '2.0', '250', '330', '500'];
+              for (const sz of sizes) {
+                if (pName.includes(sz) && cleanName.includes(sz)) return true;
+              }
+            }
+            return false;
+          });
+          if (matched) {
+            rows = [matched];
+          }
+        }
 
         if (rows.length > 0) {
           return res.status(200).json({ code: 0, exists: true, data: rows[0] });
@@ -1103,6 +1130,7 @@ export default async function handler(req, res) {
           unit,
           remark,
           expiration_date,
+          min_stock,
           classifier_id,
           additional_qty,
           is_replenish,
@@ -1124,6 +1152,7 @@ export default async function handler(req, res) {
         }
 
         const clsId = classifier_id !== undefined && classifier_id !== null && String(classifier_id).trim() !== '' ? String(classifier_id).trim() : (existing ? existing.classifier_id : null);
+        const minStk = min_stock !== undefined && min_stock !== null && min_stock !== '' ? parseInt(min_stock, 10) : (existing && existing.min_stock !== undefined ? existing.min_stock : 10);
 
         if (existing) {
           // Product exists in warehouse: add stock
@@ -1163,7 +1192,8 @@ export default async function handler(req, res) {
                 unit = ${unit || existing.unit},
                 remark = ${remark !== undefined ? remark : existing.remark},
                 expiration_date = ${expiration_date !== undefined ? expiration_date : existing.expiration_date},
-                classifier_id = ${clsId}
+                classifier_id = ${clsId},
+                min_stock = ${minStk}
             WHERE id = ${existing.id}
             RETURNING *
           `;
@@ -1208,13 +1238,13 @@ export default async function handler(req, res) {
             INSERT INTO products (
               id, "productName", "SKU", category, price, cost, "quantityInStock", status,
               shtrix_code, mxik_code, brand_name, attribute_name, image_url, unit, remark,
-              expiration_date, classifier_id, "createTime"
+              expiration_date, classifier_id, min_stock, "createTime"
             )
             VALUES (
               ${newId}, ${productName || 'Yangi Mahsulot'}, ${newSKU}, ${category || 'Ichimliklar va suvlar'},
               ${pr}, ${cst}, ${stock}, ${stat}, ${shtrix_code || null}, ${mxik_code || null},
               ${brand_name || null}, ${attribute_name || null}, ${image_url || null}, ${unit || 'dona'},
-              ${remark || null}, ${expiration_date || null}, ${clsId}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+              ${remark || null}, ${expiration_date || null}, ${clsId}, ${minStk}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
             )
             RETURNING *
           `;
@@ -1630,11 +1660,58 @@ export default async function handler(req, res) {
         sql`SELECT count(*) FROM sales`,
         sql`SELECT * FROM sales ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
       ]);
+
+      const saleIds = rows.map(r => r.id).filter(Boolean);
+      const itemsMap = {};
+      if (saleIds.length > 0) {
+        try {
+          const items = await sql`SELECT * FROM sale_items WHERE sale_id = ANY(${saleIds}) ORDER BY id ASC`;
+          for (const it of items) {
+            if (!itemsMap[it.sale_id]) {
+              itemsMap[it.sale_id] = [];
+            }
+            itemsMap[it.sale_id].push({
+              ...it,
+              price: parseFloat(it.price) || 0,
+              cost: parseFloat(it.cost) || 0,
+              quantity: parseFloat(it.quantity) || 1,
+              total: parseFloat(it.total) || ((parseFloat(it.price) || 0) * (parseFloat(it.quantity) || 1))
+            });
+          }
+        } catch (e) {
+          console.warn('Batch sale_items error:', e.message);
+        }
+      }
+
+      const listWithItems = rows.map(r => {
+        let its = itemsMap[r.id] || [];
+        if (its.length === 0 && parseFloat(r.total_amount) > 0) {
+          its = [{
+            id: 'ITEM-' + r.id,
+            sale_id: r.id,
+            product_name: r.remark || 'Ombor mahsuloti',
+            shtrix_code: 'CHK-' + (r.receipt_number || '').slice(-4),
+            price: parseFloat(r.total_amount) / (parseInt(r.total_items, 10) || 1),
+            cost: (parseFloat(r.total_amount) * 0.7) / (parseInt(r.total_items, 10) || 1),
+            quantity: parseInt(r.total_items, 10) || 1,
+            unit_name: 'dona',
+            total: parseFloat(r.total_amount)
+          }];
+        }
+        return {
+          ...r,
+          total_amount: parseFloat(r.total_amount) || 0,
+          paid_amount: parseFloat(r.paid_amount) || 0,
+          debt_amount: parseFloat(r.debt_amount) || 0,
+          items: its
+        };
+      });
+
       return res.status(200).json({
         code: 0,
         data: {
           total: parseInt(countRes[0].count, 10),
-          list: rows
+          list: listWithItems
         }
       });
     }

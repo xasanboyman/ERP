@@ -28,6 +28,7 @@ export interface ProductType {
   unit?: string
   image_url?: string
   expiration_date?: string
+  min_stock?: number
   remark?: string
   createTime?: string
   additional_qty?: number

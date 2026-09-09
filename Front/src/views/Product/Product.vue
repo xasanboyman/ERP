@@ -67,6 +67,37 @@
     </ContentWrap>
 
     <ContentWrap>
+      <!-- Low Stock Warning Alert Banner -->
+      <transition name="el-zoom-in-top">
+        <div
+          v-if="lowStockItems.length > 0"
+          class="mb-14px px-16px py-10px rounded-10px bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/35 flex items-center justify-between flex-wrap gap-2 text-xs"
+        >
+          <div class="flex items-center gap-8px text-amber-600 dark:text-amber-400 font-semibold">
+            <Icon icon="ep:warning" class="text-16px text-amber-500" />
+            <span>
+              <strong>Kam qolgan mahsulotlar:</strong> {{ lowStockItems.length }} ta mahsulot minimal qoldiqdan kam qolgan. Omborga to'ldirish tavsiya etiladi!
+            </span>
+          </div>
+          <div class="flex items-center gap-6px flex-wrap">
+            <ElTag
+              v-for="item in lowStockItems.slice(0, 4)"
+              :key="item.id"
+              size="small"
+              type="warning"
+              effect="plain"
+              class="cursor-pointer"
+              @click="openEditDialog(item)"
+            >
+              {{ item.productName }}: {{ item.quantityInStock }} {{ item.unit || 'dona' }}
+            </ElTag>
+            <span v-if="lowStockItems.length > 4" class="text-gray-400 text-10px">
+              +yana {{ lowStockItems.length - 4 }} ta
+            </span>
+          </div>
+        </div>
+      </transition>
+
       <!-- Filter and Action Bar -->
       <div class="filter-action-bar">
         <ElForm
@@ -221,23 +252,32 @@
           <ElTableColumn
             prop="quantityInStock"
             :label="t('erp.quantityInStock')"
-            width="160"
+            width="180"
             align="center"
           >
             <template #default="scope">
               <span v-if="scope?.row">
                 <ElTag
                   :type="
-                    (scope.row.quantityInStock || 0) > 10
-                      ? 'success'
-                      : (scope.row.quantityInStock || 0) > 0
+                    (scope.row.quantityInStock || 0) <= 0
+                      ? 'danger'
+                      : (scope.row.quantityInStock || 0) <= (scope.row.min_stock !== undefined && scope.row.min_stock !== null ? scope.row.min_stock : 10)
                         ? 'warning'
-                        : 'danger'
+                        : 'success'
                   "
                   effect="dark"
                   class="font-bold rounded-pill"
                 >
-                  {{ formatMoney(scope.row.quantityInStock) }} {{ scope.row.unit || 'dona' }}
+                  <span v-if="(scope.row.quantityInStock || 0) <= 0">
+                    Tugagan (0)
+                  </span>
+                  <span v-else-if="(scope.row.quantityInStock || 0) <= (scope.row.min_stock !== undefined && scope.row.min_stock !== null ? scope.row.min_stock : 10)" class="inline-flex items-center gap-4px">
+                    <Icon icon="ep:warning" class="text-12px" />
+                    <span>Kam: {{ formatMoney(scope.row.quantityInStock) }} (min: {{ scope.row.min_stock ?? 10 }})</span>
+                  </span>
+                  <span v-else>
+                    {{ formatMoney(scope.row.quantityInStock) }} {{ scope.row.unit || 'dona' }}
+                  </span>
                 </ElTag>
               </span>
             </template>
@@ -276,19 +316,21 @@
           <ElTableColumn
             prop="expiration_date"
             :label="t('erp.expirationDate')"
-            width="160"
+            width="180"
             align="center"
           >
             <template #default="scope">
               <span v-if="scope?.row">
                 <ElTag
                   v-if="scope.row.expiration_date"
-                  type="info"
+                  :type="isExpired(scope.row.expiration_date) ? 'danger' : isExpiringSoon(scope.row.expiration_date) ? 'warning' : 'info'"
                   effect="plain"
                   class="font-mono text-12px inline-flex items-center gap-4px"
                 >
-                  <Icon icon="ep:calendar" class="text-12px text-gray-500" />
+                  <Icon icon="ep:calendar" :class="isExpired(scope.row.expiration_date) ? 'text-red-500' : isExpiringSoon(scope.row.expiration_date) ? 'text-amber-500' : 'text-gray-500'" />
                   <span>{{ scope.row.expiration_date }}</span>
+                  <span v-if="isExpired(scope.row.expiration_date)" class="text-10px text-red-500 font-bold ml-2px">(O'tgan)</span>
+                  <span v-else-if="isExpiringSoon(scope.row.expiration_date)" class="text-10px text-amber-500 font-bold ml-2px">(Yaqin)</span>
                 </ElTag>
                 <span v-else class="text-muted">—</span>
               </span>
@@ -670,9 +712,13 @@
               <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
                 <ElInput
                   v-model="displayCost"
-                  placeholder="0"
+                  placeholder="Masalan: 10 000"
                   class="custom-price-input cost-input"
-                />
+                >
+                  <template #prefix>
+                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
+                  </template>
+                </ElInput>
                 <div class="text-10px text-amber-500/90 font-mono mt-2px font-semibold">
                   Eski tannarx: ${{ formatMoney(existingProduct.cost) }}
                 </div>
@@ -684,15 +730,25 @@
               <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
                 <ElInput
                   v-model="displayPrice"
-                  placeholder="0"
+                  placeholder="Masalan: 13 000"
                   class="custom-price-input sell-input"
-                />
+                >
+                  <template #prefix>
+                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
+                  </template>
+                </ElInput>
                 <div class="text-10px text-emerald-500/90 font-mono mt-2px font-semibold">
                   Eski sotuv: ${{ formatMoney(existingProduct.price) }}
                 </div>
               </ElFormItem>
             </ElCol>
           </ElRow>
+
+          <div v-if="form.cost > 0 && form.price > 0" class="mb-12px flex items-center justify-end">
+            <span class="text-xs font-mono px-8px py-2px rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
+              Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}%)
+            </span>
+          </div>
 
           <!-- Dynamic Sum Calculation Banner -->
           <div
@@ -727,44 +783,92 @@
               <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
                 <ElInput
                   v-model="displayCost"
-                  placeholder="0"
+                  placeholder="Masalan: 10 000"
                   class="custom-price-input cost-input"
-                />
+                >
+                  <template #prefix>
+                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
+                  </template>
+                </ElInput>
               </ElFormItem>
             </ElCol>
             <ElCol :span="8">
               <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
                 <ElInput
                   v-model="displayPrice"
-                  placeholder="0"
+                  placeholder="Masalan: 13 000"
                   class="custom-price-input sell-input"
-                />
+                >
+                  <template #prefix>
+                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
+                  </template>
+                </ElInput>
               </ElFormItem>
             </ElCol>
           </ElRow>
+          <div v-if="form.cost > 0 && form.price > 0" class="mb-12px flex items-center justify-end">
+            <span class="text-xs font-mono px-8px py-2px rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
+              Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}%)
+            </span>
+          </div>
         </template>
 
-        <ElFormItem :label="t('erp.category')" prop="category">
-          <ElSelect
-            v-model="form.category"
-            filterable
-            allow-create
-            default-first-option
-            :placeholder="t('erp.kategoriyaniTanlang')"
-            style="width: 100%"
-          >
-            <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
-            <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
-            <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
-            <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
-            <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
-            <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
-            <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
-            <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
-            <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
-            <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
-          </ElSelect>
-        </ElFormItem>
+        <ElRow :gutter="16">
+          <ElCol :span="10">
+            <ElFormItem :label="t('erp.category')" prop="category">
+              <ElSelect
+                v-model="form.category"
+                filterable
+                allow-create
+                default-first-option
+                :placeholder="t('erp.kategoriyaniTanlang')"
+                style="width: 100%"
+              >
+                <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
+                <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
+                <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
+                <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
+                <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
+                <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
+                <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
+                <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
+                <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
+                <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+
+          <ElCol :span="7">
+            <ElFormItem label="Kam qolganda ogohlantirish (min)" prop="min_stock">
+              <ElInputNumber
+                v-model="form.min_stock"
+                :min="0"
+                :step="5"
+                style="width: 100%"
+                placeholder="10"
+              />
+              <div class="text-10px text-gray-400 mt-2px">
+                Min. qoldiq chegarasi
+              </div>
+            </ElFormItem>
+          </ElCol>
+
+          <ElCol :span="7">
+            <ElFormItem label="Yaroqlilik Muddati" prop="expiration_date">
+              <ElDatePicker
+                v-model="form.expiration_date"
+                type="date"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                placeholder="YYYY-MM-DD"
+                style="width: 100%"
+              />
+              <div class="text-10px text-gray-400 mt-2px">
+                Amal qilish muddati
+              </div>
+            </ElFormItem>
+          </ElCol>
+        </ElRow>
 
         <ElFormItem label="Mahsulot Rasmi" prop="image_url">
           <div class="flex items-center gap-16px w-full">
@@ -1254,8 +1358,48 @@ const form = reactive<ProductType>({
   unit: 'dona',
   image_url: '',
   expiration_date: '',
+  min_stock: 10,
   remark: ''
 })
+
+const hasAlertedLowStock = ref(false)
+
+const lowStockItems = computed(() => {
+  return tableData.value.filter((p) => {
+    const threshold = p.min_stock !== undefined && p.min_stock !== null ? p.min_stock : 10
+    return (p.quantityInStock || 0) <= threshold
+  })
+})
+
+const profitAmount = computed(() => {
+  if (!form.price || !form.cost) return 0
+  return Number(form.price) - Number(form.cost)
+})
+
+const profitPercent = computed(() => {
+  if (!form.cost || !form.price || Number(form.cost) <= 0) return 0
+  const diff = Number(form.price) - Number(form.cost)
+  return Math.round((diff / Number(form.cost)) * 100)
+})
+
+const isExpired = (dateStr?: string) => {
+  if (!dateStr) return false
+  const target = new Date(dateStr)
+  if (isNaN(target.getTime())) return false
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  return target.getTime() < now.getTime()
+}
+
+const isExpiringSoon = (dateStr?: string) => {
+  if (!dateStr) return false
+  const target = new Date(dateStr)
+  if (isNaN(target.getTime())) return false
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  return diffDays >= 0 && diffDays <= 30
+}
 
 // Real-time space thousand separators formatting (e.g. 122 222 or 1 500 000)
 const displayCost = computed({
@@ -1303,7 +1447,7 @@ const copyBarcode = async (code: string) => {
 }
 
 const validateCost = (_rule: any, _value: any, callback: any) => {
-  if (form.cost === undefined || form.cost === null || form.cost <= 0) {
+  if (form.cost === undefined || form.cost === null || form.cost < 0) {
     callback(new Error("Iltimos, tannarxini kiriting (0 dan katta bo'lishi shart)"))
   } else {
     callback()
@@ -1322,8 +1466,8 @@ const rules = {
   productName: [{ required: true, message: 'Iltimos, mahsulot nomini kiriting', trigger: 'blur' }],
   SKU: [{ required: true, message: 'Iltimos, SKU kodingizni kiriting', trigger: 'blur' }],
   category: [{ required: true, message: 'Iltimos, kategoriyani tanlang', trigger: 'change' }],
-  cost: [{ required: true, validator: validateCost, trigger: ['blur', 'change'] }],
-  price: [{ required: true, validator: validatePrice, trigger: ['blur', 'change'] }]
+  cost: [{ required: true, validator: validateCost, trigger: 'blur' }],
+  price: [{ required: true, validator: validatePrice, trigger: 'blur' }]
 }
 
 const fetchTableData = async (silent = false) => {
@@ -1340,6 +1484,22 @@ const fetchTableData = async (silent = false) => {
     if (res && res.data) {
       tableData.value = res.data.list || []
       total.value = res.data.total || 0
+
+      // Low stock notification on initial page load (concise & punchy)
+      if (!silent && !hasAlertedLowStock.value) {
+        const lows = tableData.value.filter(
+          (p) => (p.quantityInStock || 0) <= (p.min_stock !== undefined && p.min_stock !== null ? p.min_stock : 10)
+        )
+        if (lows.length > 0) {
+          hasAlertedLowStock.value = true
+          if (lows.length === 1) {
+            ElMessage.warning(`"${lows[0].productName}" kam qoldi (${lows[0].quantityInStock} dona). Omborga to'ldiring!`)
+          } else {
+            ElMessage.warning(`${lows.length} ta mahsulot kam qoldi. Omborga to'ldiring!`)
+          }
+        }
+      }
+
       // Pre-fetch real picture names from Tasnif API for all products
       Promise.all(
         (tableData.value || []).map((p) =>
@@ -1537,6 +1697,8 @@ const checkAndApplyExistingProduct = async (criteria: {
     form.mxik_code = found.mxik_code || form.mxik_code
     form.image_url = found.image_url || form.image_url
     form.remark = found.remark || form.remark
+    form.min_stock = found.min_stock !== undefined && found.min_stock !== null ? found.min_stock : 10
+    form.expiration_date = found.expiration_date || ''
     // Default the quantity field to 1 (new batch count)
     form.quantityInStock = 1
 
@@ -1556,6 +1718,8 @@ const checkAndApplyExistingProduct = async (criteria: {
   form.cost = 0
   form.price = 0
   form.quantityInStock = 1
+  form.min_stock = 10
+  form.expiration_date = ''
 
   return null
 }
@@ -1577,6 +1741,7 @@ const clearProductFields = () => {
   form.attribute_name = ''
   form.unit = 'dona'
   form.image_url = ''
+  form.min_stock = 10
   form.expiration_date = ''
   form.remark = ''
   form.packagings = []
@@ -1838,6 +2003,8 @@ const openEditDialog = (row: ProductType) => {
   dialogType.value = 'edit'
   resetForm()
   Object.assign(form, row)
+  form.min_stock = row.min_stock !== undefined && row.min_stock !== null ? row.min_stock : 10
+  form.expiration_date = row.expiration_date || ''
   form.packagings = row.packagings ? JSON.parse(JSON.stringify(row.packagings)) : []
   dialogVisible.value = true
 }
