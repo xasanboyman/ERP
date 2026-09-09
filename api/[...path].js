@@ -1025,13 +1025,25 @@ export default async function handler(req, res) {
 
       let allRows = await sql`SELECT * FROM products ORDER BY id DESC`;
       if (productName) {
-        allRows = allRows.filter(p => 
-          (p.productName || '').toLowerCase().includes(productName) ||
-          (p.brand_name || '').toLowerCase().includes(productName) ||
-          (p.shtrix_code || '').includes(productName) ||
-          (p.SKU || '').toLowerCase().includes(productName) ||
-          (p.mxik_code || '').includes(productName)
-        );
+        const normalizeTokens = (str) => {
+          let s = (str || '').toLowerCase();
+          s = s.replace(/([0-9]+),([0-9]+)/g, '$1.$2');
+          s = s.replace(/([0-9]+(\.[0-9]+)?)\s*(l|litr|kg|g|gr|ml)\b/gi, '$1 ');
+          s = s.replace(/(?<=\d)\.(?=\d)/g, '___DEC___');
+          s = s.replace(/[^a-z0-9_]/gi, ' ');
+          s = s.replace(/___DEC___/g, '.');
+          return s.split(/\s+/).filter(Boolean).map(w => {
+            if (/^[0-9]+(\.[0-9]+)?$/.test(w)) return String(parseFloat(w));
+            return w;
+          });
+        };
+        const queryTokens = normalizeTokens(productName);
+        allRows = allRows.filter(p => {
+          const targetStr = `${p.productName || ''} ${p.brand_name || ''} ${p.attribute_name || ''} ${p.shtrix_code || ''} ${p.SKU || ''} ${p.mxik_code || ''} ${p.remark || ''}`;
+          if (targetStr.toLowerCase().includes(productName)) return true;
+          const targetTokens = normalizeTokens(targetStr);
+          return queryTokens.length > 0 && queryTokens.every(q => targetTokens.includes(q));
+        });
       }
       if (category) {
         allRows = allRows.filter(p => p.category === category);
@@ -1070,20 +1082,26 @@ export default async function handler(req, res) {
         if (rows.length === 0 && name) {
           rows = await sql`SELECT * FROM products WHERE LOWER("productName") = LOWER(${name}) LIMIT 1`;
         }
-        if (rows.length === 0 && name && name.length >= 4) {
-          const cleanName = name.toLowerCase();
+        if (rows.length === 0 && name && name.length >= 2) {
+          const normalizeTokens = (str) => {
+            let s = (str || '').toLowerCase();
+            s = s.replace(/([0-9]+),([0-9]+)/g, '$1.$2');
+            s = s.replace(/([0-9]+(\.[0-9]+)?)\s*(l|litr|kg|g|gr|ml)\b/gi, '$1 ');
+            s = s.replace(/(?<=\d)\.(?=\d)/g, '___DEC___');
+            s = s.replace(/[^a-z0-9_]/gi, ' ');
+            s = s.replace(/___DEC___/g, '.');
+            return s.split(/\s+/).filter(Boolean).map(w => {
+              if (/^[0-9]+(\.[0-9]+)?$/.test(w)) return String(parseFloat(w));
+              return w;
+            });
+          };
+          const queryTokens = normalizeTokens(name);
           const allProducts = await sql`SELECT * FROM products LIMIT 500`;
           const matched = allProducts.find(p => {
-            const pName = (p.productName || '').toLowerCase();
-            if (pName === cleanName) return true;
-            if (pName.includes(cleanName) || cleanName.includes(pName)) return true;
-            if (p.brand_name && cleanName.includes(p.brand_name.toLowerCase())) {
-              const sizes = ['1,0', '1.0', '1l', '1,5', '1.5', '1.5l', '0,5', '0.5', '2,0', '2.0', '250', '330', '500'];
-              for (const sz of sizes) {
-                if (pName.includes(sz) && cleanName.includes(sz)) return true;
-              }
-            }
-            return false;
+            const targetStr = `${p.productName || ''} ${p.brand_name || ''} ${p.attribute_name || ''} ${p.shtrix_code || ''} ${p.SKU || ''} ${p.mxik_code || ''} ${p.remark || ''}`;
+            if (targetStr.toLowerCase().includes(name.toLowerCase())) return true;
+            const targetTokens = normalizeTokens(targetStr);
+            return queryTokens.length > 0 && queryTokens.every(q => targetTokens.includes(q));
           });
           if (matched) {
             rows = [matched];

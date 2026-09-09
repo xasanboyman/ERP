@@ -484,6 +484,7 @@
                   :remote-method="remoteSearchClassifier"
                   :loading="classifierLoading"
                   style="width: 100%"
+                  @focus="onClassifierFocus"
                   @change="handleClassifierSelect"
                 >
                   <template #prefix>
@@ -492,12 +493,56 @@
                   <ElOption
                     v-for="item in classifierOptions"
                     :key="item.id || item.mxik_code || item.shtrix_code"
-                    :label="`${item.brand_name ? '[' + item.brand_name + '] ' : ''}${item.mxik_name} ${item.attribute_name ? '(' + item.attribute_name + ')' : ''} [${item.shtrix_code || item.mxik_code}]`"
+                    :label="
+                      item.is_warehouse
+                        ? `[OMBORDAGI MAHSULOT] ${item.productName} (Qoldiq: ${item.quantityInStock} ${item.unit || 'dona'})`
+                        : `${item.brand_name ? '[' + item.brand_name + '] ' : ''}${item.mxik_name} ${item.attribute_name ? '(' + item.attribute_name + ')' : ''} [${item.shtrix_code || item.mxik_code}]`
+                    "
                     :value="item.id || item.mxik_code"
                     class="classifier-option-item"
                   >
-                    <div class="classifier-item-card">
+                    <!-- Warehouse Product Card in Dropdown -->
+                    <div v-if="item.is_warehouse" class="classifier-item-card warehouse-item-card">
                       <div class="classifier-item-top">
+                        <span class="warehouse-badge-pill">
+                          <Icon icon="ep:shop" class="mr-3px" /> OMBORDA BOR
+                        </span>
+                        <span v-if="item.brand_name" class="classifier-brand-tag">{{
+                          item.brand_name
+                        }}</span>
+                        <span
+                          class="classifier-item-title font-bold text-gray-900 dark:text-white truncate"
+                        >
+                          {{ item.productName }}
+                        </span>
+                      </div>
+                      <div class="classifier-item-meta">
+                        <span class="warehouse-stock-chip">
+                          <Icon icon="ep:box" class="mr-3px" /> Qoldiq:
+                          {{ formatMoney(item.quantityInStock) }} {{ item.unit || 'dona' }}
+                        </span>
+                        <span class="warehouse-price-chip sell-chip">
+                          <Icon icon="ep:sell" class="mr-2px" /> Sotish: ${{
+                            formatMoney(item.price)
+                          }}
+                        </span>
+                        <span class="warehouse-price-chip cost-chip">
+                          <Icon icon="ep:coin" class="mr-2px" /> Tannarx: ${{
+                            formatMoney(item.cost)
+                          }}
+                        </span>
+                        <span v-if="item.shtrix_code" class="classifier-badge-code">
+                          <Icon icon="ep:reading" class="mr-3px" />{{ item.shtrix_code }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- External Tasnif Soliq Classifier Card -->
+                    <div v-else class="classifier-item-card catalog-item-card">
+                      <div class="classifier-item-top">
+                        <span class="catalog-badge-pill">
+                          <Icon icon="ep:connection" class="mr-2px" /> Soliq Katalogi
+                        </span>
                         <span v-if="item.brand_name" class="classifier-brand-tag">{{
                           item.brand_name
                         }}</span>
@@ -2017,6 +2062,64 @@ const handleCurrentChange = (val: number) => {
 const classifierCacheMap = new Map<string, any[]>()
 let searchDebounceTimer: any = null
 
+const normalizeProductTokens = (str: string) => {
+  let s = (str || '').toLowerCase()
+  s = s.replace(/([0-9]+),([0-9]+)/g, '$1.$2')
+  s = s.replace(/([0-9]+(\.[0-9]+)?)\s*(l|litr|kg|g|gr|ml)\b/gi, '$1 ')
+  s = s.replace(/(?<=\d)\.(?=\d)/g, '___DEC___')
+  s = s.replace(/[^a-z0-9_]/gi, ' ')
+  s = s.replace(/___DEC___/g, '.')
+  return s
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => {
+      if (/^[0-9]+(\.[0-9]+)?$/.test(w)) return String(parseFloat(w))
+      return w
+    })
+}
+
+const matchWarehouseProduct = (p: ProductType, query: string): boolean => {
+  if (!query) return false
+  const targetStr = `${p.productName || ''} ${p.brand_name || ''} ${p.attribute_name || ''} ${p.shtrix_code || ''} ${p.SKU || ''} ${p.mxik_code || ''} ${p.remark || ''}`
+  if (targetStr.toLowerCase().includes(query.toLowerCase())) return true
+  const queryTokens = normalizeProductTokens(query)
+  const targetTokens = normalizeProductTokens(targetStr)
+  return queryTokens.length > 0 && queryTokens.every((q) => targetTokens.includes(q))
+}
+
+const mapWarehouseProductToOption = (p: ProductType) => {
+  return {
+    id: `warehouse_${p.id}`,
+    is_warehouse: true,
+    warehouse_id: p.id,
+    warehouse_product: p,
+    productName: p.productName,
+    mxik_name: p.productName,
+    brand_name: p.brand_name || '',
+    attribute_name: p.attribute_name || '',
+    shtrix_code: p.shtrix_code || '',
+    SKU: p.SKU || '',
+    cost: p.cost !== undefined && p.cost !== null ? Number(p.cost) : 0,
+    price: p.price !== undefined && p.price !== null ? Number(p.price) : 0,
+    quantityInStock: p.quantityInStock || 0,
+    unit: p.unit || 'dona',
+    category: p.category || 'Ichimliklar va suvlar',
+    min_stock: p.min_stock !== undefined && p.min_stock !== null ? p.min_stock : 10,
+    expiration_date: p.expiration_date || '',
+    image_url: p.image_url || '',
+    remark: p.remark || '',
+    packagings: p.packagings || []
+  }
+}
+
+const onClassifierFocus = () => {
+  if (!lastClassifierQuery.value || classifierOptions.value.length === 0) {
+    classifierOptions.value = tableData.value
+      .slice(0, 25)
+      .map((p) => mapWarehouseProductToOption(p))
+  }
+}
+
 const onClassifierSearchModeChange = () => {
   classifierCacheMap.clear()
   if (lastClassifierQuery.value) {
@@ -2025,16 +2128,27 @@ const onClassifierSearchModeChange = () => {
 }
 
 const remoteSearchClassifier = (query: string) => {
-  if (!query || query.trim().length < 2) {
-    classifierOptions.value = []
+  if (!query || query.trim().length === 0) {
+    classifierOptions.value = tableData.value
+      .slice(0, 25)
+      .map((p) => mapWarehouseProductToOption(p))
     lastClassifierQuery.value = ''
     return
   }
   const cleanQ = query.trim()
   lastClassifierQuery.value = cleanQ
+
+  // 1. Immediately match warehouse products from local tableData
+  const localWarehouseMatches = tableData.value
+    .filter((p) => matchWarehouseProduct(p, cleanQ))
+    .map((p) => mapWarehouseProductToOption(p))
+
+  classifierOptions.value = [...localWarehouseMatches]
+
   const cacheKey = `${classifierSearchMode.value}:${cleanQ}`
   if (classifierCacheMap.has(cacheKey)) {
-    classifierOptions.value = classifierCacheMap.get(cacheKey) || []
+    const cached = classifierCacheMap.get(cacheKey) || []
+    classifierOptions.value = [...localWarehouseMatches, ...cached]
     return
   }
 
@@ -2043,17 +2157,40 @@ const remoteSearchClassifier = (query: string) => {
   searchDebounceTimer = setTimeout(async () => {
     classifierLoading.value = true
     try {
-      const res = await searchClassifierApi({
-        search: cleanQ,
-        mode: classifierSearchMode.value,
-        page: 1,
-        page_size: 25
-      })
-      if (res && res.data) {
-        const list = Array.isArray(res.data) ? res.data : (res.data as any).list || []
-        classifierOptions.value = list
-        classifierCacheMap.set(cacheKey, list)
+      // 2. Fetch any warehouse products from backend matching query
+      let backendWarehouseMatches: any[] = []
+      try {
+        const pRes = await getProductListApi({ productName: cleanQ, pageSize: 20 })
+        if (pRes && pRes.data && pRes.data.list) {
+          backendWarehouseMatches = (pRes.data.list as ProductType[])
+            .filter((bp) => !localWarehouseMatches.some((lp) => lp.warehouse_id === bp.id))
+            .map((bp) => mapWarehouseProductToOption(bp))
+        }
+      } catch (pe) {
+        // Fallback to local
       }
+
+      const allWarehouseOptions = [...localWarehouseMatches, ...backendWarehouseMatches]
+
+      // 3. Query external Tasnif Soliq API
+      let catalogList: any[] = []
+      if (cleanQ.length >= 2) {
+        const res = await searchClassifierApi({
+          search: cleanQ,
+          mode: classifierSearchMode.value,
+          page: 1,
+          page_size: 25
+        })
+        if (res && res.data) {
+          const list = Array.isArray(res.data) ? res.data : (res.data as any).list || []
+          catalogList = list
+        }
+      }
+
+      // Warehouse items on TOP, catalog items underneath
+      const combined = [...allWarehouseOptions, ...catalogList]
+      classifierOptions.value = combined
+      classifierCacheMap.set(cacheKey, catalogList)
     } catch (err) {
       console.error('Classifier search error:', err)
     } finally {
@@ -2152,31 +2289,87 @@ const autoFetchProductImage = async (criteria: {
   }
 }
 
+const applyWarehouseProductToForm = (prod: ProductType) => {
+  if (!prod) return
+  existingProduct.value = prod
+  form.id = prod.id || ''
+  form.productName = prod.productName || ''
+  form.cost = prod.cost !== undefined && prod.cost !== null ? Number(prod.cost) : 0
+  form.price = prod.price !== undefined && prod.price !== null ? Number(prod.price) : 0
+  form.category = prod.category || 'Ichimliklar va suvlar'
+  form.unit = prod.unit || 'dona'
+  form.shtrix_code = prod.shtrix_code || ''
+  form.SKU = prod.SKU || (prod.shtrix_code ? `SKU-${prod.shtrix_code}` : '')
+  form.brand_name = prod.brand_name || ''
+  form.attribute_name = prod.attribute_name || ''
+  form.mxik_code = prod.mxik_code || ''
+  form.classifier_id = prod.classifier_id || (prod.mxik_code ? String(prod.mxik_code) : undefined)
+  form.image_url = prod.image_url || ''
+  form.remark = prod.remark || ''
+  form.min_stock = prod.min_stock !== undefined && prod.min_stock !== null ? prod.min_stock : 10
+  form.expiration_date = prod.expiration_date || ''
+  form.packagings = prod.packagings ? JSON.parse(JSON.stringify(prod.packagings)) : []
+  form.quantityInStock = 1 // Default new intake batch
+  userRemovedImage.value = false
+
+  barcodeSearch.value = ''
+  selectedClassifierId.value = undefined
+
+  // Pre-fetch image if missing
+  if (!form.image_url && (form.mxik_code || form.shtrix_code || form.productName)) {
+    autoFetchProductImage({
+      image_url: form.image_url,
+      mxik_code: form.mxik_code,
+      shtrix_code: form.shtrix_code,
+      productName: form.productName,
+      brand_name: form.brand_name
+    })
+  }
+
+  ElNotification({
+    title: 'Omborda mavjud mahsulot topildi!',
+    message: `"${prod.productName}" omborda mavjud. Hozirgi qoldiq: ${formatMoney(prod.quantityInStock)} ${prod.unit || 'dona'}. Tannarxi: $${formatMoney(prod.cost)}, Sotish narxi: $${formatMoney(prod.price)}. Yangi kirim sonini kiriting.`,
+    type: 'success',
+    duration: 7000
+  })
+}
+
 const checkAndApplyExistingProduct = async (criteria: {
   barcode?: string
   sku?: string
   name?: string
+  brand?: string
   classifierId?: string | number
 }): Promise<ProductType | null> => {
   const barcode = (criteria.barcode || '').trim()
   const sku = (criteria.sku || '').trim()
   const name = (criteria.name || '').trim()
+  const brand = (criteria.brand || '').trim()
   const classifierId = criteria.classifierId ? String(criteria.classifierId).trim() : ''
 
   if (!barcode && !sku && !name && !classifierId) {
     return null
   }
 
-  // 1. Fast check in current loaded tableData
+  // 1. Fast exact check in current loaded tableData
   let found: ProductType | undefined = tableData.value.find((p) => {
     if (barcode && p.shtrix_code && String(p.shtrix_code).trim() === barcode) return true
     if (sku && p.SKU && p.SKU.toLowerCase() === sku.toLowerCase()) return true
     if (classifierId && p.classifier_id && String(p.classifier_id) === classifierId) return true
+    if (classifierId && p.mxik_code && String(p.mxik_code) === classifierId) return true
     if (name && p.productName && p.productName.toLowerCase() === name.toLowerCase()) return true
     return false
   })
 
-  // 2. If not found in loaded tableData, query backend endpoint
+  // 2. Token match in current loaded tableData
+  if (!found && (name || (brand && name))) {
+    const searchTarget = `${brand} ${name}`.trim()
+    found = tableData.value.find(
+      (p) => matchWarehouseProduct(p, searchTarget) || matchWarehouseProduct(p, name)
+    )
+  }
+
+  // 3. Query backend endpoint
   if (!found) {
     try {
       checkingExistingLoading.value = true
@@ -2198,47 +2391,7 @@ const checkAndApplyExistingProduct = async (criteria: {
   }
 
   if (found) {
-    existingProduct.value = found
-    form.id = found.id || ''
-    form.cost = found.cost || 0
-    form.price = found.price || 0
-    form.category = found.category || form.category || 'Ichimliklar va suvlar'
-    form.unit = found.unit || 'dona'
-    form.productName = found.productName || form.productName
-    form.shtrix_code = found.shtrix_code || form.shtrix_code || barcode
-    form.SKU = found.SKU || form.SKU || (barcode ? `SKU-${barcode}` : '')
-    form.brand_name = found.brand_name || form.brand_name
-    form.attribute_name = found.attribute_name || form.attribute_name
-    form.mxik_code = found.mxik_code || form.mxik_code
-    form.image_url = found.image_url || form.image_url || ''
-    form.remark = found.remark || form.remark
-    form.min_stock =
-      found.min_stock !== undefined && found.min_stock !== null ? found.min_stock : 10
-    form.expiration_date = found.expiration_date || ''
-    // Default the quantity field to 1 (new batch count)
-    form.quantityInStock = 1
-
-    if (
-      !form.image_url &&
-      !userRemovedImage.value &&
-      (form.mxik_code || form.shtrix_code || form.productName)
-    ) {
-      autoFetchProductImage({
-        image_url: form.image_url,
-        mxik_code: form.mxik_code,
-        shtrix_code: form.shtrix_code,
-        productName: form.productName,
-        brand_name: form.brand_name
-      })
-    }
-
-    ElNotification({
-      title: 'Omborda mavjud mahsulot topildi!',
-      message: `"${found.productName}" mahsuloti omborda mavjud. Hozirgi ombor qoldig'i: ${formatMoney(found.quantityInStock)} ${found.unit || 'dona'}. Eski tannarxi: $${formatMoney(found.cost)}, Eski sotish narxi: $${formatMoney(found.price)}. Yangi kirim sonini kiriting.`,
-      type: 'warning',
-      duration: 7000
-    })
-
+    applyWarehouseProductToForm(found)
     return found
   }
 
@@ -2281,7 +2434,9 @@ const clearProductFields = () => {
 const detectCategory = (item: any): string => {
   if (!item) return 'Boshqalar'
   const text =
-    `${item.category_name || ''} ${item.group_name || ''} ${item.class_name || ''} ${item.position_name || ''} ${item.mxik_name || ''}`.toLowerCase()
+    `${item.category_name || ''} ${item.group_name || ''} ${item.class_name || ''} ${item.position_name || ''} ${item.mxik_name || ''} ${item.brand_name || ''}`.toLowerCase()
+
+  // 1. Drinks & Water
   if (
     text.includes('ichimlik') ||
     text.includes('suv') ||
@@ -2291,10 +2446,15 @@ const detectCategory = (item: any): string => {
     text.includes('kofe') ||
     text.includes('napitk') ||
     text.includes('cola') ||
-    text.includes('pepsi')
+    text.includes('pepsi') ||
+    text.includes('fanta') ||
+    text.includes('sprite') ||
+    text.includes('gazirovka')
   ) {
     return 'Ichimliklar va suvlar'
   }
+
+  // 2. Dairy
   if (
     text.includes('sut') ||
     text.includes('qatiq') ||
@@ -2303,37 +2463,71 @@ const detectCategory = (item: any): string => {
     text.includes('kefir') ||
     text.includes('yogurt') ||
     text.includes('qaymoq') ||
-    text.includes('sariyog')
+    text.includes('sariyog') ||
+    text.includes('suzma')
   ) {
     return 'Sut va sut mahsulotlari'
   }
+
+  // 3. Salt & Spices
   if (
     text.includes('tuz') ||
     text.includes('murch') ||
     text.includes('ziravor') ||
+    text.includes('lavr') ||
+    text.includes('sirka') ||
     text.includes('dori-darmon')
   ) {
     return 'Tuz va ziravorlar'
   }
+
+  // 4. Food, Bakery, Sweets (Checked BEFORE plastic packaging and appliances!)
   if (
-    text.includes('plastmassa') ||
-    text.includes('idish') ||
-    text.includes('tarelka') ||
-    text.includes('stakan') ||
-    text.includes('paket') ||
-    text.includes('meshok')
+    text.includes('pechenye') ||
+    text.includes('pechene') ||
+    text.includes('biskvit') ||
+    text.includes('vafli') ||
+    text.includes('pryanik') ||
+    text.includes('tort') ||
+    text.includes('keks') ||
+    text.includes('shirinlik') ||
+    text.includes('konfet') ||
+    text.includes('shokolad') ||
+    text.includes('non') ||
+    text.includes('shakar') ||
+    text.includes('un') ||
+    text.includes('guruch') ||
+    text.includes("go'sht") ||
+    text.includes('kolbasa') ||
+    text.includes('sosiska') ||
+    text.includes('makaron') ||
+    text.includes('vermishel') ||
+    text.includes("yog'") ||
+    text.includes('oziq') ||
+    text.includes('ovqat') ||
+    text.includes('konserva') ||
+    text.includes('karam') ||
+    text.includes('kartoshka') ||
+    text.includes('piyoz') ||
+    text.includes('meva') ||
+    text.includes('sabzavot')
   ) {
-    return 'Plastmassa va idishlar'
+    return 'Oziq-ovqat mahsulotlari'
   }
+
+  // 5. Electronics & Appliances
   if (
     text.includes('elektr') ||
     text.includes('plita') ||
-    text.includes('pech') ||
+    text.includes('gaz plita') ||
+    text.includes('pechka') ||
     text.includes('muzlat') ||
     text.includes('kir yuv') ||
     text.includes('televizor') ||
     text.includes('telefon') ||
-    text.includes('gaz') ||
+    text.includes('smartphone') ||
+    text.includes('noutbuk') ||
+    text.includes('kompyuter') ||
     text.includes('gefest') ||
     text.includes('artel') ||
     text.includes('konditsioner') ||
@@ -2341,39 +2535,46 @@ const detectCategory = (item: any): string => {
   ) {
     return 'Maishiy texnika va elektronika'
   }
-  if (
-    text.includes('oziq') ||
-    text.includes('non') ||
-    text.includes('shakar') ||
-    text.includes('un') ||
-    text.includes('guruch') ||
-    text.includes('shokolad') ||
-    text.includes('konfet') ||
-    text.includes("go'sht") ||
-    text.includes('kolbasa') ||
-    text.includes('makaron') ||
-    text.includes("yog'")
-  ) {
-    return 'Oziq-ovqat mahsulotlari'
-  }
+
+  // 6. Clothing & Shoes
   if (
     text.includes('kiyim') ||
     text.includes('poyabzal') ||
     text.includes('shim') ||
     text.includes('kofta') ||
-    text.includes('kurtka')
+    text.includes('kurtka') ||
+    text.includes('kostyum') ||
+    text.includes('futbolka') ||
+    text.includes('paypoq')
   ) {
     return 'Kiyim-kechak va poyabzal'
   }
+
+  // 7. Construction & Hardware
   if (
     text.includes('qurilish') ||
     text.includes('sement') ||
     text.includes("bo'yoq") ||
     text.includes('mix') ||
-    text.includes('truba')
+    text.includes('truba') ||
+    text.includes('gipsokarton')
   ) {
     return "Qurilish va ta'mirlash"
   }
+
+  // 8. Plastics & Dishes
+  if (
+    text.includes('plastmassa') ||
+    text.includes('idish') ||
+    text.includes('tarelka') ||
+    text.includes('stakan') ||
+    text.includes('krujka') ||
+    text.includes('paket') ||
+    text.includes('meshok')
+  ) {
+    return 'Plastmassa va idishlar'
+  }
+
   if (item.category_name && item.category_name.trim()) return item.category_name.trim()
   if (item.group_name && item.group_name.trim()) return item.group_name.trim()
   if (item.class_name && item.class_name.trim()) return item.class_name.trim()
@@ -2417,11 +2618,24 @@ const onMxikCodeBlur = async () => {
 const applyClassifierToForm = async (item: any) => {
   if (!item) return
 
-  // 1. Reset previous product data first so old prices/ids don't linger
+  // 1. First check if this catalog item corresponds to an existing warehouse product
+  const existing = await checkAndApplyExistingProduct({
+    barcode: item.shtrix_code,
+    sku: item.shtrix_code ? `SKU-${item.shtrix_code}` : undefined,
+    name: item.mxik_name,
+    brand: item.brand_name,
+    classifierId: item.id || item.mxik_code
+  })
+
+  if (existing) {
+    // applyWarehouseProductToForm has populated all fields
+    return
+  }
+
+  // 2. Genuinely new item: populate classifier data
   clearProductFields()
   userRemovedImage.value = false
 
-  // 2. Populate classifier attributes
   form.classifier_id = item.id ? String(item.id) : item.mxik_code ? String(item.mxik_code) : ''
   form.productName = item.mxik_name || ''
   form.brand_name = item.brand_name || ''
@@ -2449,28 +2663,18 @@ const applyClassifierToForm = async (item: any) => {
   // 3. Clear search inputs
   barcodeSearch.value = ''
   selectedClassifierId.value = undefined
+  existingProduct.value = null
+  form.id = ''
+  form.cost = 0
+  form.price = 0
+  form.quantityInStock = 1
 
-  // 4. Check if this product already exists in warehouse:
-  const existing = await checkAndApplyExistingProduct({
-    barcode: item.shtrix_code,
-    sku: form.SKU,
-    name: item.mxik_name,
-    classifierId: form.classifier_id
-  })
+  ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
 
-  if (!existing) {
-    existingProduct.value = null
-    form.id = ''
-    form.cost = 0
-    form.price = 0
-    form.quantityInStock = 1
-    ElMessage.success(`Klassifikator ma'lumotlari yuklandi: ${item.brand_name || item.mxik_name}`)
-  }
-
-  // 5. Auto-fetch real product image from database or Tasnif Soliq (even if not in warehouse stock!)
+  // 4. Auto-fetch real product image from database or Tasnif Soliq (even if not in warehouse stock!)
   if (!userRemovedImage.value) {
     await autoFetchProductImage({
-      image_url: item.image_url || (existing ? existing.image_url : undefined),
+      image_url: item.image_url,
       mxik_code: item.mxik_code || form.mxik_code,
       shtrix_code: item.shtrix_code || form.shtrix_code,
       productName: item.mxik_name || form.productName,
@@ -2488,7 +2692,11 @@ const handleClassifierSelect = (val: number | string) => {
       String(c.shtrix_code) === String(val)
   )
   if (found) {
-    applyClassifierToForm(found)
+    if (found.is_warehouse && found.warehouse_product) {
+      applyWarehouseProductToForm(found.warehouse_product)
+    } else {
+      applyClassifierToForm(found)
+    }
   }
   selectedClassifierId.value = undefined
 }
@@ -2547,7 +2755,7 @@ const resetForm = () => {
   clearProductFields()
   barcodeSearch.value = ''
   selectedClassifierId.value = undefined
-  classifierOptions.value = []
+  classifierOptions.value = tableData.value.slice(0, 25).map((p) => mapWarehouseProductToOption(p))
 }
 
 const handleImageChange = async (uploadFile: any) => {
@@ -2574,6 +2782,7 @@ const openAddDialog = () => {
   resetForm()
   userRemovedImage.value = false
   dialogVisible.value = true
+  classifierOptions.value = tableData.value.slice(0, 25).map((p) => mapWarehouseProductToOption(p))
   nextTick(() => {
     barcodeInputRef.value?.focus?.()
   })
@@ -3283,6 +3492,67 @@ const deleteFromDetail = () => {
     font-size: 11px;
   }
 
+  .warehouse-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    background: #059669;
+    color: #ffffff;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 5px;
+    letter-spacing: 0.2px;
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.25);
+    flex-shrink: 0;
+  }
+
+  .warehouse-stock-chip {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 5px;
+  }
+
+  .warehouse-price-chip {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 5px;
+
+    &.sell-chip {
+      background: rgba(37, 99, 235, 0.08);
+      color: #2563eb;
+      border: 1px solid rgba(37, 99, 235, 0.25);
+    }
+
+    &.cost-chip {
+      background: rgba(217, 119, 6, 0.08);
+      color: #d97706;
+      border: 1px solid rgba(217, 119, 6, 0.25);
+    }
+  }
+
+  .catalog-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    background: #64748b;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
   .classifier-item-group {
     font-size: 11.5px;
     color: #64748b;
@@ -3319,6 +3589,36 @@ html.dark .classifier-select-popper,
 
   .classifier-brand-tag {
     background: #3b82f6 !important;
+  }
+
+  .warehouse-badge-pill {
+    background: #10b981 !important;
+    color: #ffffff !important;
+  }
+
+  .warehouse-stock-chip {
+    background: rgba(16, 185, 129, 0.2) !important;
+    color: #34d399 !important;
+    border-color: rgba(16, 185, 129, 0.4) !important;
+  }
+
+  .warehouse-price-chip {
+    &.sell-chip {
+      background: rgba(59, 130, 246, 0.2) !important;
+      color: #60a5fa !important;
+      border-color: rgba(59, 130, 246, 0.35) !important;
+    }
+
+    &.cost-chip {
+      background: rgba(245, 158, 11, 0.2) !important;
+      color: #fbbf24 !important;
+      border-color: rgba(245, 158, 11, 0.35) !important;
+    }
+  }
+
+  .catalog-badge-pill {
+    background: #475569 !important;
+    color: #cbd5e1 !important;
   }
 
   .classifier-badge-attr {
