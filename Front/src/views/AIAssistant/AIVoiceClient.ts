@@ -221,7 +221,7 @@ XAVFSIZLIK VA MA'LUMOT SIR SAQLASH QOIDALARI:
    "Kechirasiz, sizning hisobingizda bu amalni bajarish yoki ushbu ma'lumotni ko'rish uchun ruxsat yo'q." deb javob bering.`
     }
 
-    return `Siz Knit ERP AI tizimining Model Context Protocol (MCP) bilan to'liq integratsiyalashgan aqlli, xavfsiz va tezkor ovozli/matnli yordamchisisiz.
+    return `Siz Apex ERP AI tizimining Model Context Protocol (MCP) bilan to'liq integratsiyalashgan aqlli, xavfsiz va tezkor ovozli/matnli yordamchisisiz.
 
 ${roleSection}
 

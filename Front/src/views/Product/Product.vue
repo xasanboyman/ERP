@@ -67,37 +67,6 @@
     </ContentWrap>
 
     <ContentWrap>
-      <!-- Low Stock Warning Alert Banner -->
-      <transition name="el-zoom-in-top">
-        <div
-          v-if="lowStockItems.length > 0"
-          class="mb-14px px-16px py-10px rounded-10px bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/35 flex items-center justify-between flex-wrap gap-2 text-xs"
-        >
-          <div class="flex items-center gap-8px text-amber-600 dark:text-amber-400 font-semibold">
-            <Icon icon="ep:warning" class="text-16px text-amber-500" />
-            <span>
-              <strong>Kam qolgan mahsulotlar:</strong> {{ lowStockItems.length }} ta mahsulot minimal qoldiqdan kam qolgan. Omborga to'ldirish tavsiya etiladi!
-            </span>
-          </div>
-          <div class="flex items-center gap-6px flex-wrap">
-            <ElTag
-              v-for="item in lowStockItems.slice(0, 4)"
-              :key="item.id"
-              size="small"
-              type="warning"
-              effect="plain"
-              class="cursor-pointer"
-              @click="openEditDialog(item)"
-            >
-              {{ item.productName }}: {{ item.quantityInStock }} {{ item.unit || 'dona' }}
-            </ElTag>
-            <span v-if="lowStockItems.length > 4" class="text-gray-400 text-10px">
-              +yana {{ lowStockItems.length - 4 }} ta
-            </span>
-          </div>
-        </div>
-      </transition>
-
       <!-- Filter and Action Bar -->
       <div class="filter-action-bar">
         <ElForm
@@ -261,19 +230,31 @@
                   :type="
                     (scope.row.quantityInStock || 0) <= 0
                       ? 'danger'
-                      : (scope.row.quantityInStock || 0) <= (scope.row.min_stock !== undefined && scope.row.min_stock !== null ? scope.row.min_stock : 10)
+                      : (scope.row.quantityInStock || 0) <=
+                          (scope.row.min_stock !== undefined && scope.row.min_stock !== null
+                            ? scope.row.min_stock
+                            : 10)
                         ? 'warning'
                         : 'success'
                   "
                   effect="dark"
                   class="font-bold rounded-pill"
                 >
-                  <span v-if="(scope.row.quantityInStock || 0) <= 0">
-                    Tugagan (0)
-                  </span>
-                  <span v-else-if="(scope.row.quantityInStock || 0) <= (scope.row.min_stock !== undefined && scope.row.min_stock !== null ? scope.row.min_stock : 10)" class="inline-flex items-center gap-4px">
+                  <span v-if="(scope.row.quantityInStock || 0) <= 0"> Tugagan (0) </span>
+                  <span
+                    v-else-if="
+                      (scope.row.quantityInStock || 0) <=
+                      (scope.row.min_stock !== undefined && scope.row.min_stock !== null
+                        ? scope.row.min_stock
+                        : 10)
+                    "
+                    class="inline-flex items-center gap-4px"
+                  >
                     <Icon icon="ep:warning" class="text-12px" />
-                    <span>Kam: {{ formatMoney(scope.row.quantityInStock) }} (min: {{ scope.row.min_stock ?? 10 }})</span>
+                    <span
+                      >Kam: {{ formatMoney(scope.row.quantityInStock) }} (min:
+                      {{ scope.row.min_stock ?? 10 }})</span
+                    >
                   </span>
                   <span v-else>
                     {{ formatMoney(scope.row.quantityInStock) }} {{ scope.row.unit || 'dona' }}
@@ -323,14 +304,37 @@
               <span v-if="scope?.row">
                 <ElTag
                   v-if="scope.row.expiration_date"
-                  :type="isExpired(scope.row.expiration_date) ? 'danger' : isExpiringSoon(scope.row.expiration_date) ? 'warning' : 'info'"
+                  :type="
+                    isExpired(scope.row.expiration_date)
+                      ? 'danger'
+                      : isExpiringSoon(scope.row.expiration_date)
+                        ? 'warning'
+                        : 'info'
+                  "
                   effect="plain"
                   class="font-mono text-12px inline-flex items-center gap-4px"
                 >
-                  <Icon icon="ep:calendar" :class="isExpired(scope.row.expiration_date) ? 'text-red-500' : isExpiringSoon(scope.row.expiration_date) ? 'text-amber-500' : 'text-gray-500'" />
+                  <Icon
+                    icon="ep:calendar"
+                    :class="
+                      isExpired(scope.row.expiration_date)
+                        ? 'text-red-500'
+                        : isExpiringSoon(scope.row.expiration_date)
+                          ? 'text-amber-500'
+                          : 'text-gray-500'
+                    "
+                  />
                   <span>{{ scope.row.expiration_date }}</span>
-                  <span v-if="isExpired(scope.row.expiration_date)" class="text-10px text-red-500 font-bold ml-2px">(O'tgan)</span>
-                  <span v-else-if="isExpiringSoon(scope.row.expiration_date)" class="text-10px text-amber-500 font-bold ml-2px">(Yaqin)</span>
+                  <span
+                    v-if="isExpired(scope.row.expiration_date)"
+                    class="text-10px text-red-500 font-bold ml-2px"
+                    >(O'tgan)</span
+                  >
+                  <span
+                    v-else-if="isExpiringSoon(scope.row.expiration_date)"
+                    class="text-10px text-amber-500 font-bold ml-2px"
+                    >(Yaqin)</span
+                  >
                 </ElTag>
                 <span v-else class="text-muted">—</span>
               </span>
@@ -543,8 +547,12 @@
                 key="existing"
                 class="intake-card warehouse-status-card existing"
               >
-                <div class="flex items-center justify-between pb-6px border-b border-emerald-500/25">
-                  <div class="flex items-center gap-6px text-emerald-700 dark:text-emerald-300 font-bold text-xs">
+                <div
+                  class="flex items-center justify-between pb-6px border-b border-emerald-500/25"
+                >
+                  <div
+                    class="flex items-center gap-6px text-emerald-700 dark:text-emerald-300 font-bold text-xs"
+                  >
                     <span class="relative flex h-2 w-2">
                       <span
                         class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
@@ -562,7 +570,9 @@
                   <div
                     class="metric-box bg-white/80 dark:bg-gray-800/80 p-6px rounded-6px border border-gray-200/70 dark:border-gray-700/70 text-center"
                   >
-                    <div class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+                    <div
+                      class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight"
+                    >
                       Ombor Qoldig'i
                     </div>
                     <div
@@ -579,10 +589,14 @@
                   <div
                     class="metric-box bg-white/80 dark:bg-gray-800/80 p-6px rounded-6px border border-gray-200/70 dark:border-gray-700/70 text-center"
                   >
-                    <div class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+                    <div
+                      class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight"
+                    >
                       Eski Tannarx
                     </div>
-                    <div class="text-13px font-bold font-mono text-amber-600 dark:text-amber-400 mt-2px">
+                    <div
+                      class="text-13px font-bold font-mono text-amber-600 dark:text-amber-400 mt-2px"
+                    >
                       ${{ formatMoney(existingProduct.cost) }}
                     </div>
                     <div class="text-[9px] text-gray-400">avvalgi</div>
@@ -591,10 +605,14 @@
                   <div
                     class="metric-box bg-white/80 dark:bg-gray-800/80 p-6px rounded-6px border border-gray-200/70 dark:border-gray-700/70 text-center"
                   >
-                    <div class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+                    <div
+                      class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight"
+                    >
                       Eski Sotish
                     </div>
-                    <div class="text-13px font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2px">
+                    <div
+                      class="text-13px font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2px"
+                    >
                       ${{ formatMoney(existingProduct.price) }}
                     </div>
                     <div class="text-[9px] text-gray-400">avvalgi</div>
@@ -617,9 +635,19 @@
                   <div
                     class="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300 bg-white/90 dark:bg-black/40 px-8px py-4px rounded-6px flex items-center justify-between"
                   >
-                    <span>{{ formatMoney(existingProduct.quantityInStock) }} + {{ formatMoney(form.quantityInStock || 0) }}</span>
+                    <span
+                      >{{ formatMoney(existingProduct.quantityInStock) }} +
+                      {{ formatMoney(form.quantityInStock || 0) }}</span
+                    >
                     <span class="text-13px text-emerald-600 dark:text-emerald-400 font-black">
-                      = Jami {{ formatMoney((existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0)) }} {{ form.unit || 'dona' }}
+                      = Jami
+                      {{
+                        formatMoney(
+                          (existingProduct.quantityInStock || 0) +
+                            (Number(form.quantityInStock) || 0)
+                        )
+                      }}
+                      {{ form.unit || 'dona' }}
                     </span>
                   </div>
                 </div>
@@ -627,7 +655,9 @@
 
               <!-- If New Product -->
               <div v-else key="new" class="intake-card warehouse-status-card new-item">
-                <div class="flex items-center gap-6px text-xs font-semibold text-blue-600 dark:text-blue-400">
+                <div
+                  class="flex items-center gap-6px text-xs font-semibold text-blue-600 dark:text-blue-400"
+                >
                   <Icon icon="ep:circle-plus-filled" class="text-15px text-blue-500" />
                   <span>Yangi Mahsulot Kirimi</span>
                 </div>
@@ -777,7 +807,10 @@
                     v-if="form.cost > 0 && form.price > 0"
                     class="text-xs font-mono font-bold px-8px py-2px rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                   >
-                    Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}% marja)
+                    Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{
+                      formatMoney(profitAmount)
+                    }}
+                    ({{ profitPercent }}% marja)
                   </div>
                 </div>
 
@@ -865,10 +898,19 @@
                         <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
                         <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
                         <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
-                        <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
+                        <ElOption
+                          :label="t('erp.plasticsAndDishes')"
+                          value="Plastmassa va idishlar"
+                        />
                         <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
-                        <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
-                        <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
+                        <ElOption
+                          label="Maishiy texnika va elektronika"
+                          value="Maishiy texnika va elektronika"
+                        />
+                        <ElOption
+                          label="Kiyim-kechak va poyabzal"
+                          value="Kiyim-kechak va poyabzal"
+                        />
                         <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
                         <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
                         <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
@@ -877,7 +919,11 @@
                   </ElCol>
 
                   <ElCol :span="8">
-                    <ElFormItem label="Kam qolganda ogohlantirish (min)" prop="min_stock" class="!mb-8px">
+                    <ElFormItem
+                      label="Kam qolganda ogohlantirish (min)"
+                      prop="min_stock"
+                      class="!mb-8px"
+                    >
                       <ElInputNumber
                         v-model="form.min_stock"
                         :min="0"
@@ -978,11 +1024,15 @@
                 <span>Tahrirlash Ma'lumoti</span>
               </div>
               <div class="space-y-6px text-xs">
-                <div class="flex justify-between py-4px border-b border-gray-200/50 dark:border-gray-800/50">
+                <div
+                  class="flex justify-between py-4px border-b border-gray-200/50 dark:border-gray-800/50"
+                >
                   <span class="text-gray-400">ID:</span>
                   <span class="font-mono font-bold">{{ form.id }}</span>
                 </div>
-                <div class="flex justify-between py-4px border-b border-gray-200/50 dark:border-gray-800/50">
+                <div
+                  class="flex justify-between py-4px border-b border-gray-200/50 dark:border-gray-800/50"
+                >
                   <span class="text-gray-400">Shtrix-kod:</span>
                   <span class="font-mono font-bold">{{ form.shtrix_code || "Yo'q" }}</span>
                 </div>
@@ -1065,27 +1115,47 @@
                     v-if="form.cost > 0 && form.price > 0"
                     class="text-xs font-mono font-bold px-8px py-2px rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                   >
-                    Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}% marja)
+                    Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{
+                      formatMoney(profitAmount)
+                    }}
+                    ({{ profitPercent }}% marja)
                   </div>
                 </div>
 
                 <ElRow :gutter="10" class="items-start !mb-0">
                   <ElCol :span="8">
-                    <ElFormItem label="Ombor Qoldig'i (Soni)" prop="quantityInStock" class="!mb-4px">
-                      <ElInputNumber v-model="form.quantityInStock" :min="0" :step="1" style="width: 100%" />
+                    <ElFormItem
+                      label="Ombor Qoldig'i (Soni)"
+                      prop="quantityInStock"
+                      class="!mb-4px"
+                    >
+                      <ElInputNumber
+                        v-model="form.quantityInStock"
+                        :min="0"
+                        :step="1"
+                        style="width: 100%"
+                      />
                     </ElFormItem>
                   </ElCol>
                   <ElCol :span="8">
                     <ElFormItem :label="t('erp.costPriceDollar')" prop="cost" class="!mb-4px">
                       <ElInput v-model="displayCost" class="custom-price-input cost-input">
-                        <template #prefix><span class="text-xs font-bold text-gray-400 font-mono">$</span></template>
+                        <template #prefix
+                          ><span class="text-xs font-bold text-gray-400 font-mono"
+                            >$</span
+                          ></template
+                        >
                       </ElInput>
                     </ElFormItem>
                   </ElCol>
                   <ElCol :span="8">
                     <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price" class="!mb-4px">
                       <ElInput v-model="displayPrice" class="custom-price-input sell-input">
-                        <template #prefix><span class="text-xs font-bold text-gray-400 font-mono">$</span></template>
+                        <template #prefix
+                          ><span class="text-xs font-bold text-gray-400 font-mono"
+                            >$</span
+                          ></template
+                        >
                       </ElInput>
                     </ElFormItem>
                   </ElCol>
@@ -1100,9 +1170,15 @@
                       <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
                       <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
                       <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
-                      <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
+                      <ElOption
+                        :label="t('erp.plasticsAndDishes')"
+                        value="Plastmassa va idishlar"
+                      />
                       <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
-                      <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
+                      <ElOption
+                        label="Maishiy texnika va elektronika"
+                        value="Maishiy texnika va elektronika"
+                      />
                       <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
                       <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
                       <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
@@ -1111,8 +1187,17 @@
                   </ElFormItem>
                 </ElCol>
                 <ElCol :span="8">
-                  <ElFormItem label="Kam qolganda ogohlantirish (min)" prop="min_stock" class="!mb-8px">
-                    <ElInputNumber v-model="form.min_stock" :min="0" :step="5" style="width: 100%" />
+                  <ElFormItem
+                    label="Kam qolganda ogohlantirish (min)"
+                    prop="min_stock"
+                    class="!mb-8px"
+                  >
+                    <ElInputNumber
+                      v-model="form.min_stock"
+                      :min="0"
+                      :step="5"
+                      style="width: 100%"
+                    />
                   </ElFormItem>
                 </ElCol>
                 <ElCol :span="8">
@@ -1715,12 +1800,16 @@ const fetchTableData = async (silent = false) => {
       // Low stock notification on initial page load (concise & punchy)
       if (!silent && !hasAlertedLowStock.value) {
         const lows = tableData.value.filter(
-          (p) => (p.quantityInStock || 0) <= (p.min_stock !== undefined && p.min_stock !== null ? p.min_stock : 10)
+          (p) =>
+            (p.quantityInStock || 0) <=
+            (p.min_stock !== undefined && p.min_stock !== null ? p.min_stock : 10)
         )
         if (lows.length > 0) {
           hasAlertedLowStock.value = true
           if (lows.length === 1) {
-            ElMessage.warning(`"${lows[0].productName}" kam qoldi (${lows[0].quantityInStock} dona). Omborga to'ldiring!`)
+            ElMessage.warning(
+              `"${lows[0].productName}" kam qoldi (${lows[0].quantityInStock} dona). Omborga to'ldiring!`
+            )
           } else {
             ElMessage.warning(`${lows.length} ta mahsulot kam qoldi. Omborga to'ldiring!`)
           }
@@ -1924,7 +2013,8 @@ const checkAndApplyExistingProduct = async (criteria: {
     form.mxik_code = found.mxik_code || form.mxik_code
     form.image_url = found.image_url || form.image_url
     form.remark = found.remark || form.remark
-    form.min_stock = found.min_stock !== undefined && found.min_stock !== null ? found.min_stock : 10
+    form.min_stock =
+      found.min_stock !== undefined && found.min_stock !== null ? found.min_stock : 10
     form.expiration_date = found.expiration_date || ''
     // Default the quantity field to 1 (new batch count)
     form.quantityInStock = 1
@@ -1976,7 +2066,8 @@ const clearProductFields = () => {
 
 const detectCategory = (item: any): string => {
   if (!item) return 'Boshqalar'
-  const text = `${item.category_name || ''} ${item.group_name || ''} ${item.class_name || ''} ${item.position_name || ''} ${item.mxik_name || ''}`.toLowerCase()
+  const text =
+    `${item.category_name || ''} ${item.group_name || ''} ${item.class_name || ''} ${item.position_name || ''} ${item.mxik_name || ''}`.toLowerCase()
   if (
     text.includes('ichimlik') ||
     text.includes('suv') ||
@@ -2089,7 +2180,7 @@ const applyClassifierToForm = async (item: any) => {
   clearProductFields()
 
   // 2. Populate classifier attributes
-  form.classifier_id = item.id ? String(item.id) : (item.mxik_code ? String(item.mxik_code) : '')
+  form.classifier_id = item.id ? String(item.id) : item.mxik_code ? String(item.mxik_code) : ''
   form.productName = item.mxik_name || ''
   form.brand_name = item.brand_name || ''
   form.mxik_code = item.mxik_code || ''
@@ -2737,7 +2828,11 @@ const deleteFromDetail = () => {
   }
 
   .intake-search-card {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.04) 0%, rgba(147, 197, 253, 0.08) 100%);
+    background: linear-gradient(
+      135deg,
+      rgba(59, 130, 246, 0.04) 0%,
+      rgba(147, 197, 253, 0.08) 100%
+    );
     border-color: rgba(59, 130, 246, 0.25);
   }
 

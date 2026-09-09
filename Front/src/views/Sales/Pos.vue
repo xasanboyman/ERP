@@ -11,6 +11,9 @@
                 <div class="stat-number">
                   {{ stats.todayCount }} <span class="stat-unit">{{ t('erp.receiptsCount') }}</span>
                 </div>
+                <div class="text-[11px] text-gray-400 mt-2px">
+                  Jami: {{ stats.allTimeCount || salesTotal }} ta chek
+                </div>
               </div>
               <div class="stat-icon-wrapper">
                 <Icon icon="ep:tickets" :size="20" />
@@ -28,6 +31,9 @@
                   {{ formatMoney(stats.todayItems) }}
                   <span class="stat-unit">{{ t('erp.itemsCount') }}</span>
                 </div>
+                <div v-if="stats.allTimeItems" class="text-[11px] text-gray-400 mt-2px">
+                  Jami: {{ formatMoney(stats.allTimeItems) }} dona
+                </div>
               </div>
               <div class="stat-icon-wrapper">
                 <Icon icon="ep:box" :size="20" />
@@ -42,6 +48,9 @@
               <div class="stat-info">
                 <span class="stat-label">{{ t('erp.todayGrossRevenue') }}</span>
                 <div class="stat-number"> ${{ formatMoney(stats.todayRevenue) }} </div>
+                <div v-if="stats.allTimeRevenue" class="text-[11px] text-gray-400 mt-2px">
+                  Jami: ${{ formatMoney(stats.allTimeRevenue) }}
+                </div>
               </div>
               <div class="stat-icon-wrapper">
                 <Icon icon="ep:money" :size="20" />
@@ -915,7 +924,12 @@
       :min-resize-height="400"
       class="receipt-dialog-wrap"
     >
-      <div v-if="selectedSale" id="receiptPrintArea" class="receipt-large-card font-mono" v-loading="receiptLoading">
+      <div
+        v-if="selectedSale"
+        id="receiptPrintArea"
+        class="receipt-large-card font-mono"
+        v-loading="receiptLoading"
+      >
         <!-- Header Branding & Receipt Number -->
         <div
           class="receipt-header-branding text-center mb-16px pb-12px border-b-2 border-[var(--el-border-color)] dark:border-gray-700"
@@ -926,9 +940,14 @@
             OMBORXONA ERP POS
           </div>
           <div class="text-center text-12px text-[var(--el-text-color-secondary)] mt-2px">
-            Filial: <span class="font-bold text-[var(--el-text-color-primary)]">{{ activeBranchName }}</span>
+            Filial:
+            <span class="font-bold text-[var(--el-text-color-primary)]">{{
+              activeBranchName
+            }}</span>
           </div>
-          <div class="inline-block bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 px-12px py-4px rounded-full text-15px text-emerald-500 font-bold mt-8px">
+          <div
+            class="inline-block bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 px-12px py-4px rounded-full text-15px text-emerald-500 font-bold mt-8px"
+          >
             CHEK #{{ selectedSale.receipt_number }}
           </div>
         </div>
@@ -953,15 +972,15 @@
           </div>
           <div v-if="selectedSale.customer_name" class="flex justify-between items-center">
             <span class="text-[var(--el-text-color-secondary)]">Mijoz:</span>
-            <span class="font-bold text-purple-500">{{
-              selectedSale.customer_name
-            }}</span>
+            <span class="font-bold text-purple-500">{{ selectedSale.customer_name }}</span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-[var(--el-text-color-secondary)]">{{
               t('erp.paymentMethodColon')
             }}</span>
-            <span class="uppercase font-bold text-emerald-500 text-15px px-8px py-2px rounded bg-emerald-500/10 border border-emerald-500/20">
+            <span
+              class="uppercase font-bold text-emerald-500 text-15px px-8px py-2px rounded bg-emerald-500/10 border border-emerald-500/20"
+            >
               {{ getPaymentLabel(selectedSale.payment_method) }}
             </span>
           </div>
@@ -979,13 +998,18 @@
             <span class="w-130px text-right">SUMMA</span>
           </div>
 
-          <div v-if="selectedSale.items && selectedSale.items.length > 0" class="divide-y divide-[var(--el-border-color-lighter)]">
+          <div
+            v-if="selectedSale.items && selectedSale.items.length > 0"
+            class="divide-y divide-[var(--el-border-color-lighter)]"
+          >
             <div
               v-for="(item, idx) in selectedSale.items"
               :key="item.id || idx"
               class="flex items-center py-8px text-14px hover:bg-emerald-500/5 px-4px rounded transition-colors"
             >
-              <span class="w-32px text-center text-12px text-gray-400 font-mono flex-shrink-0">{{ idx + 1 }}</span>
+              <span class="w-32px text-center text-12px text-gray-400 font-mono flex-shrink-0">{{
+                idx + 1
+              }}</span>
               <div class="flex-1 px-8px min-w-0">
                 <span
                   class="font-bold text-[var(--el-text-color-primary)] leading-snug break-words block text-14px"
@@ -996,7 +1020,10 @@
                   <span v-if="item.shtrix_code" class="text-gray-400 font-mono text-10px">
                     {{ item.shtrix_code }}
                   </span>
-                  <span v-if="item.unit_name" class="text-blue-500 font-bold bg-blue-500/10 px-6px py-0.5 rounded text-10px">
+                  <span
+                    v-if="item.unit_name"
+                    class="text-blue-500 font-bold bg-blue-500/10 px-6px py-0.5 rounded text-10px"
+                  >
                     {{ item.unit_name }}
                   </span>
                 </div>
@@ -1011,12 +1038,17 @@
               >
                 ${{ formatMoney(item.price) }}
               </span>
-              <span class="w-130px text-right font-mono font-bold text-emerald-500 flex-shrink-0 text-15px">
+              <span
+                class="w-130px text-right font-mono font-bold text-emerald-500 flex-shrink-0 text-15px"
+              >
                 ${{ formatMoney(item.total || item.quantity * item.price) }}
               </span>
             </div>
           </div>
-          <div v-else-if="!receiptLoading" class="text-center py-24px text-gray-400 text-13px bg-gray-500/5 rounded-8px">
+          <div
+            v-else-if="!receiptLoading"
+            class="text-center py-24px text-gray-400 text-13px bg-gray-500/5 rounded-8px"
+          >
             <Icon icon="ep:info-filled" class="text-22px mb-6px text-amber-500 mx-auto block" />
             <div>Chekda mahsulotlar topilmadi</div>
           </div>
@@ -1030,7 +1062,13 @@
           <div class="flex justify-between text-14px text-[var(--el-text-color-secondary)]">
             <span>Jami mahsulotlar soni:</span>
             <span class="font-mono font-bold text-[var(--el-text-color-primary)]">
-              {{ (selectedSale.items || []).reduce((acc: number, it: any) => acc + (Number(it.quantity) || 1), 0) }} dona
+              {{
+                (selectedSale.items || []).reduce(
+                  (acc: number, it: any) => acc + (Number(it.quantity) || 1),
+                  0
+                )
+              }}
+              dona
             </span>
           </div>
           <div
@@ -1080,14 +1118,31 @@
         <div class="flex items-center justify-between flex-wrap gap-12px">
           <div class="flex items-center gap-8px">
             <ElTag v-if="selectedSale" type="success" effect="plain" class="font-bold">
-              {{ (selectedSale.items || []).length }} xil mahsulot ({{ (selectedSale.items || []).reduce((acc: number, it: any) => acc + (Number(it.quantity) || 1), 0) }} dona)
+              {{ (selectedSale.items || []).length }} xil mahsulot ({{
+                (selectedSale.items || []).reduce(
+                  (acc: number, it: any) => acc + (Number(it.quantity) || 1),
+                  0
+                )
+              }}
+              dona)
             </ElTag>
           </div>
           <div class="flex items-center gap-10px">
-            <ElButton type="primary" size="large" class="font-bold px-18px" @click="() => printReceipt('thermal')">
+            <ElButton
+              type="primary"
+              size="large"
+              class="font-bold px-18px"
+              @click="() => printReceipt('thermal')"
+            >
               <Icon icon="ep:printer" class="mr-6px" /> Termal Chek (80mm)
             </ElButton>
-            <ElButton type="success" plain size="large" class="font-bold px-18px" @click="() => printReceipt('a4')">
+            <ElButton
+              type="success"
+              plain
+              size="large"
+              class="font-bold px-18px"
+              @click="() => printReceipt('a4')"
+            >
               <Icon icon="ep:document" class="mr-6px" /> Standart (A4)
             </ElButton>
             <ElButton size="large" @click="receiptModalVisible = false">{{
@@ -1130,7 +1185,13 @@ import {
 } from 'element-plus'
 
 import { getProductListApi, ProductType } from '@/api/product'
-import { getSalesListApi, checkoutSaleApi, getSaleReceiptApi, SaleItemType, SaleType } from '@/api/sales'
+import {
+  getSalesListApi,
+  checkoutSaleApi,
+  getSaleReceiptApi,
+  SaleItemType,
+  SaleType
+} from '@/api/sales'
 import { getEmployeesAuthApi, loginApi } from '@/api/login'
 import { getBranchListApi, saveBranchApi, deleteBranchApi, BranchType } from '@/api/branch'
 import {
@@ -1489,18 +1550,59 @@ const calculatedDebt = computed(() => {
   return Math.max(0, grandTotal.value - paid)
 })
 
+const salesSummary = ref<any>(null)
+
 const stats = computed(() => {
-  const todayCount = salesTotal.value
+  // If backend returned summary, prioritize it!
+  if (salesSummary.value && salesSummary.value.todayCount !== undefined) {
+    const todayCount = Number(salesSummary.value.todayCount) || 0
+    const todayItems = Number(salesSummary.value.todayItems) || 0
+    const todayRevenue = Number(salesSummary.value.todayRevenue) || 0
+    const allTimeCount = Number(salesSummary.value.allTimeCount) || salesTotal.value || 0
+    const allTimeRevenue = Number(salesSummary.value.allTimeRevenue) || 0
+    const allTimeItems = Number(salesSummary.value.allTimeItems) || 0
+    const avgReceipt = todayCount > 0 ? todayRevenue / todayCount : 0
+    return {
+      todayCount,
+      todayItems,
+      todayRevenue,
+      allTimeCount,
+      allTimeRevenue,
+      allTimeItems,
+      avgReceipt
+    }
+  }
+
+  // Fallback: Client-side local date calculation
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  const todayStr = `${y}-${m}-${d}`
+
+  let todayCount = 0
   let todayItems = 0
   let todayRevenue = 0
 
   salesList.value.forEach((s) => {
-    todayItems += s.total_items || 0
-    todayRevenue += s.total_amount || 0
+    const createdStr = (s.created_at || '').slice(0, 10)
+    if (createdStr === todayStr) {
+      todayCount++
+      todayItems += Number(s.total_items) || 0
+      todayRevenue += Number(s.total_amount) || 0
+    }
   })
 
   const avgReceipt = todayCount > 0 ? todayRevenue / todayCount : 0
-  return { todayCount, todayItems, todayRevenue, avgReceipt }
+  return {
+    todayCount,
+    todayItems,
+    todayRevenue,
+    allTimeCount: salesTotal.value,
+    allTimeRevenue: 0,
+    allTimeItems: 0,
+    avgReceipt
+  }
 })
 
 const fetchSalesData = async (silent = false) => {
@@ -1508,7 +1610,7 @@ const fetchSalesData = async (silent = false) => {
     loadingSales.value = true
   }
   try {
-    const res = await getSalesListApi({
+    const res: any = await getSalesListApi({
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       search: searchQuery.search || undefined,
@@ -1517,6 +1619,9 @@ const fetchSalesData = async (silent = false) => {
     if (res && res.data) {
       salesList.value = res.data.list || []
       salesTotal.value = res.data.total || 0
+      if (res.data.summary) {
+        salesSummary.value = res.data.summary
+      }
     }
   } catch (err) {
     console.error(err)
@@ -2142,8 +2247,7 @@ const openReceiptDetail = async (row: SaleType) => {
         quantity: selectedSale.value.total_items || 1,
         unit_name: 'dona',
         price:
-          Number(selectedSale.value.total_amount) /
-          (Number(selectedSale.value.total_items) || 1),
+          Number(selectedSale.value.total_amount) / (Number(selectedSale.value.total_items) || 1),
         total: Number(selectedSale.value.total_amount)
       }
     ]

@@ -158,11 +158,15 @@
         <div class="receipt-meta">
           <div><b>Sana:</b> {{ selectedSale.created_at }}</div>
           <div><b>Kassir:</b> {{ selectedSale.cashier_name || 'admin' }}</div>
-          <div v-if="selectedSale.customer_name"><b>Mijoz:</b> {{ selectedSale.customer_name }}</div>
+          <div v-if="selectedSale.customer_name"
+            ><b>Mijoz:</b> {{ selectedSale.customer_name }}</div
+          >
         </div>
 
         <div class="receipt-items-wrap">
-          <div class="flex items-center font-bold text-11px text-gray-400 pb-6px border-b border-gray-700 uppercase tracking-wider mb-8px">
+          <div
+            class="flex items-center font-bold text-11px text-gray-400 pb-6px border-b border-gray-700 uppercase tracking-wider mb-8px"
+          >
             <span class="w-24px text-center">#</span>
             <span class="flex-1 px-6px">MAHSULOT NOMI</span>
             <span class="w-100px text-center">SONI</span>
@@ -170,18 +174,31 @@
             <span class="w-100px text-right">JAMI</span>
           </div>
 
-          <div v-if="selectedSale.items && selectedSale.items.length > 0" class="divide-y divide-gray-800">
-            <div v-for="(item, idx) in selectedSale.items" :key="item.id || idx" class="flex items-center py-6px text-13px">
-              <span class="w-24px text-center text-11px text-gray-400 font-mono">{{ idx + 1 }}</span>
+          <div
+            v-if="selectedSale.items && selectedSale.items.length > 0"
+            class="divide-y divide-gray-800"
+          >
+            <div
+              v-for="(item, idx) in selectedSale.items"
+              :key="item.id || idx"
+              class="flex items-center py-6px text-13px"
+            >
+              <span class="w-24px text-center text-11px text-gray-400 font-mono">{{
+                idx + 1
+              }}</span>
               <div class="flex-1 px-6px min-w-0">
-                <span class="font-bold text-[var(--el-text-color-primary)] block leading-snug break-words">
+                <span
+                  class="font-bold text-[var(--el-text-color-primary)] block leading-snug break-words"
+                >
                   {{ item.product_name }}
                 </span>
                 <span v-if="item.shtrix_code" class="text-10px text-gray-400 font-mono">
                   {{ item.shtrix_code }}
                 </span>
               </div>
-              <span class="w-100px text-center font-mono font-bold text-[var(--el-text-color-primary)]">
+              <span
+                class="w-100px text-center font-mono font-bold text-[var(--el-text-color-primary)]"
+              >
                 {{ formatMoney(item.quantity) }} {{ item.unit_name || 'dona' }}
               </span>
               <span class="w-90px text-right font-mono text-gray-400">
@@ -201,32 +218,65 @@
           <div class="flex justify-between text-13px text-gray-400">
             <span>Mahsulotlar soni:</span>
             <span class="font-bold text-[var(--el-text-color-primary)]">
-              {{ (selectedSale.items || []).reduce((acc: number, it: any) => acc + (Number(it.quantity) || 1), 0) }} dona
+              {{
+                (selectedSale.items || []).reduce(
+                  (acc: number, it: any) => acc + (Number(it.quantity) || 1),
+                  0
+                )
+              }}
+              dona
             </span>
           </div>
-          <div v-if="(selectedSale.discount || 0) > 0" class="flex justify-between text-amber-500 text-13px">
+          <div
+            v-if="(selectedSale.discount || 0) > 0"
+            class="flex justify-between text-amber-500 text-13px"
+          >
             <span>Chegirma:</span>
             <span>-${{ formatMoney(selectedSale.discount) }}</span>
           </div>
-          <div class="flex justify-between items-center text-18px font-bold text-emerald-500 pt-6px border-t border-dashed border-gray-700">
+          <div
+            class="flex justify-between items-center text-18px font-bold text-emerald-500 pt-6px border-t border-dashed border-gray-700"
+          >
             <span>JAMI SUMMA:</span>
             <span class="text-22px font-mono">${{ formatMoney(selectedSale.total_amount) }}</span>
           </div>
           <div class="flex justify-between text-13px text-gray-400">
             <span>To'langan:</span>
-            <span class="font-mono font-bold">${{ formatMoney(selectedSale.paid_amount !== undefined ? selectedSale.paid_amount : selectedSale.total_amount) }}</span>
+            <span class="font-mono font-bold"
+              >${{
+                formatMoney(
+                  selectedSale.paid_amount !== undefined
+                    ? selectedSale.paid_amount
+                    : selectedSale.total_amount
+                )
+              }}</span
+            >
           </div>
-          <div v-if="(selectedSale.debt_amount || 0) > 0" class="flex justify-between text-13px text-red-400 font-bold">
+          <div
+            v-if="(selectedSale.debt_amount || 0) > 0"
+            class="flex justify-between text-13px text-red-400 font-bold"
+          >
             <span>Qarz (Nasiya):</span>
             <span class="font-mono">${{ formatMoney(selectedSale.debt_amount) }}</span>
           </div>
         </div>
 
         <div class="flex justify-end gap-10px mt-20px pt-12px border-t border-gray-700">
-          <ElButton type="primary" size="default" class="font-bold" @click="() => printReceiptHistory('thermal')">
+          <ElButton
+            type="primary"
+            size="default"
+            class="font-bold"
+            @click="() => printReceiptHistory('thermal')"
+          >
             <Icon icon="ep:printer" class="mr-4px" /> Termal Chek (80mm)
           </ElButton>
-          <ElButton type="success" plain size="default" class="font-bold" @click="() => printReceiptHistory('a4')">
+          <ElButton
+            type="success"
+            plain
+            size="default"
+            class="font-bold"
+            @click="() => printReceiptHistory('a4')"
+          >
             <Icon icon="ep:document" class="mr-4px" /> Standart (A4)
           </ElButton>
           <ElButton size="default" @click="detailModalVisible = false">Yopish</ElButton>
@@ -285,14 +335,19 @@ const formatMoney = (val: number | string | undefined | null) => {
     .replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
 }
 
+const salesSummary = ref<any>(null)
+
 const totalSalesAmount = computed(() => {
+  if (salesSummary.value && salesSummary.value.allTimeRevenue !== undefined) {
+    return salesSummary.value.allTimeRevenue
+  }
   return salesList.value.reduce((sum, s) => sum + (s.total_amount || 0), 0)
 })
 
 const fetchSalesData = async () => {
   loading.value = true
   try {
-    const res = await getSalesListApi({
+    const res: any = await getSalesListApi({
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       search: searchQuery.search || undefined,
@@ -302,6 +357,9 @@ const fetchSalesData = async () => {
     if (res && res.data) {
       salesList.value = res.data.list || []
       total.value = res.data.total || 0
+      if (res.data.summary) {
+        salesSummary.value = res.data.summary
+      }
     }
   } catch (err) {
     console.error(err)
@@ -368,8 +426,7 @@ const openReceiptDetail = async (row: SaleType) => {
         quantity: selectedSale.value.total_items || 1,
         unit_name: 'dona',
         price:
-          Number(selectedSale.value.total_amount) /
-          (Number(selectedSale.value.total_items) || 1),
+          Number(selectedSale.value.total_amount) / (Number(selectedSale.value.total_items) || 1),
         total: Number(selectedSale.value.total_amount)
       }
     ]

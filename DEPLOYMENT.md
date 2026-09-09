@@ -1,4 +1,4 @@
-# Knit ERP Production Deployment Guide (Vercel & Cloud SQL)
+# Apex ERP Production Deployment Guide (Vercel & Cloud SQL)
 
 This repository is configured for full-stack deployment on **Vercel** with **Cloud PostgreSQL** (Neon / Supabase / Vercel Postgres / Railway).
 

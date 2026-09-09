@@ -68,7 +68,7 @@
     <el-dialog v-model="printVisible" title="QR yorliqlarni chop etish" width="700px">
       <div id="print-area" class="print-container">
         <div v-for="qr in selectedQrs" :key="qr.id" class="qr-card">
-          <div class="qr-header">KNIT ERP - TRACKING LABEL</div>
+          <div class="qr-header">APEX ERP - TRACKING LABEL</div>
           <div class="qr-content">
             <div class="qr-info">
               <div><strong>Buyurtma:</strong> {{ qr.task_details?.order_number }}</div>

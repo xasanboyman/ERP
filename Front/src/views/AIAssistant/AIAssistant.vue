@@ -1,59 +1,50 @@
 <template>
   <div class="ai-assistant-wrapper">
-    <!-- Floating Orb Trigger Button -->
-    <div class="orb-container">
-      <button
-        class="ai-trigger-orb"
-        :class="{ 'is-active': isOpen, 'is-listening': clientStatus === 'connected' }"
-        @click="togglePanel"
-        :title="isOpen ? 'Yopish' : 'AI Yordamchi'"
+    <!-- AI Dock Button (Right next to Gear icon on the right edge) -->
+    <div
+      class="ai-side-dock-btn"
+      :class="{ 'is-active': isOpen, 'is-listening': clientStatus === 'connected' }"
+      @click="togglePanel"
+      :title="isOpen ? 'Yopish' : 'AI Yordamchi'"
+    >
+      <span v-if="clientStatus === 'connected'" class="ai-side-pulse-glow"></span>
+      <!-- Animated AI Brain/Spark Icon -->
+      <svg
+        v-if="!isOpen"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="20"
+        height="20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="ai-side-icon"
       >
-        <div class="orb-pulse-glow"></div>
-        <div class="orb-pulse-glow-secondary"></div>
-        <div class="orb-content">
-          <!-- Animated AI Brain/Spark Icon -->
-          <svg
-            v-if="!isOpen"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            width="24"
-            height="24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M12 2a8 8 0 0 0-8 8c0 3.32 2.02 6.17 4.9 7.37L9 22l3-1.5L15 22l.1-4.63A8.002 8.002 0 0 0 20 10a8 8 0 0 0-8-8z"
-            />
-            <circle cx="9" cy="10" r="1" fill="currentColor" />
-            <circle cx="15" cy="10" r="1" fill="currentColor" />
-            <path d="M9.5 14a3.5 3.5 0 0 0 5 0" />
-          </svg>
-          <svg
-            v-else
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            width="22"
-            height="22"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </div>
-      </button>
-
-      <!-- Mini Float Tag -->
-      <div v-if="!isOpen" class="ai-badge-label" @click="togglePanel">
-        <span class="ai-badge-dot"></span>
-        <span>AI Yordamchi</span>
-      </div>
+        <path
+          d="M12 2a8 8 0 0 0-8 8c0 3.32 2.02 6.17 4.9 7.37L9 22l3-1.5L15 22l.1-4.63A8.002 8.002 0 0 0 20 10a8 8 0 0 0-8-8z"
+        />
+        <circle cx="9" cy="10" r="1" fill="currentColor" />
+        <circle cx="15" cy="10" r="1" fill="currentColor" />
+        <path d="M9.5 14a3.5 3.5 0 0 0 5 0" />
+      </svg>
+      <svg
+        v-else
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="ai-side-icon"
+      >
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
     </div>
 
     <!-- Glassmorphic Dialog Panel -->
@@ -64,7 +55,7 @@
           <div class="header-title-box">
             <span class="pulse-indicator" :class="clientStatus"></span>
             <div>
-              <h2 class="header-title">Knit ERP AI</h2>
+              <h2 class="header-title">Apex ERP AI</h2>
               <p class="header-status">
                 {{
                   clientStatus === 'connected'
@@ -863,10 +854,6 @@ onUnmounted(() => {
 
 <style scoped>
 .ai-assistant-wrapper {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
   font-family:
     'Outfit',
     'Inter',
@@ -876,147 +863,83 @@ onUnmounted(() => {
   user-select: none;
 }
 
-.orb-container {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  position: relative;
-}
-
-/* Float Label Tag */
-.ai-badge-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  border-radius: 20px;
-  color: #e2e8f0;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  animation: floatBadge 3s ease-in-out infinite;
-}
-
-.ai-badge-label:hover {
-  transform: translateY(-2px);
-  border-color: rgba(139, 92, 246, 0.6);
-  background: rgba(30, 41, 59, 0.95);
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
-}
-
-.ai-badge-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
-}
-
-@keyframes floatBadge {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-}
-
-/* Orb Trigger Button */
-.ai-trigger-orb {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
-  border: none;
-  color: #fff;
-  cursor: pointer;
-  box-shadow:
-    0 8px 24px rgba(99, 102, 241, 0.45),
-    inset 0 1px 2px rgba(255, 255, 255, 0.35);
-  position: relative;
+/* AI Side Dock Tab Button (Docked right near gear icon) */
+.ai-side-dock-btn {
+  position: fixed;
+  top: calc(45% - 48px);
+  right: 0;
+  z-index: 3000;
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: #ffffff;
+  border-radius: 6px 0 0 6px;
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+  transition: all 0.25s ease;
 }
 
-.ai-trigger-orb:hover {
-  transform: scale(1.1) rotate(5deg);
-  box-shadow:
-    0 12px 30px rgba(99, 102, 241, 0.6),
-    0 0 20px rgba(236, 72, 153, 0.4);
+.ai-side-dock-btn:hover {
+  filter: brightness(1.15);
+  transform: scale(1.08);
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.5);
 }
 
-.ai-trigger-orb:active {
-  transform: scale(0.95);
+.ai-side-dock-btn.is-active {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.4);
 }
 
-.ai-trigger-orb.is-active {
-  background: linear-gradient(135deg, #475569, #334155);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+.ai-side-dock-btn.is-listening {
+  background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5);
 }
 
-.orb-pulse-glow {
+.ai-side-pulse-glow {
   position: absolute;
-  top: -4px;
-  left: -4px;
-  right: -4px;
-  bottom: -4px;
-  border-radius: 50%;
-  border: 2px solid rgba(99, 102, 241, 0.5);
-  animation: pulse 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
-  pointer-events: none;
+  inset: -3px;
+  border-radius: 8px 0 0 8px;
+  background: rgba(16, 185, 129, 0.4);
+  animation: pulseListen 1.5s infinite;
 }
 
-.orb-pulse-glow-secondary {
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  right: -8px;
-  bottom: -8px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(236, 72, 153, 0.3);
-  animation: pulse 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite 0.7s;
-  pointer-events: none;
-}
-
-@keyframes pulse {
+@keyframes pulseListen {
   0% {
     transform: scale(1);
     opacity: 0.8;
   }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.2;
+  }
   100% {
-    transform: scale(1.35);
-    opacity: 0;
+    transform: scale(1);
+    opacity: 0.8;
   }
 }
 
-.ai-trigger-orb.is-listening {
-  background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
-  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.6);
+.ai-side-icon {
+  color: #ffffff;
+  display: block;
 }
 
-/* Glassmorphic Panel styling */
+/* Glassmorphic Panel styling (Opens right next to the dock button) */
 .ai-glass-panel {
-  position: absolute;
-  bottom: 70px;
-  right: 0;
+  position: fixed;
+  top: calc(45% - 240px);
+  right: 50px;
   width: 420px;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100vw - 64px);
   height: 580px;
-  max-height: calc(100vh - 100px);
-  background: rgba(15, 23, 42, 0.92);
+  max-height: calc(100vh - 80px);
+  background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
+  border-radius: 20px;
   box-shadow:
     0 24px 60px rgba(0, 0, 0, 0.65),
     0 0 1px 1px rgba(255, 255, 255, 0.1) inset;
@@ -1024,6 +947,18 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   color: #f8fafc;
+  z-index: 3001;
+}
+
+@media (max-width: 768px) {
+  .ai-glass-panel {
+    top: 55px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-width: none;
+    height: calc(100vh - 75px);
+  }
 }
 
 .panel-header {

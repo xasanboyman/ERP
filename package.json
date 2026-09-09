@@ -1,7 +1,7 @@
 {
-  "name": "knit-erp",
+  "name": "apex-erp",
   "version": "1.0.0",
-  "description": "Knit ERP - Full-Stack Enterprise Resource Planning, POS & Textile Production Management System",
+  "description": "Apex ERP - Full-Stack Enterprise Resource Planning, POS & Textile Production Management System",
   "author": "Hasanboy Abdulkhayev <lucyakkount@gmail.com>",
   "homepage": "https://github.com/AbdulkhaevHasanboy/ERP",
   "private": true,

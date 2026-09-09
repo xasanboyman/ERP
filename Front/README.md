@@ -1,8 +1,8 @@
-# Knit ERP - Frontend Client
+# Apex ERP - Frontend Client
 
 <div align="center">
-  <img width="120" src="./public/logo.png" alt="Knit ERP Logo">
-  <h1>Knit ERP (Enterprise Resource Planning & POS)</h1>
+  <img width="120" src="./public/logo.png" alt="Apex ERP Logo">
+  <h1>Apex ERP (Enterprise Resource Planning & POS)</h1>
   <p><strong>Developed & Maintained by Hasanboy Abdulkhayev</strong></p>
 </div>
 
@@ -10,7 +10,7 @@
 
 ## 📌 Overview
 
-**Knit ERP** is a modern, high-performance web interface for enterprise inventory, textile & garment manufacturing tracking, point of sale (POS) checkout, and AI voice assistance.
+**Apex ERP** is a modern, high-performance web interface for enterprise inventory, textile & garment manufacturing tracking, point of sale (POS) checkout, and AI voice assistance.
 
 - **Framework**: Vue 3 (Composition API, `<script setup lang="ts">`) + Vite 6 + TypeScript 5.7
 - **UI Architecture**: Element Plus + UnoCSS + Iconify Icons + ECharts

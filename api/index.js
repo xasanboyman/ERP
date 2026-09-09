@@ -1656,10 +1656,29 @@ export default async function handler(req, res) {
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 500, 10);
       const offset = (pageIndex - 1) * pageSize;
-      const [countRes, rows] = await Promise.all([
-        sql`SELECT count(*) FROM sales`,
+      const [statsRes, rows] = await Promise.all([
+        sql`
+          SELECT 
+            count(*) as all_time_count,
+            COALESCE(SUM(total_amount), 0) as all_time_revenue,
+            COALESCE(SUM(total_items), 0) as all_time_items,
+            COUNT(*) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')) as today_count,
+            COALESCE(SUM(total_amount) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_revenue,
+            COALESCE(SUM(total_items) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_items
+          FROM sales
+        `,
         sql`SELECT * FROM sales ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
       ]);
+
+      const statsRow = statsRes[0] || {};
+      const summary = {
+        todayCount: parseInt(statsRow.today_count, 10) || 0,
+        todayRevenue: parseFloat(statsRow.today_revenue) || 0,
+        todayItems: parseInt(statsRow.today_items, 10) || 0,
+        allTimeCount: parseInt(statsRow.all_time_count, 10) || 0,
+        allTimeRevenue: parseFloat(statsRow.all_time_revenue) || 0,
+        allTimeItems: parseInt(statsRow.all_time_items, 10) || 0
+      };
 
       const saleIds = rows.map(r => r.id).filter(Boolean);
       const itemsMap = {};
@@ -1710,8 +1729,9 @@ export default async function handler(req, res) {
       return res.status(200).json({
         code: 0,
         data: {
-          total: parseInt(countRes[0].count, 10),
-          list: listWithItems
+          total: summary.allTimeCount,
+          list: listWithItems,
+          summary
         }
       });
     }

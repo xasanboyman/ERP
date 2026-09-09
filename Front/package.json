@@ -1,7 +1,7 @@
 {
   "name": "erp-frontend",
   "version": "1.0.0",
-  "description": "Knit ERP - Enterprise Resource Planning & POS Management System",
+  "description": "Apex ERP - Enterprise Resource Planning & POS Management System",
   "author": "Hasanboy Abdulkhayev <lucyakkount@gmail.com>",
   "homepage": "https://github.com/AbdulkhaevHasanboy/ERP",
   "private": true,
