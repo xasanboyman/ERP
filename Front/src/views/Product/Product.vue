@@ -387,528 +387,755 @@
       :min-resize-width="700"
       :min-resize-height="450"
     >
-      <div v-if="dialogType === 'add'" class="classifier-picker-card mb-20px">
-        <div
-          class="classifier-header flex items-center justify-between flex-wrap gap-2 pb-10px mb-12px border-b border-blue-200/50 dark:border-blue-800/50"
-        >
-          <div class="flex items-center gap-8px">
-            <div
-              class="w-26px h-26px rounded-lg bg-blue-500 text-white flex items-center justify-center shadow-sm"
-            >
-              <Icon icon="ep:search" style="font-size: 14px" />
-            </div>
-            <div>
-              <span class="font-bold text-sm text-gray-900 dark:text-gray-100">
-                1. Klassifikatordan Tanlash va Shtrix-Kodni Skanerlash
-              </span>
-              <span class="text-xs text-gray-400 ml-6px font-normal hidden sm:inline">
-                (Formani bir zumda avtomatik to'ldirish)
-              </span>
-            </div>
-          </div>
-          <div class="flex items-center gap-10px">
-            <div
-              class="flex items-center gap-6px px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-semibold"
-            >
-              <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <Icon
-                :icon="classifierSearchMode === 'extended' ? 'ep:lightning' : 'ep:search'"
-                :class="classifierSearchMode === 'extended' ? 'text-amber-500' : 'text-blue-500'"
-                style="font-size: 13px"
-              />
-              <span>{{
-                classifierSearchMode === 'extended'
-                  ? 'Tasnif Soliq (440,000+ tovarlar)'
-                  : 'Oddiy qidiruv'
-              }}</span>
-            </div>
-            <ElButton
-              size="small"
-              type="danger"
-              plain
-              class="!px-10px !text-xs font-medium"
-              @click="resetForm"
-            >
-              <Icon icon="ep:refresh-right" class="mr-4px" /> Formani tozalash
-            </ElButton>
-          </div>
-        </div>
-
-        <div class="flex gap-10px mb-12px">
-          <ElInput
-            ref="barcodeInputRef"
-            v-model="barcodeSearch"
-            placeholder="Shtrix-kodni skanerlang yoki qo'lda kiriting (masalan: 4780022620153)..."
-            clearable
-            size="default"
-            style="flex: 1"
-            @input="(val: string) => (barcodeSearch = val.replace(/\D/g, ''))"
-            @keyup.enter="handleBarcodeScan"
-          >
-            <template #prefix>
-              <Icon icon="ep:reading" class="text-gray-400" />
-            </template>
-            <template #append>
-              <ElButton
-                type="primary"
-                :loading="barcodeLoading"
-                class="!px-16px font-semibold"
-                @click="handleBarcodeScan"
-              >
-                <Icon icon="ep:aim" class="mr-4px" /> Kodni Izlash
-              </ElButton>
-            </template>
-          </ElInput>
-        </div>
-
-        <div class="mb-10px flex items-center justify-between flex-wrap gap-2">
-          <ElRadioGroup
-            v-model="classifierSearchMode"
-            size="small"
-            class="custom-search-mode-radios"
-            @change="onClassifierSearchModeChange"
-          >
-            <ElRadioButton label="extended">
-              <Icon icon="ep:lightning" class="mr-4px text-amber-500" /> Matn bo'yicha
-              kengaytirilgan qidiruv
-            </ElRadioButton>
-            <ElRadioButton label="simple">
-              <Icon icon="ep:search" class="mr-4px" /> Matn bo'yicha qidirish
-            </ElRadioButton>
-          </ElRadioGroup>
-          <span class="text-xs text-gray-500 italic">
-            {{
-              classifierSearchMode === 'extended'
-                ? "Barcha tovarlar, brendlar va atributlar bo'yicha to'liq matnli qidiruv"
-                : 'Faqat lokal bazadan oddiy qidiruv'
-            }}
-          </span>
-        </div>
-
-        <div>
-          <ElSelect
-            v-model="selectedClassifierId"
-            filterable
-            remote
-            reserve-keyword
-            clearable
-            :fit-input-width="true"
-            popper-class="classifier-select-popper"
-            size="large"
-            :placeholder="
-              classifierSearchMode === 'extended'
-                ? 'Tovar nomi yoki brendini yozing (masalan: Pepsi 1.5, Coca Cola, Shaffof, Dinay, ruchka...)'
-                : 'Oddiy qidiruv...'
-            "
-            :remote-method="remoteSearchClassifier"
-            :loading="classifierLoading"
-            style="width: 100%"
-            @change="handleClassifierSelect"
-          >
-            <template #prefix>
-              <Icon icon="ep:search" class="text-blue-500 mr-2px" />
-            </template>
-            <ElOption
-              v-for="item in classifierOptions"
-              :key="item.id || item.mxik_code || item.shtrix_code"
-              :label="`${item.brand_name ? '[' + item.brand_name + '] ' : ''}${item.mxik_name} ${item.attribute_name ? '(' + item.attribute_name + ')' : ''} [${item.shtrix_code || item.mxik_code}]`"
-              :value="item.id || item.mxik_code"
-              class="classifier-option-item"
-            >
-              <div class="classifier-item-card">
-                <div class="classifier-item-top">
-                  <span v-if="item.brand_name" class="classifier-brand-tag">{{
-                    item.brand_name
-                  }}</span>
-                  <span class="classifier-item-title">{{ item.mxik_name }}</span>
-                </div>
-                <div class="classifier-item-meta">
-                  <span v-if="item.attribute_name" class="classifier-badge-attr">
-                    <Icon icon="ep:box" class="mr-3px" />{{ item.attribute_name }}
-                  </span>
-                  <span v-if="item.shtrix_code" class="classifier-badge-code">
-                    <Icon icon="ep:reading" class="mr-3px" />Shtrix: {{ item.shtrix_code }}
-                  </span>
-                  <span v-if="item.mxik_code" class="classifier-badge-code">
-                    <Icon icon="ep:document" class="mr-3px" />MXIK: {{ item.mxik_code }}
-                  </span>
-                </div>
-                <div v-if="item.group_name" class="classifier-item-group">
-                  <span>{{ item.group_name }}</span>
-                </div>
-              </div>
-            </ElOption>
-            <template #empty>
+      <div class="product-dialog-content">
+        <!-- ADD MODE: 2-COLUMN SPLIT (LEFT: SEARCH/SCAN/STATUS/CALC/IMAGE; RIGHT: FORM) -->
+        <div v-if="dialogType === 'add'" class="product-two-column-grid">
+          <!-- LEFT PANEL -->
+          <div class="product-panel-left">
+            <!-- 1. Search & Scanner Card -->
+            <div class="intake-card intake-search-card">
               <div
-                v-if="classifierLoading"
-                class="p-16px text-center text-blue-400 text-xs flex items-center justify-center gap-6px"
+                class="flex items-center justify-between pb-8px mb-10px border-b border-blue-200/50 dark:border-blue-800/50"
               >
-                <Icon icon="ep:loading" class="animate-spin text-14px" />
-                <span>Tasnif bazasidan mahsulotlar qidirilmoqda...</span>
-              </div>
-              <div
-                v-else-if="!lastClassifierQuery || lastClassifierQuery.length < 2"
-                class="p-14px text-center text-gray-400 text-xs flex items-center justify-center gap-6px"
-              >
-                <Icon icon="ep:info-filled" class="text-blue-400 text-14px" />
-                <span>Tovar nomi yoki brendini qidirish uchun kamida 2 ta harf yozing (masalan: Pepsi, Cola, Dinay)</span>
-              </div>
-              <div
-                v-else
-                class="p-16px text-center text-gray-400 text-xs flex items-center justify-center gap-6px"
-              >
-                <Icon icon="ep:warning" class="text-amber-400 text-14px" />
-                <span>"{{ lastClassifierQuery }}" bo'yicha hech qanday mahsulot topilmadi</span>
-              </div>
-            </template>
-          </ElSelect>
-        </div>
-      </div>
-
-      <!-- Existing Product Detection Compact Smart Banner -->
-      <transition name="el-zoom-in-top">
-        <div
-          v-if="dialogType === 'add' && existingProduct"
-          class="existing-product-alert mb-14px px-14px py-10px rounded-10px bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/35 flex items-center justify-between flex-wrap gap-2 text-xs"
-        >
-          <div class="flex items-center gap-8px text-amber-600 dark:text-amber-400 font-semibold">
-            <span class="flex h-2.5 w-2.5 relative">
-              <span
-                class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"
-              ></span>
-              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-            </span>
-            <Icon icon="ep:box" class="text-15px text-amber-500" />
-            <span>
-              <strong>Omborda mavjud tovar:</strong> Ma'lumotlar va narxlar avtomatik to'ldirildi. Yangi kirim sonini kiriting.
-            </span>
-          </div>
-
-          <div
-            class="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-white/80 dark:bg-black/50 px-10px py-4px rounded-6px border border-emerald-500/30 flex items-center gap-6px"
-          >
-            <Icon icon="ep:circle-check" class="text-14px text-emerald-500" />
-            <span>
-              Hozirgi qoldiq: {{ formatMoney(existingProduct.quantityInStock) }} {{ existingProduct.unit || 'dona' }}
-            </span>
-          </div>
-        </div>
-      </transition>
-
-      <!-- Section 2: Form Header -->
-      <div
-        class="form-section-divider flex items-center justify-between py-10px mb-16px border-b border-gray-200/80 dark:border-gray-700/60"
-      >
-        <div class="flex items-center gap-8px text-sm font-bold text-gray-800 dark:text-gray-200">
-          <div
-            class="w-24px h-24px rounded-md bg-emerald-500/15 text-emerald-500 flex items-center justify-center"
-          >
-            <Icon icon="ep:tickets" style="font-size: 13px" />
-          </div>
-          <span>2. Mahsulot Tafsilotlari va Narxlari</span>
-        </div>
-        <span class="text-xs text-gray-400">
-          {{
-            existingProduct
-              ? "Omborda mavjud mahsulot topildi, ma'lumotlar avtomatik to'ldirildi"
-              : "Kerakli maydonlarni to'ldiring yoki klassifikatordan tanlang"
-          }}
-        </span>
-      </div>
-
-      <ElForm ref="formRef" :model="form" :rules="rules" label-width="140px" class="modal-form">
-        <ElRow :gutter="16">
-          <ElCol :span="12">
-            <ElFormItem label="Shtrix-Kodi" prop="shtrix_code">
-              <ElInput
-                v-model="form.shtrix_code"
-                placeholder="Faqat raqamlar: 4780014680073"
-                @input="(val: string) => (form.shtrix_code = val.replace(/\D/g, ''))"
-                @blur="onShtrixCodeBlur"
-              />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="Brend Nomi" prop="brand_name">
-              <ElInput v-model="form.brand_name" placeholder="Masalan: PEPSI, Shaffof" />
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
-
-        <ElFormItem :label="t('erp.productName')" prop="productName">
-          <ElInput v-model="form.productName" placeholder="Masalan: Pepsi 1.5L PET" />
-        </ElFormItem>
-
-        <ElRow :gutter="16">
-          <ElCol :span="12">
-            <ElFormItem label="Atribut / Olcham" prop="attribute_name">
-              <ElInput v-model="form.attribute_name" placeholder="Masalan: PET idish 1,5 l." />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem :label="t('erp.mxikCode')" prop="mxik_code">
-              <ElInput v-model="form.mxik_code" placeholder="Masalan: 02201001001001002" />
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
-
-        <ElRow :gutter="16">
-          <ElCol :span="12">
-            <ElFormItem label="SKU Raqami" prop="SKU">
-              <ElInput v-model="form.SKU" placeholder="Masalan: SKU-4780014680073" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="O'lchov Birligi" prop="unit">
-              <ElInput v-model="form.unit" placeholder="dona, kg, litr..." />
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
-
-        <!-- Stock and Pricing: When existingProduct vs New Product -->
-        <template v-if="dialogType === 'add' && existingProduct">
-          <ElRow :gutter="16" class="items-start">
-            <!-- UNEDITABLE Existing Stock in Database -->
-            <ElCol :span="6">
-              <ElFormItem label="Omborda Bor Qoldiq">
-                <div
-                  class="uneditable-stock-box p-8px rounded-6px bg-gray-100 dark:bg-gray-800/80 border border-gray-300 dark:border-gray-700 flex items-center justify-between w-full shadow-inner"
-                >
+                <div class="flex items-center gap-6px">
                   <div
-                    class="flex items-center gap-6px text-gray-700 dark:text-gray-200 font-bold font-mono text-14px"
+                    class="w-24px h-24px rounded-md bg-blue-500 text-white flex items-center justify-center shadow-xs"
                   >
-                    <Icon icon="ep:lock" class="text-amber-500 text-14px" />
-                    <span>{{ formatMoney(existingProduct.quantityInStock) }} {{ existingProduct.unit || 'dona' }}</span>
+                    <Icon icon="ep:aim" style="font-size: 13px" />
                   </div>
-                  <ElTag size="small" type="info" effect="plain" class="text-10px font-semibold">
-                    Bazada bor
+                  <span class="font-bold text-13px text-gray-900 dark:text-gray-100">
+                    1. Qidirish & Skanerlash
+                  </span>
+                </div>
+                <ElButton
+                  size="small"
+                  type="danger"
+                  plain
+                  class="!px-8px !py-3px !text-xs font-medium"
+                  @click="resetForm"
+                >
+                  <Icon icon="ep:refresh-right" class="mr-3px" /> Tozalash
+                </ElButton>
+              </div>
+
+              <!-- Barcode input -->
+              <div class="mb-10px">
+                <ElInput
+                  ref="barcodeInputRef"
+                  v-model="barcodeSearch"
+                  placeholder="Shtrix-kodni skanerlang yoki kiriting..."
+                  clearable
+                  @input="(val: string) => (barcodeSearch = val.replace(/\D/g, ''))"
+                  @keyup.enter="handleBarcodeScan"
+                >
+                  <template #prefix>
+                    <Icon icon="ep:reading" class="text-gray-400" />
+                  </template>
+                  <template #append>
+                    <ElButton
+                      type="primary"
+                      :loading="barcodeLoading"
+                      class="!px-12px font-semibold"
+                      @click="handleBarcodeScan"
+                    >
+                      <Icon icon="ep:aim" class="mr-3px" /> Izlash
+                    </ElButton>
+                  </template>
+                </ElInput>
+              </div>
+
+              <!-- Search mode switcher -->
+              <div class="mb-8px flex items-center justify-between flex-wrap gap-1">
+                <ElRadioGroup
+                  v-model="classifierSearchMode"
+                  size="small"
+                  class="custom-search-mode-radios"
+                  @change="onClassifierSearchModeChange"
+                >
+                  <ElRadioButton label="extended">
+                    <Icon icon="ep:lightning" class="mr-2px text-amber-500" /> Kengaytirilgan
+                  </ElRadioButton>
+                  <ElRadioButton label="simple">
+                    <Icon icon="ep:search" class="mr-2px" /> Oddiy
+                  </ElRadioButton>
+                </ElRadioGroup>
+                <span class="text-[11px] text-gray-400 font-medium">Tasnif Soliq (440k+)</span>
+              </div>
+
+              <!-- Remote classifier autocomplete -->
+              <div>
+                <ElSelect
+                  v-model="selectedClassifierId"
+                  filterable
+                  remote
+                  reserve-keyword
+                  clearable
+                  :fit-input-width="true"
+                  popper-class="classifier-select-popper"
+                  :placeholder="
+                    classifierSearchMode === 'extended'
+                      ? 'Tovar nomi yoki brendi (Pepsi, Cola, ruchka...)'
+                      : 'Oddiy qidiruv...'
+                  "
+                  :remote-method="remoteSearchClassifier"
+                  :loading="classifierLoading"
+                  style="width: 100%"
+                  @change="handleClassifierSelect"
+                >
+                  <template #prefix>
+                    <Icon icon="ep:search" class="text-blue-500 mr-2px" />
+                  </template>
+                  <ElOption
+                    v-for="item in classifierOptions"
+                    :key="item.id || item.mxik_code || item.shtrix_code"
+                    :label="`${item.brand_name ? '[' + item.brand_name + '] ' : ''}${item.mxik_name} ${item.attribute_name ? '(' + item.attribute_name + ')' : ''} [${item.shtrix_code || item.mxik_code}]`"
+                    :value="item.id || item.mxik_code"
+                    class="classifier-option-item"
+                  >
+                    <div class="classifier-item-card">
+                      <div class="classifier-item-top">
+                        <span v-if="item.brand_name" class="classifier-brand-tag">{{
+                          item.brand_name
+                        }}</span>
+                        <span class="classifier-item-title">{{ item.mxik_name }}</span>
+                      </div>
+                      <div class="classifier-item-meta">
+                        <span v-if="item.attribute_name" class="classifier-badge-attr">
+                          <Icon icon="ep:box" class="mr-3px" />{{ item.attribute_name }}
+                        </span>
+                        <span v-if="item.shtrix_code" class="classifier-badge-code">
+                          <Icon icon="ep:reading" class="mr-3px" />{{ item.shtrix_code }}
+                        </span>
+                      </div>
+                    </div>
+                  </ElOption>
+                  <template #empty>
+                    <div
+                      v-if="classifierLoading"
+                      class="p-12px text-center text-blue-400 text-xs flex items-center justify-center gap-6px"
+                    >
+                      <Icon icon="ep:loading" class="animate-spin text-14px" />
+                      <span>Qidirilmoqda...</span>
+                    </div>
+                    <div
+                      v-else-if="!lastClassifierQuery || lastClassifierQuery.length < 2"
+                      class="p-12px text-center text-gray-400 text-xs flex items-center justify-center gap-6px"
+                    >
+                      <Icon icon="ep:info-filled" class="text-blue-400 text-13px" />
+                      <span>Kamida 2 ta harf kiriting (Pepsi, Cola...)</span>
+                    </div>
+                    <div
+                      v-else
+                      class="p-12px text-center text-gray-400 text-xs flex items-center justify-center gap-6px"
+                    >
+                      <Icon icon="ep:warning" class="text-amber-400 text-13px" />
+                      <span>"{{ lastClassifierQuery }}" bo'yicha topilmadi</span>
+                    </div>
+                  </template>
+                </ElSelect>
+              </div>
+            </div>
+
+            <!-- 2. Interactive Warehouse Status & Live Calculator Card -->
+            <transition name="el-zoom-in-top" mode="out-in">
+              <div
+                v-if="existingProduct"
+                key="existing"
+                class="intake-card warehouse-status-card existing"
+              >
+                <div class="flex items-center justify-between pb-6px border-b border-emerald-500/25">
+                  <div class="flex items-center gap-6px text-emerald-700 dark:text-emerald-300 font-bold text-xs">
+                    <span class="relative flex h-2 w-2">
+                      <span
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                      ></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span>Omborda Mavjud Mahsulot!</span>
+                  </div>
+                  <ElTag type="success" size="small" effect="dark" class="font-bold text-[10px]">
+                    Bazada Bor
                   </ElTag>
                 </div>
-                <div class="text-10px text-gray-400 mt-2px flex items-center gap-4px">
-                  <Icon icon="ep:info-filled" class="text-10px text-amber-500" />
-                  <span>O'zgartirib bo'lmaydi</span>
+
+                <div class="grid grid-cols-3 gap-6px my-8px">
+                  <div
+                    class="metric-box bg-white/80 dark:bg-gray-800/80 p-6px rounded-6px border border-gray-200/70 dark:border-gray-700/70 text-center"
+                  >
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+                      Ombor Qoldig'i
+                    </div>
+                    <div
+                      class="text-13px font-bold font-mono text-gray-900 dark:text-white flex items-center justify-center gap-2px mt-2px"
+                    >
+                      <Icon icon="ep:lock" class="text-amber-500 text-11px" />
+                      <span>{{ formatMoney(existingProduct.quantityInStock) }}</span>
+                    </div>
+                    <div class="text-[9px] text-gray-400">
+                      {{ existingProduct.unit || 'dona' }}
+                    </div>
+                  </div>
+
+                  <div
+                    class="metric-box bg-white/80 dark:bg-gray-800/80 p-6px rounded-6px border border-gray-200/70 dark:border-gray-700/70 text-center"
+                  >
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+                      Eski Tannarx
+                    </div>
+                    <div class="text-13px font-bold font-mono text-amber-600 dark:text-amber-400 mt-2px">
+                      ${{ formatMoney(existingProduct.cost) }}
+                    </div>
+                    <div class="text-[9px] text-gray-400">avvalgi</div>
+                  </div>
+
+                  <div
+                    class="metric-box bg-white/80 dark:bg-gray-800/80 p-6px rounded-6px border border-gray-200/70 dark:border-gray-700/70 text-center"
+                  >
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-tight">
+                      Eski Sotish
+                    </div>
+                    <div class="text-13px font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2px">
+                      ${{ formatMoney(existingProduct.price) }}
+                    </div>
+                    <div class="text-[9px] text-gray-400">avvalgi</div>
+                  </div>
                 </div>
-              </ElFormItem>
-            </ElCol>
 
-            <!-- NEW Input for Incoming Product Quantity -->
-            <ElCol :span="6">
-              <ElFormItem label="Yangi Kirim Soni (+)" prop="quantityInStock">
-                <ElInputNumber
-                  v-model="form.quantityInStock"
-                  :min="1"
-                  :step="1"
-                  style="width: 100%"
-                  placeholder="Kirim soni"
-                />
-                <div class="text-10px text-emerald-500 font-mono mt-2px font-bold">
-                  +{{ form.quantityInStock || 0 }} qo'shiladi
+                <!-- Live Dynamic Stock Formula Banner -->
+                <div class="p-8px rounded-8px bg-emerald-500/10 border border-emerald-500/25">
+                  <div
+                    class="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium mb-3px flex items-center justify-between"
+                  >
+                    <span class="flex items-center gap-4px">
+                      <Icon icon="ep:circle-check" class="text-emerald-500 text-12px" />
+                      Yangi umumiy qoldiq hisobi:
+                    </span>
+                    <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                      +{{ form.quantityInStock || 0 }} qo'shiladi
+                    </span>
+                  </div>
+                  <div
+                    class="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300 bg-white/90 dark:bg-black/40 px-8px py-4px rounded-6px flex items-center justify-between"
+                  >
+                    <span>{{ formatMoney(existingProduct.quantityInStock) }} + {{ formatMoney(form.quantityInStock || 0) }}</span>
+                    <span class="text-13px text-emerald-600 dark:text-emerald-400 font-black">
+                      = Jami {{ formatMoney((existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0)) }} {{ form.unit || 'dona' }}
+                    </span>
+                  </div>
                 </div>
-              </ElFormItem>
-            </ElCol>
-
-            <!-- Cost Price (Tannarx) -->
-            <ElCol :span="6">
-              <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
-                <ElInput
-                  v-model="displayCost"
-                  placeholder="Masalan: 10 000"
-                  class="custom-price-input cost-input"
-                >
-                  <template #prefix>
-                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
-                  </template>
-                </ElInput>
-                <div class="text-10px text-amber-500/90 font-mono mt-2px font-semibold">
-                  Eski tannarx: ${{ formatMoney(existingProduct.cost) }}
-                </div>
-              </ElFormItem>
-            </ElCol>
-
-            <!-- Selling Price (Sotish narxi) -->
-            <ElCol :span="6">
-              <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
-                <ElInput
-                  v-model="displayPrice"
-                  placeholder="Masalan: 13 000"
-                  class="custom-price-input sell-input"
-                >
-                  <template #prefix>
-                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
-                  </template>
-                </ElInput>
-                <div class="text-10px text-emerald-500/90 font-mono mt-2px font-semibold">
-                  Eski sotuv: ${{ formatMoney(existingProduct.price) }}
-                </div>
-              </ElFormItem>
-            </ElCol>
-          </ElRow>
-
-          <div v-if="form.cost > 0 && form.price > 0" class="mb-12px flex items-center justify-end">
-            <span class="text-xs font-mono px-8px py-2px rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
-              Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}%)
-            </span>
-          </div>
-
-          <!-- Dynamic Sum Calculation Banner -->
-          <div
-            class="stock-summary-calc mb-16px p-10px rounded-8px bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-between flex-wrap gap-2 text-xs"
-          >
-            <div class="flex items-center gap-6px text-emerald-900 dark:text-emerald-200 font-medium">
-              <Icon icon="ep:circle-check" class="text-15px text-emerald-500" />
-              <span>Yangi umumiy qoldiq hisobi:</span>
-            </div>
-            <div
-              class="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 bg-white/70 dark:bg-black/40 px-10px py-3px rounded-6px border border-emerald-500/30"
-            >
-              Bazada mavjud ({{ formatMoney(existingProduct.quantityInStock) }}) + Yangi kirim ({{
-                formatMoney(form.quantityInStock || 0)
-              }}) = Jami {{ formatMoney((existingProduct.quantityInStock || 0) + (Number(form.quantityInStock) || 0)) }} {{ form.unit || 'dona' }}
-            </div>
-          </div>
-        </template>
-        <template v-else>
-          <ElRow :gutter="16">
-            <ElCol :span="8">
-              <ElFormItem :label="t('erp.quantityInStock')" prop="quantityInStock">
-                <ElInputNumber
-                  v-model="form.quantityInStock"
-                  :min="1"
-                  :step="1"
-                  style="width: 100%"
-                />
-              </ElFormItem>
-            </ElCol>
-            <ElCol :span="8">
-              <ElFormItem :label="t('erp.costPriceDollar')" prop="cost">
-                <ElInput
-                  v-model="displayCost"
-                  placeholder="Masalan: 10 000"
-                  class="custom-price-input cost-input"
-                >
-                  <template #prefix>
-                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
-                  </template>
-                </ElInput>
-              </ElFormItem>
-            </ElCol>
-            <ElCol :span="8">
-              <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price">
-                <ElInput
-                  v-model="displayPrice"
-                  placeholder="Masalan: 13 000"
-                  class="custom-price-input sell-input"
-                >
-                  <template #prefix>
-                    <span class="text-xs font-bold text-gray-400 font-mono">$</span>
-                  </template>
-                </ElInput>
-              </ElFormItem>
-            </ElCol>
-          </ElRow>
-          <div v-if="form.cost > 0 && form.price > 0" class="mb-12px flex items-center justify-end">
-            <span class="text-xs font-mono px-8px py-2px rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
-              Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}%)
-            </span>
-          </div>
-        </template>
-
-        <ElRow :gutter="16">
-          <ElCol :span="10">
-            <ElFormItem :label="t('erp.category')" prop="category">
-              <ElSelect
-                v-model="form.category"
-                filterable
-                allow-create
-                default-first-option
-                :placeholder="t('erp.kategoriyaniTanlang')"
-                style="width: 100%"
-              >
-                <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
-                <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
-                <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
-                <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
-                <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
-                <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
-                <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
-                <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
-                <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
-                <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
-              </ElSelect>
-            </ElFormItem>
-          </ElCol>
-
-          <ElCol :span="7">
-            <ElFormItem label="Kam qolganda ogohlantirish (min)" prop="min_stock">
-              <ElInputNumber
-                v-model="form.min_stock"
-                :min="0"
-                :step="5"
-                style="width: 100%"
-                placeholder="10"
-              />
-              <div class="text-10px text-gray-400 mt-2px">
-                Min. qoldiq chegarasi
               </div>
-            </ElFormItem>
-          </ElCol>
 
-          <ElCol :span="7">
-            <ElFormItem label="Yaroqlilik Muddati" prop="expiration_date">
-              <ElDatePicker
-                v-model="form.expiration_date"
-                type="date"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
-                placeholder="YYYY-MM-DD"
-                style="width: 100%"
-              />
-              <div class="text-10px text-gray-400 mt-2px">
-                Amal qilish muddati
+              <!-- If New Product -->
+              <div v-else key="new" class="intake-card warehouse-status-card new-item">
+                <div class="flex items-center gap-6px text-xs font-semibold text-blue-600 dark:text-blue-400">
+                  <Icon icon="ep:circle-plus-filled" class="text-15px text-blue-500" />
+                  <span>Yangi Mahsulot Kirimi</span>
+                </div>
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-4px leading-relaxed">
+                  Ushbu tovar omborda hali mavjud emas. Yangi mahsulot sifatida saqlanadi.
+                </div>
               </div>
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
+            </transition>
 
-        <ElFormItem label="Mahsulot Rasmi" prop="image_url">
-          <div class="flex items-center gap-16px w-full">
-            <div
-              v-if="form.image_url"
-              class="relative w-80px h-80px rounded-8px overflow-hidden border border-gray-700 group flex-shrink-0"
-            >
-              <img :src="form.image_url" class="w-full h-full object-cover" />
+            <!-- 3. Photo Upload Card -->
+            <div class="intake-card photo-card">
               <div
-                class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-                @click="form.image_url = ''"
+                class="text-xs font-bold text-gray-700 dark:text-gray-300 mb-8px flex items-center justify-between"
               >
-                <Icon icon="ep:delete" class="text-white text-18px" />
+                <span class="flex items-center gap-6px">
+                  <Icon icon="ep:picture" class="text-blue-500" /> Mahsulot Rasmi
+                </span>
+                <span
+                  v-if="form.image_url"
+                  class="text-[11px] text-red-500 cursor-pointer hover:underline"
+                  @click="form.image_url = ''"
+                >
+                  Rasmni o'chirish
+                </span>
+              </div>
+              <div class="flex items-center gap-12px">
+                <div
+                  v-if="form.image_url"
+                  class="relative w-64px h-64px rounded-8px overflow-hidden border border-gray-300 dark:border-gray-700 flex-shrink-0 group shadow-xs"
+                >
+                  <img :src="form.image_url" class="w-full h-full object-cover" />
+                  <div
+                    class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                    @click="form.image_url = ''"
+                  >
+                    <Icon icon="ep:delete" class="text-white text-16px" />
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="w-64px h-64px rounded-8px border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center flex-shrink-0 text-gray-400"
+                >
+                  <Icon icon="ep:picture" class="text-22px opacity-40" />
+                </div>
+                <div class="flex flex-col gap-4px flex-1">
+                  <ElUpload
+                    action="#"
+                    :auto-upload="false"
+                    :show-file-list="false"
+                    accept="image/*"
+                    @change="handleImageChange"
+                  >
+                    <ElButton size="small" type="primary" plain class="w-full">
+                      <Icon icon="ep:upload" class="mr-4px" />
+                      {{ form.image_url ? "O'zgartirish" : 'Rasm yuklash' }}
+                    </ElButton>
+                  </ElUpload>
+                  <span class="text-[10px] text-gray-400">JPG, PNG, WEBP (maks 5MB)</span>
+                </div>
               </div>
             </div>
-            <ElUpload
-              action="#"
-              :auto-upload="false"
-              :show-file-list="false"
-              accept="image/*"
-              @change="handleImageChange"
-            >
-              <ElButton type="primary" plain class="upload-img-btn">
-                <Icon icon="ep:picture" class="mr-6px" />
-                {{ form.image_url ? "Rasmni o'zgartirish" : 'Rasm yuklash' }}
-              </ElButton>
-            </ElUpload>
-            <span class="text-12px text-gray-400">PNG, JPG, WEBP fayllari (maks 5MB)</span>
           </div>
-        </ElFormItem>
 
-        <ElFormItem :label="t('erp.izoh')" prop="remark">
-          <ElInput
-            v-model="form.remark"
-            type="textarea"
-            :rows="2"
-            placeholder="Mahsulot haqida qo'shimcha izoh..."
-          />
-        </ElFormItem>
-      </ElForm>
+          <!-- RIGHT PANEL: Form Details -->
+          <div class="product-panel-right flex-1 min-w-0">
+            <ElForm
+              ref="formRef"
+              :model="form"
+              :rules="rules"
+              label-position="top"
+              class="compact-modal-form"
+            >
+              <!-- Card 1: Asosiy Ma'lumotlar -->
+              <div class="intake-form-section mb-10px">
+                <div
+                  class="section-title mb-8px flex items-center gap-6px text-xs font-bold text-gray-700 dark:text-gray-200"
+                >
+                  <Icon icon="ep:document" class="text-blue-500" />
+                  <span>2. Mahsulot Asosiy Ma'lumotlari</span>
+                </div>
+
+                <!-- Product Name -->
+                <ElFormItem :label="t('erp.productName')" prop="productName" class="!mb-10px">
+                  <ElInput
+                    v-model="form.productName"
+                    placeholder="Masalan: Pepsi 1.5L PET"
+                    class="font-medium"
+                  />
+                </ElFormItem>
+
+                <!-- Row 1: Shtrix-kodi, Brend, MXIK -->
+                <ElRow :gutter="10" class="!mb-0">
+                  <ElCol :span="8">
+                    <ElFormItem label="Shtrix-Kodi" prop="shtrix_code" class="!mb-8px">
+                      <ElInput
+                        v-model="form.shtrix_code"
+                        placeholder="4780014680073"
+                        @input="(val: string) => (form.shtrix_code = val.replace(/\D/g, ''))"
+                        @blur="onShtrixCodeBlur"
+                      />
+                    </ElFormItem>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElFormItem label="Brend Nomi" prop="brand_name" class="!mb-8px">
+                      <ElInput v-model="form.brand_name" placeholder="PEPSI, Shaffof" />
+                    </ElFormItem>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElFormItem :label="t('erp.mxikCode')" prop="mxik_code" class="!mb-8px">
+                      <ElInput v-model="form.mxik_code" placeholder="02201001001001002" />
+                    </ElFormItem>
+                  </ElCol>
+                </ElRow>
+
+                <!-- Row 2: SKU, O'lchov birligi, Atribut -->
+                <ElRow :gutter="10" class="!mb-0">
+                  <ElCol :span="8">
+                    <ElFormItem label="SKU Raqami" prop="SKU" class="!mb-8px">
+                      <ElInput v-model="form.SKU" placeholder="SKU-4780014680073" />
+                    </ElFormItem>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElFormItem label="O'lchov Birligi" prop="unit" class="!mb-8px">
+                      <ElInput v-model="form.unit" placeholder="dona, kg, litr..." />
+                    </ElFormItem>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElFormItem label="Atribut / O'lcham" prop="attribute_name" class="!mb-8px">
+                      <ElInput v-model="form.attribute_name" placeholder="PET idish 1,5 l." />
+                    </ElFormItem>
+                  </ElCol>
+                </ElRow>
+              </div>
+
+              <!-- Card 2: Kirim Miqdori va Narxlar Karti -->
+              <div
+                class="pricing-card-wrapper p-10px rounded-10px border border-blue-500/25 bg-blue-50/25 dark:bg-blue-950/25 mb-10px"
+              >
+                <div class="flex items-center justify-between mb-8px">
+                  <div
+                    class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-6px"
+                  >
+                    <Icon icon="ep:coin" class="text-amber-500" />
+                    <span>3. Kirim Miqdori va Narxlar ($)</span>
+                  </div>
+                  <div
+                    v-if="form.cost > 0 && form.price > 0"
+                    class="text-xs font-mono font-bold px-8px py-2px rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                  >
+                    Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}% marja)
+                  </div>
+                </div>
+
+                <ElRow :gutter="10" class="items-start !mb-0">
+                  <!-- Quantity In Stock -->
+                  <ElCol :span="8">
+                    <ElFormItem
+                      :label="existingProduct ? 'Yangi Kirim Soni (+)' : 'Ombor Qoldig\'i (Soni)'"
+                      prop="quantityInStock"
+                      class="!mb-4px"
+                    >
+                      <ElInputNumber
+                        v-model="form.quantityInStock"
+                        :min="1"
+                        :step="1"
+                        style="width: 100%"
+                        placeholder="Kirim soni"
+                      />
+                      <div
+                        v-if="existingProduct"
+                        class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono mt-2px font-bold"
+                      >
+                        +{{ form.quantityInStock || 0 }} dona qo'shiladi
+                      </div>
+                    </ElFormItem>
+                  </ElCol>
+
+                  <!-- Cost Price -->
+                  <ElCol :span="8">
+                    <ElFormItem :label="t('erp.costPriceDollar')" prop="cost" class="!mb-4px">
+                      <ElInput
+                        v-model="displayCost"
+                        placeholder="Masalan: 10 000"
+                        class="custom-price-input cost-input"
+                      >
+                        <template #prefix>
+                          <span class="text-xs font-bold text-gray-400 font-mono">$</span>
+                        </template>
+                      </ElInput>
+                      <div
+                        v-if="existingProduct"
+                        class="text-[10px] text-amber-500/90 font-mono mt-2px font-semibold"
+                      >
+                        Eski tannarx: ${{ formatMoney(existingProduct.cost) }}
+                      </div>
+                    </ElFormItem>
+                  </ElCol>
+
+                  <!-- Selling Price -->
+                  <ElCol :span="8">
+                    <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price" class="!mb-4px">
+                      <ElInput
+                        v-model="displayPrice"
+                        placeholder="Masalan: 13 000"
+                        class="custom-price-input sell-input"
+                      >
+                        <template #prefix>
+                          <span class="text-xs font-bold text-gray-400 font-mono">$</span>
+                        </template>
+                      </ElInput>
+                      <div
+                        v-if="existingProduct"
+                        class="text-[10px] text-emerald-500/90 font-mono mt-2px font-semibold"
+                      >
+                        Eski sotuv: ${{ formatMoney(existingProduct.price) }}
+                      </div>
+                    </ElFormItem>
+                  </ElCol>
+                </ElRow>
+              </div>
+
+              <!-- Card 3: Ombor Qoidalari, Kategoriya, Muddat -->
+              <div class="intake-form-section mb-8px">
+                <ElRow :gutter="10" class="!mb-0">
+                  <ElCol :span="8">
+                    <ElFormItem :label="t('erp.category')" prop="category" class="!mb-8px">
+                      <ElSelect
+                        v-model="form.category"
+                        filterable
+                        allow-create
+                        default-first-option
+                        :placeholder="t('erp.kategoriyaniTanlang')"
+                        style="width: 100%"
+                      >
+                        <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
+                        <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
+                        <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
+                        <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
+                        <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
+                        <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
+                        <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
+                        <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
+                        <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
+                        <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
+                      </ElSelect>
+                    </ElFormItem>
+                  </ElCol>
+
+                  <ElCol :span="8">
+                    <ElFormItem label="Kam qolganda ogohlantirish (min)" prop="min_stock" class="!mb-8px">
+                      <ElInputNumber
+                        v-model="form.min_stock"
+                        :min="0"
+                        :step="5"
+                        style="width: 100%"
+                        placeholder="10"
+                      />
+                    </ElFormItem>
+                  </ElCol>
+
+                  <ElCol :span="8">
+                    <ElFormItem label="Yaroqlilik Muddati" prop="expiration_date" class="!mb-8px">
+                      <ElDatePicker
+                        v-model="form.expiration_date"
+                        type="date"
+                        format="YYYY-MM-DD"
+                        value-format="YYYY-MM-DD"
+                        placeholder="YYYY-MM-DD"
+                        style="width: 100%"
+                      />
+                    </ElFormItem>
+                  </ElCol>
+                </ElRow>
+
+                <!-- Remark -->
+                <ElFormItem :label="t('erp.izoh')" prop="remark" class="!mb-0">
+                  <ElInput
+                    v-model="form.remark"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="Mahsulot haqida qo'shimcha izoh..."
+                  />
+                </ElFormItem>
+              </div>
+            </ElForm>
+          </div>
+        </div>
+
+        <!-- EDIT MODE: Symmetrical 2-Column -->
+        <div v-else class="product-two-column-grid">
+          <!-- LEFT PANEL: Image & Quick Overview -->
+          <div class="product-panel-left">
+            <div class="intake-card photo-card">
+              <div
+                class="text-xs font-bold text-gray-700 dark:text-gray-300 mb-8px flex items-center justify-between"
+              >
+                <span class="flex items-center gap-6px">
+                  <Icon icon="ep:picture" class="text-blue-500" /> Mahsulot Rasmi
+                </span>
+                <span
+                  v-if="form.image_url"
+                  class="text-[11px] text-red-500 cursor-pointer hover:underline"
+                  @click="form.image_url = ''"
+                >
+                  O'chirish
+                </span>
+              </div>
+              <div class="flex flex-col items-center gap-10px">
+                <div
+                  v-if="form.image_url"
+                  class="relative w-140px h-140px rounded-12px overflow-hidden border border-gray-300 dark:border-gray-700 group shadow-md"
+                >
+                  <img :src="form.image_url" class="w-full h-full object-cover" />
+                  <div
+                    class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                    @click="form.image_url = ''"
+                  >
+                    <Icon icon="ep:delete" class="text-white text-20px" />
+                  </div>
+                </div>
+                <div
+                  v-else
+                  class="w-140px h-140px rounded-12px border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-400"
+                >
+                  <Icon icon="ep:picture" class="text-36px opacity-40" />
+                </div>
+                <ElUpload
+                  action="#"
+                  :auto-upload="false"
+                  :show-file-list="false"
+                  accept="image/*"
+                  @change="handleImageChange"
+                >
+                  <ElButton size="small" type="primary" plain>
+                    <Icon icon="ep:upload" class="mr-4px" />
+                    {{ form.image_url ? "Rasmni o'zgartirish" : 'Rasm yuklash' }}
+                  </ElButton>
+                </ElUpload>
+              </div>
+            </div>
+
+            <!-- Quick Info -->
+            <div class="intake-card warehouse-status-card">
+              <div
+                class="text-xs font-bold text-gray-700 dark:text-gray-300 mb-8px flex items-center gap-6px"
+              >
+                <Icon icon="ep:info-filled" class="text-blue-500" />
+                <span>Tahrirlash Ma'lumoti</span>
+              </div>
+              <div class="space-y-6px text-xs">
+                <div class="flex justify-between py-4px border-b border-gray-200/50 dark:border-gray-800/50">
+                  <span class="text-gray-400">ID:</span>
+                  <span class="font-mono font-bold">{{ form.id }}</span>
+                </div>
+                <div class="flex justify-between py-4px border-b border-gray-200/50 dark:border-gray-800/50">
+                  <span class="text-gray-400">Shtrix-kod:</span>
+                  <span class="font-mono font-bold">{{ form.shtrix_code || "Yo'q" }}</span>
+                </div>
+                <div class="flex justify-between py-4px">
+                  <span class="text-gray-400">Hozirgi qoldiq:</span>
+                  <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {{ formatMoney(form.quantityInStock) }} {{ form.unit || 'dona' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT PANEL: Edit Form -->
+          <div class="product-panel-right flex-1 min-w-0">
+            <ElForm
+              ref="formRef"
+              :model="form"
+              :rules="rules"
+              label-position="top"
+              class="compact-modal-form"
+            >
+              <!-- Name -->
+              <ElFormItem :label="t('erp.productName')" prop="productName" class="!mb-10px">
+                <ElInput v-model="form.productName" class="font-medium" />
+              </ElFormItem>
+
+              <!-- Codes -->
+              <ElRow :gutter="10" class="!mb-0">
+                <ElCol :span="8">
+                  <ElFormItem label="Shtrix-Kodi" prop="shtrix_code" class="!mb-8px">
+                    <ElInput
+                      v-model="form.shtrix_code"
+                      @input="(val: string) => (form.shtrix_code = val.replace(/\D/g, ''))"
+                    />
+                  </ElFormItem>
+                </ElCol>
+                <ElCol :span="8">
+                  <ElFormItem label="Brend Nomi" prop="brand_name" class="!mb-8px">
+                    <ElInput v-model="form.brand_name" />
+                  </ElFormItem>
+                </ElCol>
+                <ElCol :span="8">
+                  <ElFormItem :label="t('erp.mxikCode')" prop="mxik_code" class="!mb-8px">
+                    <ElInput v-model="form.mxik_code" />
+                  </ElFormItem>
+                </ElCol>
+              </ElRow>
+
+              <ElRow :gutter="10" class="!mb-0">
+                <ElCol :span="8">
+                  <ElFormItem label="SKU Raqami" prop="SKU" class="!mb-8px">
+                    <ElInput v-model="form.SKU" />
+                  </ElFormItem>
+                </ElCol>
+                <ElCol :span="8">
+                  <ElFormItem label="O'lchov Birligi" prop="unit" class="!mb-8px">
+                    <ElInput v-model="form.unit" />
+                  </ElFormItem>
+                </ElCol>
+                <ElCol :span="8">
+                  <ElFormItem label="Atribut / O'lcham" prop="attribute_name" class="!mb-8px">
+                    <ElInput v-model="form.attribute_name" />
+                  </ElFormItem>
+                </ElCol>
+              </ElRow>
+
+              <!-- Pricing Card -->
+              <div
+                class="pricing-card-wrapper p-10px rounded-10px border border-blue-500/25 bg-blue-50/25 dark:bg-blue-950/25 mb-10px"
+              >
+                <div class="flex items-center justify-between mb-8px">
+                  <div
+                    class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-6px"
+                  >
+                    <Icon icon="ep:coin" class="text-amber-500" />
+                    <span>Ombor Qoldig'i va Narxlar ($)</span>
+                  </div>
+                  <div
+                    v-if="form.cost > 0 && form.price > 0"
+                    class="text-xs font-mono font-bold px-8px py-2px rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                  >
+                    Kutilayotgan foyda: {{ profitAmount >= 0 ? '+' : '' }}${{ formatMoney(profitAmount) }} ({{ profitPercent }}% marja)
+                  </div>
+                </div>
+
+                <ElRow :gutter="10" class="items-start !mb-0">
+                  <ElCol :span="8">
+                    <ElFormItem label="Ombor Qoldig'i (Soni)" prop="quantityInStock" class="!mb-4px">
+                      <ElInputNumber v-model="form.quantityInStock" :min="0" :step="1" style="width: 100%" />
+                    </ElFormItem>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElFormItem :label="t('erp.costPriceDollar')" prop="cost" class="!mb-4px">
+                      <ElInput v-model="displayCost" class="custom-price-input cost-input">
+                        <template #prefix><span class="text-xs font-bold text-gray-400 font-mono">$</span></template>
+                      </ElInput>
+                    </ElFormItem>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElFormItem :label="t('erp.sellingPriceDollar')" prop="price" class="!mb-4px">
+                      <ElInput v-model="displayPrice" class="custom-price-input sell-input">
+                        <template #prefix><span class="text-xs font-bold text-gray-400 font-mono">$</span></template>
+                      </ElInput>
+                    </ElFormItem>
+                  </ElCol>
+                </ElRow>
+              </div>
+
+              <!-- Category, Min Stock, Expiration -->
+              <ElRow :gutter="10" class="!mb-0">
+                <ElCol :span="8">
+                  <ElFormItem :label="t('erp.category')" prop="category" class="!mb-8px">
+                    <ElSelect v-model="form.category" filterable allow-create style="width: 100%">
+                      <ElOption :label="t('erp.drinksAndWater')" value="Ichimliklar va suvlar" />
+                      <ElOption :label="t('erp.dairyProducts')" value="Sut va sut mahsulotlari" />
+                      <ElOption :label="t('erp.saltAndSpices')" value="Tuz va ziravorlar" />
+                      <ElOption :label="t('erp.plasticsAndDishes')" value="Plastmassa va idishlar" />
+                      <ElOption :label="t('erp.foodProducts')" value="Oziq-ovqat mahsulotlari" />
+                      <ElOption label="Maishiy texnika va elektronika" value="Maishiy texnika va elektronika" />
+                      <ElOption label="Kiyim-kechak va poyabzal" value="Kiyim-kechak va poyabzal" />
+                      <ElOption label="Qurilish va ta'mirlash" value="Qurilish va ta'mirlash" />
+                      <ElOption label="Avtoehtiyot qismlar" value="Avtoehtiyot qismlar" />
+                      <ElOption :label="t('erp.otherCategory')" value="Boshqalar" />
+                    </ElSelect>
+                  </ElFormItem>
+                </ElCol>
+                <ElCol :span="8">
+                  <ElFormItem label="Kam qolganda ogohlantirish (min)" prop="min_stock" class="!mb-8px">
+                    <ElInputNumber v-model="form.min_stock" :min="0" :step="5" style="width: 100%" />
+                  </ElFormItem>
+                </ElCol>
+                <ElCol :span="8">
+                  <ElFormItem label="Yaroqlilik Muddati" prop="expiration_date" class="!mb-8px">
+                    <ElDatePicker
+                      v-model="form.expiration_date"
+                      type="date"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      style="width: 100%"
+                    />
+                  </ElFormItem>
+                </ElCol>
+              </ElRow>
+
+              <!-- Remark -->
+              <ElFormItem :label="t('erp.izoh')" prop="remark" class="!mb-0">
+                <ElInput v-model="form.remark" type="textarea" :rows="2" />
+              </ElFormItem>
+            </ElForm>
+          </div>
+        </div>
+      </div>
 
       <template #footer>
         <ElButton @click="dialogVisible = false">{{ t('common.cancel') }}</ElButton>
@@ -2455,6 +2682,109 @@ const deleteFromDetail = () => {
 
   .stock-summary-calc {
     box-shadow: 0 1px 3px rgba(16, 185, 129, 0.1);
+  }
+
+  /* Modern Two-Column Layout for Product Intake Modal */
+  .product-dialog-content {
+    padding: 2px;
+  }
+
+  .product-two-column-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+
+    @media (min-width: 992px) {
+      flex-direction: row;
+      align-items: flex-start;
+    }
+  }
+
+  .product-panel-left {
+    width: 100%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    @media (min-width: 992px) {
+      width: 380px;
+    }
+
+    @media (min-width: 1200px) {
+      width: 440px;
+    }
+  }
+
+  .product-panel-right {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .intake-card {
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--el-border-color-lighter, #e2e8f0);
+    background: var(--el-fill-color-blank, #ffffff);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  :global(.dark) & .intake-card {
+    background: #1e293b;
+    border-color: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .intake-search-card {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.04) 0%, rgba(147, 197, 253, 0.08) 100%);
+    border-color: rgba(59, 130, 246, 0.25);
+  }
+
+  :global(.dark) & .intake-search-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .warehouse-status-card.existing {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(52, 211, 153, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.35);
+  }
+
+  :global(.dark) & .warehouse-status-card.existing {
+    background: linear-gradient(135deg, rgba(6, 78, 59, 0.25) 0%, rgba(4, 120, 87, 0.15) 100%);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  .warehouse-status-card.new-item {
+    background: rgba(59, 130, 246, 0.04);
+    border-color: rgba(59, 130, 246, 0.2);
+  }
+
+  :global(.dark) & .warehouse-status-card.new-item {
+    background: rgba(30, 58, 138, 0.2);
+    border-color: rgba(59, 130, 246, 0.25);
+  }
+
+  .compact-modal-form {
+    :deep(.el-form-item) {
+      margin-bottom: 10px;
+    }
+    :deep(.el-form-item__label) {
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.25;
+      padding-bottom: 3px;
+      color: var(--el-text-color-regular, #475569);
+    }
+    :deep(.el-input__inner),
+    :deep(.el-input-number) {
+      font-size: 13px;
+    }
+  }
+
+  .pricing-card-wrapper {
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.06);
   }
 }
 </style>
