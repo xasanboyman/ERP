@@ -13,13 +13,13 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const loading = ref(true)
+const internalLoading = ref(true)
 
 const isSkeletonLoading = computed(() => {
   if (props.loading !== undefined) {
     return props.loading
   }
-  return loading.value
+  return internalLoading.value
 })
 
 const financialData = ref({
@@ -51,7 +51,7 @@ watch(
         realNetProfit: val.realNetProfit || 0,
         profitMargin: val.profitMargin || 0
       }
-      loading.value = false
+      internalLoading.value = false
     }
   },
   { immediate: true, deep: true }
@@ -59,10 +59,10 @@ watch(
 
 const loadData = async () => {
   if (props.data) {
-    loading.value = false
+    internalLoading.value = false
     return
   }
-  loading.value = true
+  internalLoading.value = true
   try {
     const res = await getFinancialOverviewApi({ time_range: '6m' })
     if (res && res.data) {
@@ -80,7 +80,7 @@ const loadData = async () => {
   } catch (e) {
     console.error('Executive Panel Data Load Error:', e)
   } finally {
-    loading.value = false
+    internalLoading.value = false
   }
 }
 
