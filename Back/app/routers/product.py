@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
+from app.cache import invalidate_analytics, invalidate_sales
 
 router = APIRouter()
 
@@ -207,24 +208,9 @@ def get_product_detail(id: str = Query(...), db: Session = Depends(get_db)):
 @router.post("/product/save")
 def product_save(prod_in: schemas.ProductCreate, db: Session = Depends(get_db)):
     prod_id = getattr(prod_in, "id", None)
-    shtrix = getattr(prod_in, "shtrix_code", None)
-    classifier_id = getattr(prod_in, "classifier_id", None)
-    sku = getattr(prod_in, "SKU", None)
-
-    existing = None
-    if prod_id:
-        existing = db.query(models.Product).filter(models.Product.id == prod_id).first()
-    if not existing and shtrix and shtrix.strip():
-        existing = db.query(models.Product).filter(models.Product.shtrix_code == shtrix.strip()).first()
-    if not existing and classifier_id:
-        existing = db.query(models.Product).filter(models.Product.classifier_id == classifier_id).first()
-    if not existing and sku and sku.strip():
-        existing = db.query(models.Product).filter(models.Product.SKU == sku.strip()).first()
-
-    is_existing = (existing is not None) and (not prod_id)
-    action = "updated" if existing else "created"
-
     product = crud.create_product(db, prod_in)
+    is_existing = getattr(product, "is_existing_record", False)
+    action = "updated" if (is_existing or prod_id) else "created"
 
     log_activity(
         db,
@@ -234,6 +220,9 @@ def product_save(prod_in: schemas.ProductCreate, db: Session = Depends(get_db)):
         entity_id=getattr(product, "id", None) or prod_id,
         entity_name=prod_in.productName,
     )
+    invalidate_analytics()
+    invalidate_sales()
+
     return {
         "code": 0,
         "data": "success",
@@ -253,11 +242,19 @@ def product_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     if isinstance(ids, str):
         ids = [ids]
 
+    products = db.query(models.Product).filter(models.Product.id.in_(ids)).all()
+    prod_dict = {p.id: p.productName for p in products}
+
+    db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id.in_(ids)).delete(synchronize_session=False)
+    db.query(models.Product).filter(models.Product.id.in_(ids)).delete(synchronize_session=False)
+
     for i in ids:
-        product = db.query(models.Product).filter(models.Product.id == i).first()
-        name = product.productName if product else i
-        crud.delete_product(db, i)
-        log_activity(db, actor="admin", action="deleted", entity="product", entity_id=i, entity_name=name)
+        name = prod_dict.get(i, i)
+        log_activity(db, actor="admin", action="deleted", entity="product", entity_id=i, entity_name=name, commit=False)
+
+    db.commit()
+    invalidate_analytics()
+    invalidate_sales()
 
     return {"code": 0, "data": "success"}
 

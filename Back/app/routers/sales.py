@@ -2,11 +2,13 @@ import uuid
 import datetime
 import json
 from fastapi import APIRouter, Depends, Query, HTTPException, Header, Body
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app import models, schemas
 from app.auth import get_current_device_token, get_current_user_required
 from app.routers.activity import log_activity
+from app.cache import get_sales_cache, set_sales_cache, invalidate_sales, invalidate_analytics
 
 router = APIRouter()
 
@@ -17,9 +19,22 @@ def get_sales_list(
     search: str = Query(None),
     payment_method: str = Query(None),
     cashier_name: str = Query(None),
+    month: str = Query(None),
     db: Session = Depends(get_db)
 ):
+    cache_key = f"sales_list:{pageIndex}:{pageSize}:{search}:{payment_method}:{cashier_name}:{month}"
+    cached = get_sales_cache(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(models.Sale)
+
+    if month:
+        m = month.strip()
+        query = query.filter(
+            models.Sale.created_at >= f"{m}-01 00:00:00",
+            models.Sale.created_at <= f"{m}-31 23:59:59"
+        )
 
     if search:
         s = f"%{search.strip()}%"
@@ -35,9 +50,13 @@ def get_sales_list(
 
     query = query.order_by(models.Sale.created_at.desc())
 
-    total = query.count()
     offset = (pageIndex - 1) * pageSize
-    sales = query.offset(offset).limit(pageSize).all()
+    sales = query.options(joinedload(models.Sale.items)).offset(offset).limit(pageSize).all()
+
+    if pageIndex == 1 and len(sales) < pageSize:
+        total = len(sales)
+    else:
+        total = query.count()
 
     result_list = []
     for s in sales:
@@ -74,13 +93,15 @@ def get_sales_list(
             "items": items_list
         })
 
-    return {
+    res = {
         "code": 0,
         "data": {
             "total": total,
             "list": result_list
         }
     }
+    set_sales_cache(cache_key, res)
+    return res
 
 
 @router.post("/sales/checkout")
@@ -91,6 +112,23 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
     receipt_no = f"CHK-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
     sale_id = f"SALE-{uuid.uuid4().hex[:8]}"
 
+    # Single batch round-trip query for all products in cart
+    req_ids = [str(item.product_id).strip() for item in sale_in.items if item.product_id]
+    req_codes = [str(item.shtrix_code).strip() for item in sale_in.items if item.shtrix_code]
+
+    filter_conds = []
+    if req_ids:
+        filter_conds.append(models.Product.id.in_(req_ids))
+    if req_codes:
+        filter_conds.append(models.Product.shtrix_code.in_(req_codes))
+
+    products = []
+    if filter_conds:
+        products = db.query(models.Product).filter(or_(*filter_conds)).all()
+
+    prod_by_id = {str(p.id): p for p in products}
+    prod_by_code = {str(p.shtrix_code): p for p in products if p.shtrix_code}
+
     total_amount = 0.0
     total_qty = 0
     sale_items = []
@@ -98,9 +136,11 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
     items_to_process = []
 
     for item in sale_in.items:
-        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
-        if not product and item.shtrix_code:
-            product = db.query(models.Product).filter(models.Product.shtrix_code == item.shtrix_code).first()
+        product = None
+        if item.product_id and str(item.product_id).strip() in prod_by_id:
+            product = prod_by_id[str(item.product_id).strip()]
+        elif item.shtrix_code and str(item.shtrix_code).strip() in prod_by_code:
+            product = prod_by_code[str(item.shtrix_code).strip()]
 
         conversion_factor = float(getattr(item, 'conversion_factor', 1.0) or 1.0)
         unit_name = getattr(item, 'unit_name', None)
@@ -123,9 +163,9 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
             "line_total": line_total
         })
 
-    # Validate stock requirements across all cart items
+    # Validate stock requirements across all cart items using in-memory product map (0 network trips)
     for p_id, total_req in product_requirements.items():
-        prod = db.query(models.Product).filter(models.Product.id == p_id).first()
+        prod = prod_by_id.get(p_id)
         if prod and prod.quantityInStock < total_req:
             base_unit = prod.unit or 'kg'
             raise HTTPException(
@@ -158,7 +198,6 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
         )
         sale_items.append(s_item)
 
-
     final_total = max(0.0, total_amount - (sale_in.discount or 0.0))
 
     paid = sale_in.paid_amount if (sale_in.paid_amount is not None and sale_in.paid_amount >= 0) else final_total
@@ -188,9 +227,6 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
     for s_item in sale_items:
         db.add(s_item)
 
-    db.commit()
-    db.refresh(db_sale)
-
     log_activity(
         db,
         actor=db_sale.cashier_name,
@@ -198,7 +234,12 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
         entity="sale",
         entity_id=db_sale.id,
         entity_name=f"Chek #{db_sale.receipt_number} (${final_total:,.2f})",
+        commit=False
     )
+
+    db.commit()
+    invalidate_sales()
+    invalidate_analytics()
 
     return {
         "code": 0,
@@ -442,11 +483,9 @@ def repay_debt(payment_in: schemas.DebtPaymentCreate, db: Session = Depends(get_
     )
 
     db.add(db_payment)
-    db.commit()
-    db.refresh(db_payment)
 
-    # Recalculate remaining total debt for customer
-    remaining_total_debt = sum(s.debt_amount for s in db.query(models.Sale).filter(models.Sale.customer_name == name).all())
+    # Calculate remaining debt directly in memory (0 network queries)
+    remaining_total_debt = sum(s.debt_amount for s in sales)
 
     log_activity(
         db,
@@ -455,7 +494,12 @@ def repay_debt(payment_in: schemas.DebtPaymentCreate, db: Session = Depends(get_
         entity="debt_payment",
         entity_id=db_payment.id,
         entity_name=f"Qarz to'landi: {name} (${payment_in.amount:,.2f})",
+        commit=False
     )
+
+    db.commit()
+    invalidate_sales()
+    invalidate_analytics()
 
     return {
         "code": 0,
@@ -822,6 +866,8 @@ def phone_checkout(
 
     db.commit()
     db.refresh(db_sale)
+    invalidate_sales()
+    invalidate_analytics()
 
     return {
         "code": 0,

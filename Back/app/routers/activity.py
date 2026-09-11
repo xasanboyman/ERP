@@ -14,6 +14,7 @@ def log_activity(
     entity: str,
     entity_id: str = None,
     entity_name: str = None,
+    commit: bool = True,
 ):
     """Helper called by all routers to record an activity and broadcast real-time sync."""
     entry = models.ActivityLog(
@@ -25,7 +26,8 @@ def log_activity(
         timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
     db.add(entry)
-    db.commit()
+    if commit:
+        db.commit()
 
     try:
         from app.websocket_manager import manager

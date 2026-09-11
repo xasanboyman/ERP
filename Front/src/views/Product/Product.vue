@@ -1717,6 +1717,7 @@ import {
   ElNotification,
   ElImage,
   ElUpload,
+  ElDatePicker,
   FormInstance
 } from 'element-plus'
 

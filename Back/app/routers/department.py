@@ -177,22 +177,24 @@ def department_save(dept_in: schemas.DepartmentCreate, db: Session = Depends(get
 def department_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     ids = body.get("ids")
     if not ids:
-        return {"code": 500, "message": "请选择需要删除的数据"}
+        return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}
     
     # Support string ids or list of ids
     if isinstance(ids, str):
         ids = [ids]
         
     from app.routers.activity import log_activity
+    db.query(models.Department).filter(models.Department.id.in_(ids)).delete(synchronize_session=False)
     for i in ids:
-        crud.delete_department(db, i)
         log_activity(
             db=db,
             actor="admin",
             action="deleted",
             entity="department",
-            entity_id=str(i)
+            entity_id=str(i),
+            commit=False
         )
+    db.commit()
         
     return {
         "code": 0,

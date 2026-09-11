@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
+from app.cache import invalidate_analytics
 
 router = APIRouter()
 
@@ -25,13 +26,13 @@ def get_salary_list(
     total = len(salaries)
     start = (pageIndex - 1) * pageSize
     end = start + pageSize
-    paginated = salaries[start:end]
+    paged = salaries[start:end]
 
     workers = {w.id: w for w in db.query(models.Worker).all()}
     depts = {d.id: d.departmentName for d in db.query(models.Department).all()}
 
     list_data = []
-    for s in paginated:
+    for s in paged:
         w = workers.get(s.workerId)
         list_data.append({
             "id": s.id,
@@ -42,8 +43,8 @@ def get_salary_list(
             "allowance": s.allowance,
             "deduction": s.deduction,
             "netSalary": s.netSalary,
-            "payDate": s.payDate,
             "status": s.status,
+            "payDate": s.payDate,
             "remark": s.remark
         })
 
@@ -67,6 +68,7 @@ def salary_save(sal_in: schemas.SalaryCreate, db: Session = Depends(get_db)):
         entity_id=getattr(salary, "id", None),
         entity_name=worker.name if worker else sal_in.workerId,
     )
+    invalidate_analytics()
     return {"code": 0, "data": "success"}
 
 @router.post("/salary/delete")
@@ -78,13 +80,18 @@ def salary_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     if isinstance(ids, str):
         ids = [ids]
 
-    for i in ids:
-        salary = db.query(models.Salary).filter(models.Salary.id == i).first()
-        worker = db.query(models.Worker).filter(models.Worker.id == salary.workerId).first() if salary else None
-        name = worker.name if worker else i
-        crud.delete_salary(db, i)
-        log_activity(db, actor="admin", action="deleted", entity="salary", entity_id=i, entity_name=name)
+    salaries = db.query(models.Salary).filter(models.Salary.id.in_(ids)).all()
+    worker_ids = [s.workerId for s in salaries if s.workerId]
+    workers = {w.id: w.name for w in db.query(models.Worker).filter(models.Worker.id.in_(worker_ids)).all()} if worker_ids else {}
 
+    db.query(models.Salary).filter(models.Salary.id.in_(ids)).delete(synchronize_session=False)
+
+    for s in salaries:
+        name = workers.get(s.workerId, s.id)
+        log_activity(db, actor="admin", action="deleted", entity="salary", entity_id=s.id, entity_name=name, commit=False)
+
+    db.commit()
+    invalidate_analytics()
     return {"code": 0, "data": "success"}
 
 @router.post("/salary/payout")
@@ -156,6 +163,7 @@ def salary_payout(payout: schemas.SalaryPayout, db: Session = Depends(get_db)):
             )
             pay_count += 1
 
+    invalidate_analytics()
     return {
         "code": 0,
         "data": f"{pay_count} ta xodimga ish haqi muvaffaqiyatli tarqatildi va hisobga olindi"

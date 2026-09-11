@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
+from app.cache import invalidate_analytics
 
 router = APIRouter()
 
@@ -199,6 +200,7 @@ def save_output(out_in: schemas.StaffOutputCreate, db: Session = Depends(get_db)
     existing = db.query(models.StaffOutput).filter(models.StaffOutput.id == out_in.id).first() if out_in.id else None
     action = "updated" if existing else "created"
     out = crud.create_staff_output(db, out_in)
+    invalidate_analytics()
     log_activity(
         db,
         actor="admin",
@@ -221,4 +223,5 @@ def delete_output(body: dict = Body(...), db: Session = Depends(get_db)):
         name = out.name if out else i
         crud.delete_staff_output(db, i)
         log_activity(db, actor="admin", action="deleted", entity="staff_output", entity_id=i, entity_name=name)
+    invalidate_analytics()
     return {"code": 0, "data": "success"}

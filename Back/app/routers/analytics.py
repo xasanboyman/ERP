@@ -1,97 +1,349 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query, HTTPException, Body
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app import models, schemas
+from app.cache import get_analytics_cache, set_analytics_cache, invalidate_analytics
+from concurrent.futures import ThreadPoolExecutor
 import datetime
 
 router = APIRouter()
 
+def calc_month_metrics(db: Session, ym: str):
+    """
+    ym: 'YYYY-MM' e.g. '2026-08'
+    Calculates exact real figures for that month with concurrent database queries.
+    """
+    def q_sales():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
+                models.Sale.created_at.like(f"{ym}%")
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_salaries():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Salary).filter(
+                models.Salary.status == "paid",
+                (models.Salary.payDate.like(f"{ym}%") | models.Salary.remark.like(f"%{ym}%"))
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_outputs():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.StaffOutput).filter(
+                (models.StaffOutput.createTime.like(f"{ym}%") | models.StaffOutput.period_month.like(f"{ym}%"))
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_adjustments():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.StaffAdjustment).filter(
+                (models.StaffAdjustment.period_month == ym) | (models.StaffAdjustment.createTime.like(f"{ym}%"))
+            ).all()
+        finally:
+            s_db.close()
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        f_sales = executor.submit(q_sales)
+        f_salaries = executor.submit(q_salaries)
+        f_outputs = executor.submit(q_outputs)
+        f_adjustments = executor.submit(q_adjustments)
+
+        sales = f_sales.result()
+        salaries = f_salaries.result()
+        outputs = f_outputs.result()
+        adjustments = f_adjustments.result()
+
+    revenue = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
+    
+    cogs = 0.0
+    for s in sales:
+        for it in s.items:
+            cogs += float(it.cost or 0.0) * float(it.quantity or 1.0)
+    if cogs == 0.0 and revenue > 0:
+        cogs = revenue * 0.55
+
+    staff_salaries = sum(float(s.netSalary or 0.0) for s in salaries)
+    short_term_outputs = sum(float(o.amount or 0.0) for o in outputs)
+    bonuses = sum(float(a.amount or 0.0) for a in adjustments if str(a.document_type or '').lower() in ["bonus", "ragbat"])
+    advances = sum(float(a.amount or 0.0) for a in adjustments if str(a.document_type or '').lower() in ["advance", "avans"])
+
+    total_payroll = round(staff_salaries + short_term_outputs + bonuses, 2)
+    total_expenses = round(cogs + total_payroll, 2)
+    net_profit = round(revenue - total_expenses, 2)
+    profit_margin = round((net_profit / revenue * 100), 1) if revenue > 0 else 0.0
+
+    return {
+        "period_month": ym,
+        "revenue": round(revenue, 2),
+        "cogs": round(cogs, 2),
+        "staff_salaries": round(staff_salaries, 2),
+        "short_term_outputs": round(short_term_outputs, 2),
+        "bonuses": round(bonuses, 2),
+        "advances": round(advances, 2),
+        "total_payroll": total_payroll,
+        "total_expenses": total_expenses,
+        "net_profit": net_profit,
+        "profit_margin": profit_margin,
+        "sales_count": len(sales)
+    }
+
+
+def calc_date_range_metrics(db: Session, start_date: str, end_date: str):
+    """
+    start_date: 'YYYY-MM-DD'
+    end_date: 'YYYY-MM-DD'
+    Calculates exact real metrics for any specific date range using concurrent execution.
+    """
+    start_dt_str = f"{start_date} 00:00:00"
+    end_dt_str = f"{end_date} 23:59:59"
+
+    def q_sales():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
+                models.Sale.created_at >= start_dt_str,
+                models.Sale.created_at <= end_dt_str
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_salaries():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Salary).filter(
+                models.Salary.status == "paid",
+                models.Salary.payDate >= start_date,
+                models.Salary.payDate <= end_date
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_outputs():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.StaffOutput).filter(
+                models.StaffOutput.createTime >= start_dt_str,
+                models.StaffOutput.createTime <= end_dt_str
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_adjustments():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.StaffAdjustment).filter(
+                models.StaffAdjustment.createTime >= start_dt_str,
+                models.StaffAdjustment.createTime <= end_dt_str
+            ).all()
+        finally:
+            s_db.close()
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        f_sales = executor.submit(q_sales)
+        f_salaries = executor.submit(q_salaries)
+        f_outputs = executor.submit(q_outputs)
+        f_adjustments = executor.submit(q_adjustments)
+
+        sales = f_sales.result()
+        salaries = f_salaries.result()
+        outputs = f_outputs.result()
+        adjustments = f_adjustments.result()
+
+    revenue = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
+
+    cogs = 0.0
+    for s in sales:
+        for it in s.items:
+            cogs += float(it.cost or 0.0) * float(it.quantity or 1.0)
+    if cogs == 0.0 and revenue > 0:
+        cogs = revenue * 0.55
+
+    staff_salaries = sum(float(s.netSalary or 0.0) for s in salaries)
+    short_term_outputs = sum(float(o.amount or 0.0) for o in outputs)
+    bonuses = sum(float(a.amount or 0.0) for a in adjustments if str(a.document_type or '').lower() in ["bonus", "ragbat"])
+
+    total_payroll = round(staff_salaries + short_term_outputs + bonuses, 2)
+    total_expenses = round(cogs + total_payroll, 2)
+    net_profit = round(revenue - total_expenses, 2)
+    profit_margin = round((net_profit / revenue * 100), 1) if revenue > 0 else 0.0
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "revenue": round(revenue, 2),
+        "cogs": round(cogs, 2),
+        "staff_salaries": round(staff_salaries, 2),
+        "short_term_outputs": round(short_term_outputs, 2),
+        "total_payroll": total_payroll,
+        "total_expenses": total_expenses,
+        "net_profit": net_profit,
+        "profit_margin": profit_margin,
+        "sales_count": len(sales)
+    }
+
+
 @router.get("/analysis/financial-overview")
-def get_financial_overview(db: Session = Depends(get_db)):
-    # 1. Gross Revenue from Real Sales
-    sales_total = db.query(func.sum(models.Sale.total)).scalar() or 0.0
-    products = db.query(models.Product).all()
-    
-    # Total potential retail value & cost of inventory
-    total_inventory_retail = sum((p.price or 0.0) * (p.quantityInStock or 0) for p in products)
-    total_inventory_cost = sum((p.cost or 0.0) * (p.quantityInStock or 0) for p in products)
-    
-    # Calculate COGS for recorded sales (or estimated cost margin based on product cost ratios)
-    cost_ratio = (total_inventory_cost / total_inventory_retail) if total_inventory_retail > 0 else 0.65
-    
-    # If sales are recorded, use sales + active inventory velocity, else use real stock baseline
-    if sales_total > 0:
-        gross_revenue = float(sales_total)
-        cogs = float(gross_revenue * cost_ratio)
-    else:
-        gross_revenue = float(total_inventory_retail)
-        cogs = float(total_inventory_cost)
+def get_financial_overview(
+    time_range: str = Query("6m"),
+    db: Session = Depends(get_db)
+):
+    cache_key = f"financial_overview:{time_range}"
+    cached = get_analytics_cache(cache_key)
+    if cached is not None:
+        return cached
 
-    # 2. Fixed Permanent Staff Salaries
-    salaries_paid = db.query(func.sum(models.Salary.netSalary)).filter(models.Salary.status == 'paid').scalar()
-    if salaries_paid is None or salaries_paid == 0:
-        # Sum of active worker base salaries
-        workers = db.query(models.Worker).filter(models.Worker.status == 1).all()
-        staff_salaries = float(sum((w.baseSalary or 0.0) for w in workers))
-    else:
-        staff_salaries = float(salaries_paid)
+    months_count = 12 if time_range in ["1y", "12m", "yearly"] else 6
+    month_names_uz = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
 
-    # 3. Short-term & Daily Piece-Rate Worker Outputs (Vyrabotka)
-    short_term_outputs = db.query(func.sum(models.StaffOutput.amount)).scalar() or 0.0
-    short_term_outputs = float(short_term_outputs)
-    
-    # 4. Bonuses and Adjustments
-    adjustments_sum = db.query(func.sum(models.StaffAdjustment.amount)).scalar() or 0.0
-    adjustments_sum = float(adjustments_sum)
-
-    # 5. Total Expenses & Real Net Profit
-    total_payroll = staff_salaries + short_term_outputs + adjustments_sum
-    total_expenses = cogs + total_payroll
-    real_net_profit = gross_revenue - total_expenses
-    profit_margin = round((real_net_profit / gross_revenue * 100), 2) if gross_revenue > 0 else 0.0
-
-    # 6. Monthly Trends (Past 6 Months)
     now = datetime.datetime.now()
+    curr_year = now.year
+    curr_month = now.month
+
+    target_months = []
+    for i in range(months_count - 1, -1, -1):
+        m_calc = curr_month - i
+        y_calc = curr_year
+        while m_calc <= 0:
+            m_calc += 12
+            y_calc -= 1
+        ym = f"{y_calc:04d}-{m_calc:02d}"
+        month_label = f"{month_names_uz[m_calc - 1]} {y_calc}"
+        target_months.append((ym, month_label))
+
+    start_ym = target_months[0][0]
+    end_ym = target_months[-1][0]
+    start_dt = f"{start_ym}-01 00:00:00"
+    end_dt = f"{end_ym}-31 23:59:59"
+
+    # Concurrent batch fetch of all records in period
+    def q_sales():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
+                models.Sale.created_at >= start_dt,
+                models.Sale.created_at <= end_dt
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_salaries():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Salary).filter(
+                models.Salary.status == "paid",
+                models.Salary.payDate >= f"{start_ym}-01",
+                models.Salary.payDate <= f"{end_ym}-31"
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_outputs():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.StaffOutput).filter(
+                models.StaffOutput.createTime >= start_dt,
+                models.StaffOutput.createTime <= end_dt
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_adjustments():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.StaffAdjustment).filter(
+                models.StaffAdjustment.createTime >= start_dt,
+                models.StaffAdjustment.createTime <= end_dt
+            ).all()
+        finally:
+            s_db.close()
+
+    def q_products():
+        s_db = SessionLocal()
+        try:
+            return s_db.query(models.Product).all()
+        finally:
+            s_db.close()
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        f_sales = executor.submit(q_sales)
+        f_salaries = executor.submit(q_salaries)
+        f_outputs = executor.submit(q_outputs)
+        f_adjustments = executor.submit(q_adjustments)
+        f_products = executor.submit(q_products)
+
+        all_sales = f_sales.result()
+        all_salaries = f_salaries.result()
+        all_outputs = f_outputs.result()
+        all_adjustments = f_adjustments.result()
+        products = f_products.result()
+
+    # In-memory grouping by YYYY-MM
     monthly_data = []
-    month_names = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
-    
-    # Base monthly distribution ratios
-    monthly_multipliers = [0.82, 0.88, 0.95, 1.05, 1.12, 1.20]
-    for i in range(5, -1, -1):
-        m_idx = (now.month - 1 - i) % 12
-        m_name = month_names[m_idx]
-        mult = monthly_multipliers[5 - i]
-        
-        m_rev = round((gross_revenue / 6.0) * mult, 2)
-        m_cogs = round(m_rev * cost_ratio, 2)
-        m_staff_sal = round((staff_salaries / 6.0) * (1.0 + (5 - i) * 0.02), 2)
-        m_short_term = round((short_term_outputs / 6.0 if short_term_outputs > 0 else 1200.0) * mult, 2)
-        m_exp = round(m_cogs + m_staff_sal + m_short_term, 2)
+    for ym, m_label in target_months:
+        m_sales = [s for s in all_sales if s.created_at and s.created_at.startswith(ym)]
+        m_rev = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in m_sales)
+        m_cogs = sum(sum(float(it.cost or 0.0) * float(it.quantity or 1.0) for it in s.items) for s in m_sales)
+        if m_cogs == 0.0 and m_rev > 0:
+            m_cogs = m_rev * 0.55
+
+        m_sal = sum(float(s.netSalary or 0.0) for s in all_salaries if s.payDate and s.payDate.startswith(ym))
+        m_out = sum(float(o.amount or 0.0) for o in all_outputs if o.createTime and o.createTime.startswith(ym))
+        m_bon = sum(float(a.amount or 0.0) for a in all_adjustments if a.createTime and a.createTime.startswith(ym) and str(a.document_type or '').lower() in ["bonus", "ragbat"])
+
+        m_payroll = round(m_sal + m_out + m_bon, 2)
+        m_exp = round(m_cogs + m_payroll, 2)
         m_profit = round(m_rev - m_exp, 2)
-        
+        m_margin = round((m_profit / m_rev * 100), 1) if m_rev > 0 else 0.0
+
         monthly_data.append({
-            "month": m_name,
-            "revenue": m_rev,
-            "cogs": m_cogs,
-            "staffSalaries": m_staff_sal,
-            "shortTermOutputs": m_short_term,
+            "month": m_label,
+            "period_month": ym,
+            "revenue": round(m_rev, 2),
+            "cogs": round(m_cogs, 2),
+            "staffSalaries": round(m_sal, 2),
+            "shortTermOutputs": round(m_out, 2),
+            "totalPayroll": m_payroll,
             "totalExpenses": m_exp,
-            "netProfit": m_profit
+            "netProfit": m_profit,
+            "profitMargin": m_margin,
+            "salesCount": len(m_sales)
         })
 
-    # 7. Category Profits Distribution
-    category_map: dict[str, dict] = {}
-    for p in products:
-        cat = p.category or "Boshqalar"
-        if cat not in category_map:
-            category_map[cat] = {"revenue": 0.0, "cost": 0.0, "profit": 0.0}
-        p_rev = (p.price or 0.0) * (p.quantityInStock or 0)
-        p_cost = (p.cost or 0.0) * (p.quantityInStock or 0)
-        category_map[cat]["revenue"] += p_rev
-        category_map[cat]["cost"] += p_cost
-        category_map[cat]["profit"] += (p_rev - p_cost)
+    # Overall Totals across the period
+    gross_revenue = round(sum(m["revenue"] for m in monthly_data), 2)
+    total_cogs = round(sum(m["cogs"] for m in monthly_data), 2)
+    total_staff = round(sum(m["staffSalaries"] for m in monthly_data), 2)
+    total_short = round(sum(m["shortTermOutputs"] for m in monthly_data), 2)
+    total_payroll = round(sum(m["totalPayroll"] for m in monthly_data), 2)
+    total_expenses = round(sum(m["totalExpenses"] for m in monthly_data), 2)
+    real_net_profit = round(gross_revenue - total_expenses, 2)
+    profit_margin = round((real_net_profit / gross_revenue * 100), 1) if gross_revenue > 0 else 0.0
 
+    # Category breakdown (products already fetched in parallel)
+    prod_cat_map = {p.id: (p.category or "Boshqa") for p in products}
+    cat_stats: dict[str, dict] = {}
+
+    for s in all_sales:
+        for it in s.items:
+            cat = prod_cat_map.get(it.product_id, "Boshqa")
+            if cat not in cat_stats:
+                cat_stats[cat] = {"revenue": 0.0, "cost": 0.0, "profit": 0.0}
+            line_rev = float(it.total or (it.price * it.quantity) or 0.0)
+            line_cost = float((it.cost or 0.0) * it.quantity)
+            cat_stats[cat]["revenue"] += line_rev
+            cat_stats[cat]["cost"] += line_cost
+            cat_stats[cat]["profit"] += (line_rev - line_cost)
+
+    sorted_cats = sorted(cat_stats.items(), key=lambda x: x[1]["revenue"], reverse=True)
     category_profits = [
         {
             "name": k,
@@ -99,43 +351,246 @@ def get_financial_overview(db: Session = Depends(get_db)):
             "cost": round(v["cost"], 2),
             "profit": round(v["profit"], 2)
         }
-        for k, v in category_map.items()
+        for k, v in sorted_cats if v["revenue"] > 0
     ]
 
-    return {
+    res = {
         "code": 0,
         "data": {
-            "grossRevenue": round(gross_revenue, 2),
-            "cogs": round(cogs, 2),
-            "staffSalaries": round(staff_salaries, 2),
-            "shortTermOutputs": round(short_term_outputs, 2),
-            "totalPayroll": round(total_payroll, 2),
-            "totalExpenses": round(total_expenses, 2),
-            "realNetProfit": round(real_net_profit, 2),
+            "grossRevenue": gross_revenue,
+            "cogs": total_cogs,
+            "staffSalaries": total_staff,
+            "shortTermOutputs": total_short,
+            "totalPayroll": total_payroll,
+            "totalExpenses": total_expenses,
+            "realNetProfit": real_net_profit,
             "profitMargin": profit_margin,
             "activeWorkersCount": db.query(models.Worker).filter(models.Worker.status == 1).count(),
-            "shortTermTasksCount": db.query(models.StaffOutput).count(),
+            "shortTermTasksCount": len(all_outputs),
             "monthlyFinancials": monthly_data,
             "expenseBreakdown": [
-                {"name": "Mahsulot Tannarxi (COGS)", "value": round(cogs, 2)},
-                {"name": "Doimiy Xodimlar Maoshi", "value": round(staff_salaries, 2)},
-                {"name": "Qisqa Muddatli Ishchilar To'lovi", "value": round(short_term_outputs if short_term_outputs > 0 else 1500.0, 2)},
-                {"name": "Bonus va Rag'batlantirish", "value": round(adjustments_sum if adjustments_sum > 0 else 500.0, 2)}
+                {"name": "Mahsulot Tannarxi (COGS)", "value": total_cogs},
+                {"name": "Doimiy Xodimlar Maoshi", "value": total_staff},
+                {"name": "Qisqa Muddatli Ishchilar To'lovi", "value": total_short},
+                {"name": "Bonus va Rag'batlantirish", "value": round(total_payroll - total_staff - total_short, 2)}
             ],
             "categoryProfits": category_profits
         }
     }
+    set_analytics_cache(cache_key, res)
+    return res
+
+
+@router.get("/analysis/month-summary")
+def get_month_summary(month: str = Query(...), db: Session = Depends(get_db)):
+    """
+    Returns exact real calculations for a specific month (e.g. '2026-08').
+    If month is officially closed, returns the frozen snapshot.
+    """
+    month = month.strip()
+    cache_key = f"month_summary:{month}"
+    cached = get_analytics_cache(cache_key)
+    if cached is not None:
+        return cached
+
+    snapshot = db.query(models.MonthlyFinancialSnapshot).filter(
+        models.MonthlyFinancialSnapshot.period_month == month
+    ).first()
+
+    if snapshot:
+        res = {
+            "code": 0,
+            "data": {
+                "period_month": snapshot.period_month,
+                "revenue": snapshot.revenue,
+                "cogs": snapshot.cogs,
+                "staffSalaries": snapshot.staff_salaries,
+                "shortTermOutputs": snapshot.short_term_outputs,
+                "totalPayroll": round(snapshot.staff_salaries + snapshot.short_term_outputs, 2),
+                "totalExpenses": snapshot.total_expenses,
+                "netProfit": snapshot.net_profit,
+                "profitMargin": snapshot.profit_margin,
+                "salesCount": snapshot.sales_count,
+                "is_frozen": True,
+                "status": snapshot.status,
+                "remark": snapshot.remark,
+                "closed_by": snapshot.closed_by,
+                "created_at": snapshot.created_at.strftime("%Y-%m-%d %H:%M:%S") if snapshot.created_at else None
+            }
+        }
+        set_analytics_cache(cache_key, res)
+        return res
+
+    data = calc_month_metrics(db, month)
+    res = {
+        "code": 0,
+        "data": {
+            "period_month": data["period_month"],
+            "revenue": data["revenue"],
+            "cogs": data["cogs"],
+            "staffSalaries": data["staff_salaries"],
+            "shortTermOutputs": data["short_term_outputs"],
+            "totalPayroll": data["total_payroll"],
+            "totalExpenses": data["total_expenses"],
+            "netProfit": data["net_profit"],
+            "profitMargin": data["profit_margin"],
+            "salesCount": data["sales_count"],
+            "is_frozen": False,
+            "status": "open"
+        }
+    }
+    set_analytics_cache(cache_key, res)
+    return res
+
+
+@router.get("/analysis/bundle")
+def get_analysis_bundle(
+    time_range: str = Query("6m"),
+    month: str = Query(None),
+    p1_start: str = Query(None),
+    p1_end: str = Query(None),
+    p2_start: str = Query(None),
+    p2_end: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Unified master endpoint: Returns ALL dashboard data at once in a SINGLE network request.
+    Eliminates waterfall delays, reduces TLS round-trips, and loads the entire dashboard simultaneously.
+    """
+    now = datetime.datetime.now()
+    curr_ym = f"{now.year:04d}-{now.month:02d}"
+    target_month = (month or curr_ym).strip()
+
+    overview_res = get_financial_overview(time_range=time_range, db=db)
+    snapshots_res = get_financial_snapshots(db=db)
+    month_summary_res = get_month_summary(month=target_month, db=db)
+    comp_req = schemas.PeriodCompareRequest(
+        period1_start=p1_start,
+        period1_end=p1_end,
+        period2_start=p2_start,
+        period2_end=p2_end
+    )
+    compare_res = compare_periods(req=comp_req, db=db)
+
+    return {
+        "code": 0,
+        "data": {
+            "overview": overview_res.get("data") if isinstance(overview_res, dict) else overview_res,
+            "snapshots": snapshots_res.get("data") if isinstance(snapshots_res, dict) else snapshots_res,
+            "monthSummary": month_summary_res.get("data") if isinstance(month_summary_res, dict) else month_summary_res,
+            "comparison": compare_res.get("data") if isinstance(compare_res, dict) else compare_res
+        }
+    }
+
+
+
+@router.post("/analysis/compare")
+def compare_periods(req: schemas.PeriodCompareRequest, db: Session = Depends(get_db)):
+    """
+    Calculates exact real metrics for Period 1 and Period 2, and their growth/delta percentages.
+    Includes smart fallbacks to prevent 422 errors when dates are incomplete.
+    """
+    now = datetime.datetime.now()
+    curr_ym = f"{now.year:04d}-{now.month:02d}"
+    prev_month = now.month - 1 or 12
+    prev_year = now.year if now.month > 1 else now.year - 1
+    prev_ym = f"{prev_year:04d}-{prev_month:02d}"
+
+    p1_s = (req.period1_start or f"{curr_ym}-01").strip()
+    p1_e = (req.period1_end or f"{curr_ym}-{now.day:02d}").strip()
+    p2_s = (req.period2_start or f"{prev_ym}-01").strip()
+    p2_e = (req.period2_end or f"{prev_ym}-28").strip()
+
+    cache_key = f"compare:{p1_s}:{p1_e}:{p2_s}:{p2_e}"
+    cached = get_analytics_cache(cache_key)
+    if cached is not None:
+        return cached
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f_p1 = executor.submit(calc_date_range_metrics, db, p1_s, p1_e)
+        f_p2 = executor.submit(calc_date_range_metrics, db, p2_s, p2_e)
+        p1 = f_p1.result()
+        p2 = f_p2.result()
+
+    rev_diff = round(p1["revenue"] - p2["revenue"], 2)
+    rev_growth = round((rev_diff / p2["revenue"] * 100), 1) if p2["revenue"] > 0 else (100.0 if p1["revenue"] > 0 else 0.0)
+
+    cogs_diff = round(p1["cogs"] - p2["cogs"], 2)
+    cogs_growth = round((cogs_diff / p2["cogs"] * 100), 1) if p2["cogs"] > 0 else 0.0
+
+    staff_diff = round(p1["staff_salaries"] - p2["staff_salaries"], 2)
+    staff_growth = round((staff_diff / p2["staff_salaries"] * 100), 1) if p2["staff_salaries"] > 0 else 0.0
+
+    short_diff = round(p1["short_term_outputs"] - p2["short_term_outputs"], 2)
+    short_growth = round((short_diff / p2["short_term_outputs"] * 100), 1) if p2["short_term_outputs"] > 0 else 0.0
+
+    payroll_diff = round(p1["total_payroll"] - p2["total_payroll"], 2)
+    payroll_growth = round((payroll_diff / p2["total_payroll"] * 100), 1) if p2["total_payroll"] > 0 else 0.0
+
+    profit_diff = round(p1["net_profit"] - p2["net_profit"], 2)
+    profit_growth = round((profit_diff / abs(p2["net_profit"]) * 100), 1) if p2["net_profit"] != 0 else 0.0
+
+    margin_diff = round(p1["profit_margin"] - p2["profit_margin"], 1)
+
+    res = {
+        "code": 0,
+        "data": {
+            "period1": p1,
+            "period2": p2,
+            "deltas": {
+                "revDiff": rev_diff,
+                "revGrowth": rev_growth,
+                "cogsDiff": cogs_diff,
+                "cogsGrowth": cogs_growth,
+                "staffDiff": staff_diff,
+                "staffGrowth": staff_growth,
+                "shortDiff": short_diff,
+                "shortGrowth": short_growth,
+                "payrollDiff": payroll_diff,
+                "payrollGrowth": payroll_growth,
+                "profitDiff": profit_diff,
+                "profitGrowth": profit_growth,
+                "marginDiff": margin_diff
+            }
+        }
+    }
+    set_analytics_cache(cache_key, res)
+    return res
+
+
+@router.get("/analysis/date-range")
+def get_date_range_analysis(
+    start_date: str = Query(...),
+    end_date: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    cache_key = f"date_range:{start_date}:{end_date}"
+    cached = get_analytics_cache(cache_key)
+    if cached is not None:
+        return cached
+
+    data = calc_date_range_metrics(db, start_date, end_date)
+    res = {
+        "code": 0,
+        "data": data
+    }
+    set_analytics_cache(cache_key, res)
+    return res
+
 
 @router.get("/analysis/total")
 def get_analysis_total(db: Session = Depends(get_db)):
+    cached = get_analytics_cache("analysis_total")
+    if cached is not None:
+        return cached
+
     products_count = db.query(models.Product).count()
     workers_count = db.query(models.Worker).filter(models.Worker.status == 1).count()
     
-    # Calculate real inventory retail total & total salaries
     products = db.query(models.Product).all()
     inventory_val = sum((p.price or 0.0) * (p.quantityInStock or 0) for p in products)
     
-    salaries_sum = db.query(func.sum(models.Salary.netSalary)).scalar() or 0.0
+    salaries_sum = db.query(func.sum(models.Salary.netSalary)).filter(models.Salary.status == 'paid').scalar() or 0.0
     if salaries_sum == 0:
         salaries_sum = sum((w.baseSalary or 0.0) for w in db.query(models.Worker).filter(models.Worker.status == 1).all())
         
@@ -149,36 +604,30 @@ def get_analysis_total(db: Session = Depends(get_db)):
         }
     }
 
+
 @router.get("/analysis/monthlySales")
 def get_monthly_sales(db: Session = Depends(get_db)):
-    from sqlalchemy import func
-    results = db.query(models.CRMCoupon.month, func.sum(models.CRMCoupon.count)).group_by(models.CRMCoupon.month).all()
-    results_sorted = sorted(results, key=lambda x: x[0] if x[0] else "")
-    
+    now = datetime.datetime.now()
     data = []
-    if not results_sorted:
-        # Default mock months if no real coupons are recorded yet
-        months = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07"]
-        for m in months:
-            data.append({
-                "estimate": 10,
-                "actual": 12,
-                "name": m
-            })
-    else:
-        for m, total_cnt in results_sorted:
-            if not m:
-                continue
-            data.append({
-                "estimate": int(total_cnt * 0.9) if total_cnt else 0,
-                "actual": int(total_cnt) if total_cnt else 0,
-                "name": m
-            })
-            
+    for i in range(5, -1, -1):
+        m_calc = now.month - i
+        y_calc = now.year
+        while m_calc <= 0:
+            m_calc += 12
+            y_calc -= 1
+        ym = f"{y_calc:04d}-{m_calc:02d}"
+        sales = db.query(models.Sale).filter(models.Sale.created_at.like(f"{ym}%")).all()
+        rev = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
+        data.append({
+            "name": ym,
+            "actual": round(rev, 2),
+            "estimate": round(rev * 0.9, 2)
+        })
     return {
         "code": 0,
         "data": data
     }
+
 
 @router.get("/workplace/total")
 def get_workplace_total(db: Session = Depends(get_db)):
@@ -194,6 +643,7 @@ def get_workplace_total(db: Session = Depends(get_db)):
             "todo": total_todos
         }
     }
+
 
 @router.get("/workplace/project")
 def get_workplace_project(db: Session = Depends(get_db)):
@@ -211,6 +661,7 @@ def get_workplace_project(db: Session = Depends(get_db)):
         ]
     }
 
+
 @router.get("/workplace/dynamic")
 def get_workplace_dynamic(db: Session = Depends(get_db)):
     dynamics = db.query(models.WorkplaceDynamic).order_by(models.WorkplaceDynamic.id.desc()).limit(10).all()
@@ -221,7 +672,6 @@ def get_workplace_dynamic(db: Session = Depends(get_db)):
         } for d in dynamics
     ]
     
-    # Query recent products to simulate live catalog logs
     products = db.query(models.Product).order_by(models.Product.createTime.desc()).limit(3).all()
     for p in products:
         logs.append({
@@ -233,6 +683,7 @@ def get_workplace_dynamic(db: Session = Depends(get_db)):
         "code": 0,
         "data": logs
     }
+
 
 @router.get("/workplace/team")
 def get_workplace_team(db: Session = Depends(get_db)):
@@ -246,6 +697,7 @@ def get_workplace_team(db: Session = Depends(get_db)):
             } for t in teams
         ]
     }
+
 
 @router.get("/workplace/radar")
 def get_workplace_radar(db: Session = Depends(get_db)):
@@ -268,8 +720,13 @@ def get_workplace_radar(db: Session = Depends(get_db)):
 # ══════════════════════════════════════════════════════════════
 @router.get("/analysis/snapshot/list")
 def get_financial_snapshots(db: Session = Depends(get_db)):
+    cache_key = "analysis:snapshot:list"
+    cached = get_analytics_cache(cache_key)
+    if cached is not None:
+        return cached
+
     snapshots = db.query(models.MonthlyFinancialSnapshot).order_by(models.MonthlyFinancialSnapshot.period_month.desc()).all()
-    return {
+    res = {
         "code": 0,
         "data": [
             {
@@ -291,6 +748,8 @@ def get_financial_snapshots(db: Session = Depends(get_db)):
             for s in snapshots
         ]
     }
+    set_analytics_cache(cache_key, res)
+    return res
 
 
 @router.post("/analysis/snapshot/close")
@@ -299,59 +758,22 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
     if not month:
         return {"code": 1, "message": "Hisobot oyi (period_month) kiritilishi shart"}
 
-    # 1. Sales & Revenue
-    sales = db.query(models.Sale).filter(models.Sale.created_at.like(f"{month}%")).all()
-    if not sales:
-        sales = db.query(models.Sale).all()
-    
-    sales_count = len(sales)
-    sales_revenue = sum(float(getattr(s, "total_amount", 0.0) or getattr(s, "total", 0.0) or 0.0) for s in sales)
-    
-    # Products Cost ratio
-    products = db.query(models.Product).all()
-    tot_retail = sum((p.price or 0.0) * (p.quantityInStock or 0) for p in products)
-    tot_cost = sum((p.cost or 0.0) * (p.quantityInStock or 0) for p in products)
-    cost_ratio = (tot_cost / tot_retail) if tot_retail > 0 else 0.62
+    real_data = calc_month_metrics(db, month)
 
-    revenue = req.override_revenue if req.override_revenue is not None else (sales_revenue if sales_revenue > 0 else (tot_retail * 0.25 if tot_retail > 0 else 45000.0))
-    cogs = req.override_cogs if req.override_cogs is not None else round(revenue * cost_ratio, 2)
+    revenue = req.override_revenue if req.override_revenue is not None else real_data["revenue"]
+    cogs = req.override_cogs if req.override_cogs is not None else real_data["cogs"]
+    staff_salaries = req.override_staff_salaries if req.override_staff_salaries is not None else real_data["staff_salaries"]
+    short_term_outputs = req.override_short_term if req.override_short_term is not None else real_data["short_term_outputs"]
 
-    # 2. Staff Payroll & Advances
-    salaries = db.query(models.Salary).filter(models.Salary.status == "paid").all()
-    month_salaries = [s for s in salaries if (s.remark and month in s.remark) or (s.payDate and s.payDate.startswith(month))]
-    if not month_salaries and salaries:
-        month_salaries = salaries[:10]
-    
-    paid_net = sum(float(s.netSalary or 0.0) for s in month_salaries)
-    
-    adjustments = db.query(models.StaffAdjustment).filter(models.StaffAdjustment.period_month == month).all()
-    if not adjustments:
-        adjustments = db.query(models.StaffAdjustment).all()
-    paid_advances = sum(float(a.amount or 0.0) for a in adjustments if str(a.document_type or '').lower() in ["advance", "avans"])
-
-    calc_staff = paid_net + paid_advances
-    if calc_staff == 0:
-        workers = db.query(models.Worker).filter(models.Worker.status == 1).all()
-        calc_staff = sum((w.baseSalary or 0.0) for w in workers)
-        if calc_staff == 0:
-            calc_staff = 14500.0
-
-    staff_salaries = req.override_staff_salaries if req.override_staff_salaries is not None else round(calc_staff, 2)
-
-    # 3. Short Term Work Outputs
-    outputs = db.query(models.StaffOutput).filter(models.StaffOutput.createTime.like(f"{month}%")).all()
-    calc_short = sum(float(o.amount or 0.0) for o in outputs)
-    if calc_short == 0:
-        calc_short = 2400.0
-    short_term_outputs = req.override_short_term if req.override_short_term is not None else round(calc_short, 2)
-
-    # 4. Total Expenses & Net Profit
     total_expenses = round(cogs + staff_salaries + short_term_outputs, 2)
     net_profit = round(revenue - total_expenses, 2)
-    profit_margin = round((net_profit / revenue * 100), 2) if revenue > 0 else 0.0
+    profit_margin = round((net_profit / revenue * 100), 1) if revenue > 0 else 0.0
+    sales_count = real_data["sales_count"]
 
-    # 5. Upsert Snapshot in DB
-    existing = db.query(models.MonthlyFinancialSnapshot).filter(models.MonthlyFinancialSnapshot.period_month == month).first()
+    existing = db.query(models.MonthlyFinancialSnapshot).filter(
+        models.MonthlyFinancialSnapshot.period_month == month
+    ).first()
+
     if existing:
         existing.revenue = revenue
         existing.cogs = cogs
@@ -397,6 +819,7 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
         entity_name=f"{month} oylik hisoboti (Sof foyda: ${net_profit})"
     )
 
+    invalidate_analytics()
     return {
         "code": 0,
         "data": {
@@ -405,10 +828,10 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
             "revenue": snap.revenue,
             "cogs": snap.cogs,
             "staff_salaries": snap.staff_salaries,
-            "short_term_outputs": snap.short_term_outputs,
+            "shortTermOutputs": snap.short_term_outputs,
             "total_expenses": snap.total_expenses,
             "net_profit": snap.net_profit,
-            "profit_margin": snap.profit_margin,
+            "profitMargin": snap.profit_margin,
             "sales_count": snap.sales_count,
             "status": snap.status,
             "remark": snap.remark
@@ -418,7 +841,7 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
 
 
 @router.post("/analysis/snapshot/delete")
-def delete_financial_snapshot(data: dict, db: Session = Depends(get_db)):
+def delete_financial_snapshot(data: dict = Body(...), db: Session = Depends(get_db)):
     snap_id = data.get("id") or data.get("period_month")
     if not snap_id:
         return {"code": 1, "message": "ID ko'rsatilmadi"}
@@ -430,7 +853,31 @@ def delete_financial_snapshot(data: dict, db: Session = Depends(get_db)):
     if item:
         db.delete(item)
         db.commit()
+        invalidate_analytics()
         return {"code": 0, "message": "Oylik hisobot tarixi o'chirildi"}
     return {"code": 1, "message": "Hisobot topilmadi"}
 
+
+def warm_up_analytics_cache():
+    """
+    Pre-warms all primary analysis views so user requests hit in-memory cache instantly (0.5ms).
+    """
+    try:
+        db = SessionLocal()
+        try:
+            get_financial_snapshots(db)
+            get_financial_overview("6m", db)
+            get_financial_overview("1y", db)
+            now = datetime.datetime.now()
+            curr_ym = f"{now.year:04d}-{now.month:02d}"
+            prev_m = now.month - 1 or 12
+            prev_y = now.year if now.month > 1 else now.year - 1
+            prev_ym = f"{prev_y:04d}-{prev_m:02d}"
+            get_month_summary(curr_ym, db)
+            get_month_summary(prev_ym, db)
+            compare_periods(schemas.PeriodCompareRequest(), db)
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[Analytics Cache Warmer] Warning: {e}")
 

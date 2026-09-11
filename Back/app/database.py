@@ -28,24 +28,42 @@ if is_sqlite:
             pass
     connect_args["check_same_thread"] = False
 else:
-    # Use pure Python pg8000 driver for 100% serverless compatibility
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql+pg8000://", 1)
-    elif db_url.startswith("postgresql://") and "+pg8000" not in db_url and "+psycopg" not in db_url:
-        db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
-    
-    # Strip any parameters unsupported by pg8000 query string
-    if "?" in db_url:
-        base_part, query_part = db_url.split("?", 1)
-        db_url = base_part
-    ctx = ssl.create_default_context()
-    connect_args["ssl_context"] = ctx
+    try:
+        import psycopg2
+        has_psycopg2 = True
+    except ImportError:
+        has_psycopg2 = False
 
-engine = create_engine(
-    db_url,
-    connect_args=connect_args,
-    pool_pre_ping=True
-)
+    if has_psycopg2:
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
+        elif db_url.startswith("postgresql+pg8000://"):
+            db_url = db_url.replace("postgresql+pg8000://", "postgresql://", 1)
+        if "sslmode=" not in db_url:
+            separator = "&" if "?" in db_url else "?"
+            db_url = f"{db_url}{separator}sslmode=require"
+    else:
+        # Fallback to pure Python pg8000 driver for serverless environments
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql+pg8000://", 1)
+        elif db_url.startswith("postgresql://") and "+pg8000" not in db_url and "+psycopg" not in db_url:
+            db_url = db_url.replace("postgresql://", "postgresql+pg8000://", 1)
+        if "?" in db_url:
+            base_part, query_part = db_url.split("?", 1)
+            db_url = base_part
+        ctx = ssl.create_default_context()
+        connect_args["ssl_context"] = ctx
+
+engine_kwargs = {
+    "connect_args": connect_args,
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
+if not is_sqlite:
+    engine_kwargs["pool_size"] = 15
+    engine_kwargs["max_overflow"] = 25
+
+engine = create_engine(db_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

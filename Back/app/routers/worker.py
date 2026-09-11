@@ -138,11 +138,15 @@ def worker_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     if isinstance(ids, str):
         ids = [ids]
 
-    for i in ids:
-        worker = db.query(models.Worker).filter(models.Worker.id == i).first()
-        name = worker.name if worker else i
-        crud.delete_worker(db, i)
-        log_activity(db, actor="admin", action="deleted", entity="worker", entity_id=i, entity_name=name)
+    workers = db.query(models.Worker).filter(models.Worker.id.in_(ids)).all()
+    worker_names = {w.id: w.name for w in workers}
 
+    db.query(models.Worker).filter(models.Worker.id.in_(ids)).delete(synchronize_session=False)
+
+    for i in ids:
+        name = worker_names.get(i, i)
+        log_activity(db, actor="admin", action="deleted", entity="worker", entity_id=i, entity_name=name, commit=False)
+
+    db.commit()
     return {"code": 0, "data": "success"}
 

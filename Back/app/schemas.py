@@ -667,3 +667,10 @@ class MonthlyFinancialSnapshotResponse(BaseModel):
         from_attributes = True
 
 
+class PeriodCompareRequest(BaseModel):
+    period1_start: Optional[str] = None
+    period1_end: Optional[str] = None
+    period2_start: Optional[str] = None
+    period2_end: Optional[str] = None
+
+

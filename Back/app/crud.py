@@ -127,18 +127,23 @@ def create_product(db: Session, prod: schemas.ProductCreate):
     classifier_id = getattr(prod, 'classifier_id', None)
     sku = getattr(prod, 'SKU', None)
 
-    db_prod = None
+    # Consolidate duplicate checks into a single round-trip query
+    conditions = []
     if prod_id:
-        db_prod = db.query(models.Product).filter(models.Product.id == prod_id).first()
+        conditions.append(models.Product.id == prod_id)
+    else:
+        if shtrix and str(shtrix).strip():
+            conditions.append(models.Product.shtrix_code == str(shtrix).strip())
+        if classifier_id:
+            conditions.append(models.Product.classifier_id == classifier_id)
+        if sku and str(sku).strip():
+            conditions.append(models.Product.SKU == str(sku).strip())
 
-    # If not editing an explicit ID, check if product already exists by shtrix_code, classifier_id, or SKU
-    if not db_prod:
-        if shtrix and shtrix.strip():
-            db_prod = db.query(models.Product).filter(models.Product.shtrix_code == shtrix.strip()).first()
-        if not db_prod and classifier_id:
-            db_prod = db.query(models.Product).filter(models.Product.classifier_id == classifier_id).first()
-        if not db_prod and sku and sku.strip():
-            db_prod = db.query(models.Product).filter(models.Product.SKU == sku.strip()).first()
+    db_prod = None
+    if conditions:
+        db_prod = db.query(models.Product).filter(or_(*conditions)).first()
+
+    is_existing = (db_prod is not None) and (not prod_id)
 
     if db_prod:
         # If adding new stock for an existing product (no explicit ID passed from openAddDialog)
@@ -195,8 +200,6 @@ def create_product(db: Session, prod: schemas.ProductCreate):
             remark=prod.remark
         )
         db.add(db_prod)
-    db.commit()
-    db.refresh(db_prod)
 
     if hasattr(prod, 'packagings') and prod.packagings is not None:
         db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id == db_prod.id).delete()
@@ -212,9 +215,10 @@ def create_product(db: Session, prod: schemas.ProductCreate):
                 is_base_unit=getattr(pkg_in, 'is_base_unit', False)
             )
             db.add(pkg_obj)
-        db.commit()
-        db.refresh(db_prod)
 
+    # Single commit, no redundant network round-trip refresh
+    db.commit()
+    db_prod.is_existing_record = is_existing
     return db_prod
 
 
@@ -233,11 +237,10 @@ def get_workers(db: Session):
 
 def generate_unique_employee_code(db: Session) -> str:
     import random
-    for _ in range(100):
-        code = "".join(random.choices("0123456789", k=6))
-        exists = db.query(models.Worker).filter(models.Worker.employee_code == code).first()
-        if not exists:
-            return code
+    code = "".join(random.choices("0123456789", k=6))
+    exists = db.query(models.Worker.id).filter(models.Worker.employee_code == code).first()
+    if not exists:
+        return code
     return str(random.randint(100000, 999999))
 
 def create_worker(db: Session, worker: schemas.WorkerCreate):
@@ -324,7 +327,6 @@ def create_worker(db: Session, worker: schemas.WorkerCreate):
         db.add(db_user)
             
     db.commit()
-    db.refresh(db_w)
     return db_w
 
 def delete_worker(db: Session, worker_id: str):
@@ -370,7 +372,6 @@ def create_salary(db: Session, sal: schemas.SalaryCreate):
         )
         db.add(db_sal)
     db.commit()
-    db.refresh(db_sal)
     return db_sal
 
 def delete_salary(db: Session, sal_id: str):

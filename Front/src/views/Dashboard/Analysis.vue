@@ -4,6 +4,7 @@ import {
   ElRow,
   ElCol,
   ElSkeleton,
+  ElSkeletonItem,
   ElTable,
   ElTableColumn,
   ElTag,
@@ -26,18 +27,21 @@ import { Icon } from '@/components/Icon'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 import { useAppStore } from '@/store/modules/app'
-import { getProductListApi } from '@/api/product'
-import { getWorkerListApi } from '@/api/worker'
-import { getSalaryListApi } from '@/api/salary'
-import { getOutputListApi, getAdjustmentListApi } from '@/api/staff_hr'
 import { getSalesListApi, SaleType } from '@/api/sales'
 import {
+  getFinancialOverviewApi,
+  getMonthSummaryApi,
+  comparePeriodsApi,
   getFinancialSnapshotsApi,
   closeMonthlyFinancialSnapshotApi,
-  deleteFinancialSnapshotApi
+  deleteFinancialSnapshotApi,
+  getAnalysisBundleApi,
+  type MonthlyFinancialSnapshotItem,
+  type FinancialOverviewData,
+  type MonthSummaryData,
+  type PeriodComparisonData
 } from '@/api/dashboard/analysis'
 import { exportToExcel } from '@/utils/exportReport'
-import { formatMoney } from '@/utils'
 import { useI18n } from '@/hooks/web/useI18n'
 import { useLocaleStore } from '@/store/modules/locale'
 import type { EChartsOption } from 'echarts'
@@ -47,24 +51,18 @@ const appStore = useAppStore()
 const isDark = computed(() => appStore.getIsDark)
 const localeStore = useLocaleStore()
 
-watch(
-  () => localeStore.getCurrentLocale,
-  () => {
-    buildChartOptions()
-    buildArchiveCharts()
-    updateComparisonCalculations()
-  }
-)
-
 const activeViewTab = ref<'standard' | 'closing' | 'compare'>('standard')
 const loading = ref(true)
-const timeRange = ref('6m')
+const closingLoading = ref(false)
+const comparisonLoading = ref(false)
+const timeRange = ref<'6m' | '1y'>('6m')
 
 // Standard ECharts Options
 const financialTrendOptions = ref<EChartsOption>({})
 const expenseStructureOptions = ref<EChartsOption>({})
 const categoryProfitOptions = ref<EChartsOption>({})
 const monthlyFinancialTable = ref<any[]>([])
+const overviewData = ref<FinancialOverviewData | null>(null)
 
 // Closing & Archive Charts Options
 const archiveHistoryTimelineOptions = ref<EChartsOption>({})
@@ -72,8 +70,8 @@ const monthDistributionDonutOptions = ref<EChartsOption>({})
 
 // Comparison Mode States
 const comparePreset = ref<'mom' | 'qoq' | 'last30' | 'yoy' | 'custom'>('mom')
-const period1Dates = ref<[string, string] | null>(['2026-08-01', '2026-08-09'])
-const period2Dates = ref<[string, string] | null>(['2026-07-01', '2026-07-31'])
+const period1Dates = ref<[string, string]>(['2026-08-01', '2026-08-31'])
+const period2Dates = ref<[string, string]>(['2026-07-01', '2026-07-31'])
 const period1Label = ref('Period 1')
 const period2Label = ref('Period 2')
 
@@ -81,9 +79,9 @@ const period2Label = ref('Period 2')
 const comparisonBarOptions = ref<EChartsOption>({})
 const comparisonCategoryOptions = ref<EChartsOption>({})
 
-// Raw metrics state
-const cachedRawData = ref<any>(null)
+// Raw sales list for POS & Monthly Sales table
 const allRawSales = ref<SaleType[]>([])
+const salesLoading = ref(false)
 
 // Comparison Calculated Data
 const comparisonData = reactive({
@@ -114,39 +112,6 @@ const comparisonData = reactive({
 
 const comparisonTable = ref<any[]>([])
 
-// ══════════════════════════════════════════════════════════════
-// MONTHLY FINANCIAL CLOSING & SALES TABLE STATE
-// ══════════════════════════════════════════════════════════════
-const getLastMonth = () => {
-  const d = new Date()
-  d.setMonth(d.getMonth() - 1)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
-
-const getCurrentMonth = () => {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
-
-const closeMonthInput = ref(getLastMonth())
-const closeMonthRemark = ref('')
-const closingSubmitting = ref(false)
-const savedSnapshots = ref<MonthlyFinancialSnapshotItem[]>([])
-const snapshotsLoading = ref(false)
-const selectedSnapshotDetail = ref<MonthlyFinancialSnapshotItem | null>(null)
-const detailDialogVisible = ref(false)
-
-// Bottom Table Mode: 'sales' (Monthly Sales List) or 'archive' (Historical Snapshots)
-const bottomTableMode = ref<'sales' | 'archive'>('sales')
-const monthlySalesFilterSearch = ref('')
-const monthlySalesFilterPayment = ref('all')
-const selectedSaleDetail = ref<SaleType | null>(null)
-const saleDetailDialogVisible = ref(false)
-
 const formatMoney = (val: number | string | null | undefined, decimals = 0) => {
   if (val === undefined || val === null || val === '') return '0'
   const num = typeof val === 'string' ? parseFloat(val) : val
@@ -158,32 +123,75 @@ const formatMoney = (val: number | string | null | undefined, decimals = 0) => {
   return parts.join('.')
 }
 
-// Quick jump months helper
+const formatDateStr = (d: Date) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const getLastMonth = () => {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
+// ══════════════════════════════════════════════════════════════
+// MONTHLY FINANCIAL CLOSING & SALES TABLE STATE
+// ══════════════════════════════════════════════════════════════
+const closeMonthInput = ref(getLastMonth())
+const closeMonthRemark = ref('')
+const closingSubmitting = ref(false)
+const savedSnapshots = ref<MonthlyFinancialSnapshotItem[]>([])
+const snapshotsLoading = ref(false)
+const selectedSnapshotDetail = ref<MonthlyFinancialSnapshotItem | null>(null)
+const detailDialogVisible = ref(false)
+const currentMonthSummary = ref<MonthSummaryData | null>(null)
+
+// Bottom Table Mode: 'sales' (Monthly Sales List) or 'archive' (Historical Snapshots)
+const bottomTableMode = ref<'sales' | 'archive'>('sales')
+const monthlySalesFilterSearch = ref('')
+const monthlySalesFilterPayment = ref('all')
+const selectedSaleDetail = ref<SaleType | null>(null)
+const saleDetailDialogVisible = ref(false)
+
+// Quick jump months helper (Dynamically generated from current date)
 const quickJumpMonths = computed(() => {
-  const current = getCurrentMonth()
-  const last = getLastMonth()
-  return [
-    {
-      label: `${t('erp.currentMonthPill')} (${t('analysis.august')})`,
-      value: current,
-      tip: `2026-08 ${t('analysis.tipSelectMonth')}`
-    },
-    {
-      label: `${t('erp.prevMonthPill')} (${t('analysis.july')})`,
-      value: last,
-      tip: `2026-07 ${t('analysis.tipSelectMonth')}`
-    },
-    {
-      label: `${t('analysis.june')} 2026`,
-      value: '2026-06',
-      tip: `2026-06 ${t('analysis.tipSelectMonth')}`
-    },
-    {
-      label: `${t('analysis.may')} 2026`,
-      value: '2026-05',
-      tip: `2026-05 ${t('analysis.tipSelectMonth')}`
-    }
+  const d = new Date()
+  const res: Array<{ label: string; value: string; tip: string }> = []
+  const monthNames = [
+    t('analysis.january') || 'Yanvar',
+    t('analysis.february') || 'Fevral',
+    t('analysis.march') || 'Mart',
+    t('analysis.april') || 'Aprel',
+    t('analysis.may') || 'May',
+    t('analysis.june') || 'Iyun',
+    t('analysis.july') || 'Iyul',
+    t('analysis.august') || 'Avgust',
+    t('analysis.september') || 'Sentabr',
+    t('analysis.october') || 'Oktabr',
+    t('analysis.november') || 'Noyabr',
+    t('analysis.december') || 'Dekabr'
   ]
+  for (let i = 0; i < 4; i++) {
+    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1)
+    const ym = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
+    const mName = monthNames[dt.getMonth()]
+    const label =
+      i === 0
+        ? `${t('erp.currentMonthPill')} (${mName})`
+        : i === 1
+          ? `${t('erp.prevMonthPill')} (${mName})`
+          : `${mName} ${dt.getFullYear()}`
+    res.push({
+      label,
+      value: ym,
+      tip: `${ym} ${t('analysis.tipSelectMonth')}`
+    })
+  }
+  return res
 })
 
 // Filtered Monthly Sales Data
@@ -193,10 +201,7 @@ const filteredMonthlySales = computed(() => {
 
   // Month filter: if sale created_at matches targetMonth
   if (targetMonth) {
-    const monthMatches = list.filter((s) => (s.created_at || '').startsWith(targetMonth))
-    if (monthMatches.length > 0) {
-      list = monthMatches
-    }
+    list = list.filter((s) => (s.created_at || '').startsWith(targetMonth))
   }
 
   // Search query filter
@@ -251,17 +256,11 @@ const fetchSavedSnapshots = async () => {
   try {
     const res = await getFinancialSnapshotsApi()
     if (res && res.data) {
-      if (Array.isArray(res.data)) {
-        savedSnapshots.value = res.data
-      } else if (res.data && Array.isArray((res.data as any).list)) {
-        savedSnapshots.value = (res.data as any).list
-      } else {
-        savedSnapshots.value = []
-      }
-      buildArchiveCharts()
+      savedSnapshots.value = Array.isArray(res.data) ? res.data : (res.data as any).list || []
     } else {
       savedSnapshots.value = []
     }
+    buildArchiveCharts()
   } catch (err) {
     console.error('Failed to load snapshots:', err)
     savedSnapshots.value = []
@@ -299,40 +298,50 @@ const closeMonthPreview = computed(() => {
     }
   }
 
-  if (!cachedRawData.value) {
+  // If backend month summary loaded, display live real summary
+  if (currentMonthSummary.value) {
+    const s = currentMonthSummary.value
     return {
-      revenue: 0,
-      cogs: 0,
-      staffSalaries: 0,
-      shortTerm: 0,
-      totalExpenses: 0,
-      netProfit: 0,
-      margin: 0,
-      salesCount: 0,
+      revenue: s.revenue,
+      cogs: s.cogs,
+      staffSalaries: s.staffSalaries,
+      shortTerm: s.shortTermOutputs,
+      totalExpenses: s.totalExpenses,
+      netProfit: s.netProfit,
+      margin: s.profitMargin,
+      salesCount: s.salesCount,
       isFrozen: false
     }
   }
 
-  const { baseRevenue, baseCOGS, baseSalaries, baseShortTerm } = cachedRawData.value
-  const rev = Math.round(baseRevenue / 6.0)
-  const c = Math.round(baseCOGS / 6.0)
-  const staff = Math.round(baseSalaries / 6.0)
-  const short = Math.round(baseShortTerm / 6.0)
-  const exp = c + staff + short
-  const prof = Math.max(0, rev - exp)
-  const marg = rev > 0 ? parseFloat(((prof / rev) * 100).toFixed(1)) : 0
   return {
-    revenue: rev,
-    cogs: c,
-    staffSalaries: staff,
-    shortTerm: short,
-    totalExpenses: exp,
-    netProfit: prof,
-    margin: marg,
-    salesCount: filteredMonthlySales.value.length || 34,
+    revenue: 0,
+    cogs: 0,
+    staffSalaries: 0,
+    shortTerm: 0,
+    totalExpenses: 0,
+    netProfit: 0,
+    margin: 0,
+    salesCount: filteredMonthlySales.value.length,
     isFrozen: false
   }
 })
+
+// Fetch single month summary for Closing mode
+const fetchMonthSummary = async () => {
+  closingLoading.value = true
+  try {
+    const res = await getMonthSummaryApi({ month: closeMonthInput.value })
+    if (res && res.data) {
+      currentMonthSummary.value = res.data
+    }
+  } catch (err) {
+    console.error('Failed to fetch month summary:', err)
+  } finally {
+    closingLoading.value = false
+    buildArchiveCharts()
+  }
+}
 
 // Action: Close and Archive Month
 const handleCloseMonth = async () => {
@@ -360,10 +369,13 @@ const handleCloseMonth = async () => {
           remark: closeMonthRemark.value || `${month} ойи якуний молиявий ҳисоботи (Ёпилди)`
         })
         if (res && res.code === 0) {
-          ElMessage.success(res.message || `${month} ойи молиявий ҳисоботи муваффақиятли ёпилди!`)
+          ElMessage.success(
+            (res as any).message || `${month} ойи молиявий ҳисоботи муваффақиятли ёпилди!`
+          )
           closeMonthRemark.value = ''
           await fetchSavedSnapshots()
-          await loadAnalyticsData()
+          await fetchMonthSummary()
+          await loadStandardOverview()
         }
       } catch (err: any) {
         console.error(err)
@@ -384,14 +396,16 @@ const handleDeleteSnapshot = (row: MonthlyFinancialSnapshotItem) => {
       dangerouslyUseHTMLString: true,
       confirmButtonText: t('analysis.deleteBtn'),
       cancelButtonText: t('analysis.cancelBtn'),
-      type: 'danger'
+      type: 'warning'
     }
   )
     .then(async () => {
       const res = await deleteFinancialSnapshotApi({ id: row.id, period_month: row.period_month })
       if (res && res.code === 0) {
         ElMessage.success('Архивдан ўчирилди')
-        fetchSavedSnapshots()
+        await fetchSavedSnapshots()
+        await fetchMonthSummary()
+        await loadStandardOverview()
       }
     })
     .catch(() => {})
@@ -414,7 +428,7 @@ const buildArchiveCharts = () => {
 
   const cur = closeMonthPreview.value
 
-  // 1. DUAL-RING ROTATING DONUT & PROFIT RADIUS CHART (Interactive Luxury)
+  // 1. DUAL-RING ROTATING DONUT & PROFIT RADIUS CHART
   const donutData = [
     {
       value: cur.cogs,
@@ -532,24 +546,15 @@ const buildArchiveCharts = () => {
         data: donutData
       }
     ]
-  }
+  } as any
 
-  // 2. 6-MONTH ROLLING PERFORMANCE & MULTI-HORIZON EVOLUTION TIMELINE
-  const months = [
-    t('analysis.march'),
-    t('analysis.april'),
-    t('analysis.may'),
-    t('analysis.june'),
-    t('analysis.july'),
-    t('analysis.august')
-  ]
-  const baseRev = cachedRawData.value ? cachedRawData.value.baseRevenue : 4369840
-  const mults = [0.82, 0.88, 0.94, 1.04, 1.14, 1.22]
-  const costRatio = 0.835
-
-  const timelineRevs = mults.map((m) => Math.round((baseRev / 6.0) * m))
-  const timelineExps = timelineRevs.map((r) => Math.round(r * (costRatio + 0.008)))
-  const timelineProfs = timelineRevs.map((r, i) => Math.max(0, r - timelineExps[i]))
+  // 2. 6-MONTH ROLLING EVOLUTION TIMELINE FROM REAL HISTORICAL DATA
+  const hist = overviewData.value?.monthlyFinancials || []
+  const last6 = hist.slice(-6)
+  const months = last6.map((m) => m.month)
+  const timelineRevs = last6.map((m) => m.revenue)
+  const timelineExps = last6.map((m) => m.totalExpenses)
+  const timelineProfs = last6.map((m) => m.netProfit)
 
   archiveHistoryTimelineOptions.value = {
     backgroundColor: 'transparent',
@@ -564,7 +569,7 @@ const buildArchiveCharts = () => {
         crossStyle: { color: '#3b82f6', width: 1, type: 'dashed' }
       },
       formatter: (params: any) => {
-        let title = `<div style="font-weight: 800; font-size: 13px; margin-bottom: 6px; color: ${textColor}">${params[0].name} 2026</div>`
+        let title = `<div style="font-weight: 800; font-size: 13px; margin-bottom: 6px; color: ${textColor}">${params[0].name}</div>`
         params.forEach((item: any) => {
           title += `<div style="display: flex; justify-content: space-between; gap: 16px; margin: 4px 0;">
             <span style="display: flex; align-items: center; gap: 6px;">
@@ -662,183 +667,255 @@ const buildArchiveCharts = () => {
 }
 
 watch(
-  () => [closeMonthInput.value, isDark.value],
-  () => {
-    buildArchiveCharts()
-  },
-  { deep: true }
+  () => closeMonthInput.value,
+  (newMonth) => {
+    fetchMonthSummary()
+    loadRawSales(newMonth)
+  }
 )
 
-const updateComparisonCalculations = () => {
-  if (!cachedRawData.value) return
-  const { baseRevenue, baseCOGS, baseSalaries, baseShortTerm } = cachedRawData.value
+watch(
+  () => isDark.value,
+  () => {
+    buildArchiveCharts()
+  }
+)
 
-  let p1Mult = 1.2
-  let p2Mult = 1.0
+watch(
+  () => activeViewTab.value,
+  (newTab) => {
+    if (newTab === 'closing') {
+      if (!currentMonthSummary.value) fetchMonthSummary()
+      if (savedSnapshots.value.length === 0) fetchSavedSnapshots()
+      if (allRawSales.value.length === 0) loadRawSales(closeMonthInput.value)
+    } else if (newTab === 'compare') {
+      updateComparisonCalculations()
+    } else if (newTab === 'standard') {
+      if (!overviewData.value) loadStandardOverview()
+    }
+  }
+)
+
+// ══════════════════════════════════════════════════════════════
+// COMPARISON MODE CALCULATIONS POWERED BY BACKEND API
+// ══════════════════════════════════════════════════════════════
+const updateComparisonCalculations = async () => {
+  comparisonLoading.value = true
+  const d = new Date()
+  const todayStr = formatDateStr(d)
+
+  let p1Start = ''
+  let p1End = ''
+  let p2Start = ''
+  let p2End = ''
 
   if (comparePreset.value === 'mom') {
-    period1Label.value = `${t('analysis.august')} 2026 (${t('erp.currentMonthPill')})`
-    period2Label.value = `${t('analysis.july')} 2026 (${t('erp.prevMonthPill')})`
-    p1Mult = 1.22
-    p2Mult = 1.14
+    // Current month vs Previous month
+    const currFirst = new Date(d.getFullYear(), d.getMonth(), 1)
+    const prevFirst = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+    const prevLast = new Date(d.getFullYear(), d.getMonth(), 0)
+
+    p1Start = formatDateStr(currFirst)
+    p1End = todayStr
+    p2Start = formatDateStr(prevFirst)
+    p2End = formatDateStr(prevLast)
+
+    period1Label.value = `${t('erp.currentMonthPill')} (${p1Start.slice(0, 7)})`
+    period2Label.value = `${t('erp.prevMonthPill')} (${p2Start.slice(0, 7)})`
   } else if (comparePreset.value === 'qoq') {
-    period1Label.value = `3-Q 2026 (Q3)`
-    period2Label.value = `2-Q 2026 (Q2)`
-    p1Mult = 1.35
-    p2Mult = 1.1
+    // Current Quarter vs Previous Quarter
+    const currQuarter = Math.floor(d.getMonth() / 3)
+    const q1StartMonth = currQuarter * 3
+    const q1Start = new Date(d.getFullYear(), q1StartMonth, 1)
+    const q1End = new Date(d.getFullYear(), q1StartMonth + 3, 0)
+
+    const q2StartMonth = (currQuarter - 1) * 3
+    const q2Year = q2StartMonth < 0 ? d.getFullYear() - 1 : d.getFullYear()
+    const normQ2Month = (q2StartMonth + 12) % 12
+    const q2Start = new Date(q2Year, normQ2Month, 1)
+    const q2End = new Date(q2Year, normQ2Month + 3, 0)
+
+    p1Start = formatDateStr(q1Start)
+    p1End = formatDateStr(q1End)
+    p2Start = formatDateStr(q2Start)
+    p2End = formatDateStr(q2End)
+
+    period1Label.value = `Q${currQuarter + 1} ${d.getFullYear()}`
+    period2Label.value = `Q${currQuarter === 0 ? 4 : currQuarter} ${q2Year}`
   } else if (comparePreset.value === 'last30') {
-    period1Label.value = t('analysis.compareLast30')
+    // Last 30 Days vs Previous 30 Days
+    const p1StartDate = new Date(d.getTime() - 29 * 86400000)
+    const p2EndDate = new Date(d.getTime() - 30 * 86400000)
+    const p2StartDate = new Date(d.getTime() - 59 * 86400000)
+
+    p1Start = formatDateStr(p1StartDate)
+    p1End = todayStr
+    p2Start = formatDateStr(p2StartDate)
+    p2End = formatDateStr(p2EndDate)
+
+    period1Label.value = `${t('analysis.compareLast30')}`
     period2Label.value = `${t('erp.prevMonthPill')} (30d)`
-    p1Mult = 1.18
-    p2Mult = 1.05
   } else if (comparePreset.value === 'yoy') {
-    period1Label.value = `2026 (${t('analysis.yearly')})`
-    period2Label.value = `2025 (${t('analysis.yearly')})`
-    p1Mult = 1.45
-    p2Mult = 1.0
+    // Current year vs Last year
+    p1Start = `${d.getFullYear()}-01-01`
+    p1End = `${d.getFullYear()}-12-31`
+    p2Start = `${d.getFullYear() - 1}-01-01`
+    p2End = `${d.getFullYear() - 1}-12-31`
+
+    period1Label.value = `${d.getFullYear()} (${t('analysis.yearly')})`
+    period2Label.value = `${d.getFullYear() - 1} (${t('analysis.yearly')})`
   } else if (comparePreset.value === 'custom') {
-    const p1Text = period1Dates.value
-      ? `${period1Dates.value[0]} ~ ${period1Dates.value[1]}`
-      : t('analysis.period1')
-    const p2Text = period2Dates.value
-      ? `${period2Dates.value[0]} ~ ${period2Dates.value[1]}`
-      : t('analysis.period2')
-    period1Label.value = `${t('analysis.period1')} (${p1Text})`
-    period2Label.value = `${t('analysis.period2')} (${p2Text})`
-    p1Mult = 1.25
-    p2Mult = 1.02
+    if (
+      Array.isArray(period1Dates.value) &&
+      period1Dates.value.length === 2 &&
+      period1Dates.value[0] &&
+      period1Dates.value[1] &&
+      Array.isArray(period2Dates.value) &&
+      period2Dates.value.length === 2 &&
+      period2Dates.value[0] &&
+      period2Dates.value[1]
+    ) {
+      p1Start = String(period1Dates.value[0])
+      p1End = String(period1Dates.value[1])
+      p2Start = String(period2Dates.value[0])
+      p2End = String(period2Dates.value[1])
+    } else {
+      // Fallback custom dates without mutating watched refs
+      p1Start = `${d.getFullYear()}-08-01`
+      p1End = `${d.getFullYear()}-08-31`
+      p2Start = `${d.getFullYear()}-07-01`
+      p2End = `${d.getFullYear()}-07-31`
+    }
+    period1Label.value = `${t('analysis.period1')} (${p1Start} ~ ${p1End})`
+    period2Label.value = `${t('analysis.period2')} (${p2Start} ~ ${p2End})`
   }
 
-  // 1. Period 1 Metrics (Always Positive & Realistic)
-  const p1Rev = parseFloat(((baseRevenue / 6) * p1Mult).toFixed(2))
-  const p1C = parseFloat((p1Rev * 0.62).toFixed(2))
-  const p1Staff = parseFloat(((baseSalaries / 6) * 1.05).toFixed(2))
-  const p1Short = parseFloat(((baseShortTerm / 6) * p1Mult).toFixed(2))
-  const p1Pay = parseFloat((p1Staff + p1Short).toFixed(2))
-  const p1Prof = parseFloat(Math.max(0, p1Rev - (p1C + p1Pay)).toFixed(2))
-  const p1Marg = parseFloat(((p1Prof / p1Rev) * 100).toFixed(1))
+  if (!p1Start || !p1End || !p2Start || !p2End) {
+    comparisonLoading.value = false
+    return
+  }
 
-  // 2. Period 2 Metrics
-  const p2Rev = parseFloat(((baseRevenue / 6) * p2Mult).toFixed(2))
-  const p2C = parseFloat((p2Rev * 0.62).toFixed(2))
-  const p2Staff = parseFloat(((baseSalaries / 6) * 1.0).toFixed(2))
-  const p2Short = parseFloat(((baseShortTerm / 6) * p2Mult).toFixed(2))
-  const p2Pay = parseFloat((p2Staff + p2Short).toFixed(2))
-  const p2Prof = parseFloat(Math.max(0, p2Rev - (p2C + p2Pay)).toFixed(2))
-  const p2Marg = parseFloat(((p2Prof / p2Rev) * 100).toFixed(1))
+  try {
+    const res = await comparePeriodsApi({
+      period1_start: p1Start,
+      period1_end: p1End,
+      period2_start: p2Start,
+      period2_end: p2End
+    })
 
-  // 3. Deltas
-  const revDiff = parseFloat((p1Rev - p2Rev).toFixed(2))
-  const revGrowth = parseFloat(((revDiff / p2Rev) * 100).toFixed(1))
+    if (res && res.data) {
+      applyComparisonData(res.data)
+    }
+  } catch (err) {
+    console.error('Failed to update period comparison:', err)
+  } finally {
+    comparisonLoading.value = false
+  }
+}
 
-  const cogsDiff = parseFloat((p1C - p2C).toFixed(2))
-  const cogsGrowth = parseFloat(((cogsDiff / p2C) * 100).toFixed(1))
+const applyComparisonData = (compData: PeriodComparisonData) => {
+  if (!compData) return
+  const { period1, period2, deltas } = compData
 
-  const payrollDiff = parseFloat((p1Pay - p2Pay).toFixed(2))
-  const payrollGrowth = parseFloat(((payrollDiff / p2Pay) * 100).toFixed(1))
+  comparisonData.p1Revenue = period1.revenue
+  comparisonData.p2Revenue = period2.revenue
+  comparisonData.revDiff = deltas.revDiff
+  comparisonData.revGrowth = deltas.revGrowth
 
-  const profitDiff = parseFloat((p1Prof - p2Prof).toFixed(2))
-  const profitGrowth = parseFloat((((p1Prof - p2Prof) / (p2Prof || 1)) * 100).toFixed(1))
+  comparisonData.p1COGS = period1.cogs
+  comparisonData.p2COGS = period2.cogs
+  comparisonData.cogsDiff = deltas.cogsDiff
+  comparisonData.cogsGrowth = deltas.cogsGrowth
 
-  const marginDiff = parseFloat((p1Marg - p2Marg).toFixed(1))
+  comparisonData.p1Payroll = period1.total_payroll
+  comparisonData.p2Payroll = period2.total_payroll
+  comparisonData.payrollDiff = deltas.payrollDiff
+  comparisonData.payrollGrowth = deltas.payrollGrowth
 
-  // 4. Update reactive comparison object
-  comparisonData.p1Revenue = p1Rev
-  comparisonData.p2Revenue = p2Rev
-  comparisonData.revDiff = revDiff
-  comparisonData.revGrowth = revGrowth
+  comparisonData.p1Profit = period1.net_profit
+  comparisonData.p2Profit = period2.net_profit
+  comparisonData.profitDiff = deltas.profitDiff
+  comparisonData.profitGrowth = deltas.profitGrowth
 
-  comparisonData.p1COGS = p1C
-  comparisonData.p2COGS = p2C
-  comparisonData.cogsDiff = cogsDiff
-  comparisonData.cogsGrowth = cogsGrowth
+  comparisonData.p1Margin = period1.profit_margin
+  comparisonData.p2Margin = period2.profit_margin
+  comparisonData.marginDiff = deltas.marginDiff
 
-  comparisonData.p1Payroll = p1Pay
-  comparisonData.p2Payroll = p2Pay
-  comparisonData.payrollDiff = payrollDiff
-  comparisonData.payrollGrowth = payrollGrowth
-
-  comparisonData.p1Profit = p1Prof
-  comparisonData.p2Profit = p2Prof
-  comparisonData.profitDiff = profitDiff
-  comparisonData.profitGrowth = profitGrowth
-
-  comparisonData.p1Margin = p1Marg
-  comparisonData.p2Margin = p2Marg
-  comparisonData.marginDiff = marginDiff
-
-  // 5. Update Comparison Table Data with clear descriptions and hover tooltips
+  // Update comparison table with real data
   comparisonTable.value = [
     {
       metric: 'Жами Тушум (Gross Revenue)',
-      p1: p1Rev,
-      p2: p2Rev,
-      diff: revDiff,
-      growth: revGrowth,
-      status: revGrowth >= 0 ? 'positive' : 'negative',
+      p1: period1.revenue,
+      p2: period2.revenue,
+      diff: deltas.revDiff,
+      growth: deltas.revGrowth,
+      status: deltas.revGrowth >= 0 ? 'positive' : 'negative',
       desc: 'Барча сотилган товарлардан тушган ялпи даромад',
       tooltip:
         'Сотувлар орқали корхонага кирган умумий сумма. Қанча юқори бўлса, савдо ҳажми шунча яхши.'
     },
     {
       metric: 'Маҳсулот Таннархи (COGS)',
-      p1: p1C,
-      p2: p2C,
-      diff: cogsDiff,
-      growth: cogsGrowth,
-      status: cogsGrowth <= 0 ? 'positive' : 'negative',
+      p1: period1.cogs,
+      p2: period2.cogs,
+      diff: deltas.cogsDiff,
+      growth: deltas.cogsGrowth,
+      status: deltas.cogsGrowth <= 0 ? 'positive' : 'negative',
       desc: 'Сотилган товарларнинг асл харид ва тайёрлаш қиймати',
       tooltip:
         'Маҳсулотларни омборга олиб келиш ёки ишлаб чиқариш учун сарфланган тўғридан-тўғри харажат.'
     },
     {
-      metric: 'Доимий Ишчилар Маоши (Staff Salaries)',
-      p1: p1Staff,
-      p2: p2Staff,
-      diff: parseFloat((p1Staff - p2Staff).toFixed(2)),
-      growth: parseFloat((((p1Staff - p2Staff) / p2Staff) * 100).toFixed(1)),
+      metric: 'Доимий Ишчиlar Маоши (Staff Salaries)',
+      p1: period1.staff_salaries,
+      p2: period2.staff_salaries,
+      diff: deltas.staffDiff,
+      growth: deltas.staffGrowth,
       status: 'neutral',
       desc: 'Доимий штатдаги ходимларнинг белгиланган тариф ойликлари',
-      tooltip: 'Ҳар ой ходимларга тўланадиган қатъий белгиланган асосий ойлик маошлар йиғиндиси.'
+      tooltip:
+        'Ҳар ой ходимларга тўланадиган қатъий белгиланган асосий ойлик маошлар йиғиндиси.'
     },
     {
       metric: 'Қисқа Муддатли Ишчилар (Piece-rate / Выработка)',
-      p1: p1Short,
-      p2: p2Short,
-      diff: parseFloat((p1Short - p2Short).toFixed(2)),
-      growth: parseFloat((((p1Short - p2Short) / p2Short) * 100).toFixed(1)),
+      p1: period1.short_term_outputs,
+      p2: period2.short_term_outputs,
+      diff: deltas.shortDiff,
+      growth: deltas.shortGrowth,
       status: 'neutral',
       desc: 'Ҳосил ёки бажарилган иш ҳажми бўйича тўланган иш ҳақи',
-      tooltip: 'Вақтинча ёки донабай (выработка) ишчилар бажарган ҳажмларига қараб олган тўловлар.'
+      tooltip:
+        'Вақтинча ёки донабай (выработка) ишчилар бажарган ҳажмларига қараб олган тўловлар.'
     },
     {
       metric: 'Жами Иш Ҳақи Харажатлари (Total Payroll)',
-      p1: p1Pay,
-      p2: p2Pay,
-      diff: payrollDiff,
-      growth: payrollGrowth,
-      status: payrollGrowth <= 0 ? 'positive' : 'negative',
+      p1: period1.total_payroll,
+      p2: period2.total_payroll,
+      diff: deltas.payrollDiff,
+      growth: deltas.payrollGrowth,
+      status: deltas.payrollGrowth <= 0 ? 'positive' : 'negative',
       desc: 'Компаниянинг барча ойлик тўловлари йиғиндиси',
-      tooltip: 'Доимий ойликлар ва қўшимча иш ҳажми учун тўланган барча меҳнат харажатлари суммаси.'
+      tooltip:
+        'Доимий ойликлар ва қўшимча иш ҳажми учун тўланган барча меҳнат харажатлари суммаси.'
     },
     {
       metric: `${t('erp.realNetProfit')} (Real Net Profit)`,
-      p1: p1Prof,
-      p2: p2Prof,
-      diff: profitDiff,
-      growth: profitGrowth,
-      status: profitGrowth >= 0 ? 'positive' : 'negative',
+      p1: period1.net_profit,
+      p2: period2.net_profit,
+      diff: deltas.profitDiff,
+      growth: deltas.profitGrowth,
+      status: deltas.profitGrowth >= 0 ? 'positive' : 'negative',
       desc: 'Таннарх ва барча ойликлар чегирилган тоза фойда',
       tooltip: 'Компаниянинг барча харажатларидан кейин тоза чўнтагига қолган ҳақиқий даромад.'
     },
     {
       metric: 'Рентабеллик Маржаси (Profit Margin %)',
-      p1: p1Marg,
-      p2: p2Marg,
-      diff: marginDiff,
-      growth: marginDiff,
+      p1: period1.profit_margin,
+      p2: period2.profit_margin,
+      diff: deltas.marginDiff,
+      growth: deltas.marginDiff,
       isPercentage: true,
-      status: marginDiff >= 0 ? 'positive' : 'negative',
+      status: deltas.marginDiff >= 0 ? 'positive' : 'negative',
       desc: 'Соф фойданинг умумий тушумдаги фоиз улуши',
       tooltip:
         'Ҳар $100 долларлик савдодан компанияга неча доллар соф фойда қолаётганини кўрсатувчи самарадорлик индекси.'
@@ -847,6 +924,7 @@ const updateComparisonCalculations = () => {
 
   buildComparisonChartOptions()
 }
+
 
 const buildComparisonChartOptions = () => {
   const dark = isDark.value
@@ -1028,18 +1106,14 @@ const buildComparisonChartOptions = () => {
 }
 
 const buildChartOptions = () => {
-  if (!cachedRawData.value) return
-  const {
-    months,
-    revList,
-    cogsList,
-    staffList,
-    shortTermList,
-    profitList,
-    catNames,
-    catRevenues,
-    catProfits
-  } = cachedRawData.value
+  if (!overviewData.value) return
+  const data = overviewData.value
+  const months = data.monthlyFinancials.map((m) => m.month)
+  const revList = data.monthlyFinancials.map((m) => m.revenue)
+  const cogsList = data.monthlyFinancials.map((m) => m.cogs)
+  const staffList = data.monthlyFinancials.map((m) => m.staffSalaries)
+  const shortTermList = data.monthlyFinancials.map((m) => m.shortTermOutputs)
+  const profitList = data.monthlyFinancials.map((m) => m.netProfit)
 
   const dark = isDark.value
   const textColor = dark ? '#f1f5f9' : '#1e293b'
@@ -1060,7 +1134,7 @@ const buildChartOptions = () => {
       textStyle: { color: textColor },
       axisPointer: { type: 'cross', crossStyle: { color: '#999' } },
       formatter: (params: any) => {
-        let title = `<div style="font-weight: 700; margin-bottom: 6px; color: ${textColor}">${params[0].name} 2026</div>`
+        let title = `<div style="font-weight: 700; margin-bottom: 6px; color: ${textColor}">${params[0].name}</div>`
         params.forEach((item: any) => {
           title += `<div style="display: flex; justify-content: space-between; gap: 16px; margin: 3px 0;">
             <span style="display: flex; align-items: center; gap: 6px;">
@@ -1205,17 +1279,17 @@ const buildChartOptions = () => {
         },
         data: [
           {
-            value: Math.round(cachedRawData.value.baseCOGS),
+            value: data.cogs,
             name: t('analysis.cogs'),
             itemStyle: { color: '#f59e0b' }
           },
           {
-            value: Math.round(cachedRawData.value.baseSalaries),
+            value: data.staffSalaries,
             name: t('analysis.permanentSalaries'),
             itemStyle: { color: '#a855f7' }
           },
           {
-            value: Math.round(cachedRawData.value.baseShortTerm),
+            value: data.shortTermOutputs,
             name: t('analysis.shortTermWorkers'),
             itemStyle: { color: '#ec4899' }
           }
@@ -1225,6 +1299,10 @@ const buildChartOptions = () => {
   }
 
   // 3. Category Profitability Breakdown
+  const catNames = (data.categoryProfits || []).map((c) => c.name)
+  const catRevenues = (data.categoryProfits || []).map((c) => c.revenue)
+  const catProfits = (data.categoryProfits || []).map((c) => c.profit)
+
   categoryProfitOptions.value = {
     backgroundColor: 'transparent',
     tooltip: {
@@ -1313,8 +1391,9 @@ const buildChartOptions = () => {
   buildArchiveCharts()
 }
 
+// Watchers for locale & dark theme
 watch(
-  () => isDark.value,
+  () => [localeStore.getCurrentLocale, isDark.value],
   () => {
     buildChartOptions()
     buildComparisonChartOptions()
@@ -1322,6 +1401,12 @@ watch(
   }
 )
 
+// Watcher for Time Range button toggle (6m vs 1y)
+watch(timeRange, () => {
+  loadStandardOverview()
+})
+
+// Watcher for Comparison Preset or Custom Dates
 watch(
   () => [comparePreset.value, period1Dates.value, period2Dates.value],
   () => {
@@ -1330,175 +1415,87 @@ watch(
   { deep: true }
 )
 
-const loadAnalyticsData = async (silent = false) => {
-  if (!silent) {
-    loading.value = true
-  }
+// Load Standard Analysis Overview from Backend
+const loadStandardOverview = async (silent = false) => {
+  if (!silent) loading.value = true
   try {
-    const [prodRes, workerRes, salaryRes, outputRes, salesRes, adjRes] = await Promise.allSettled([
-      getProductListApi({ pageIndex: 1, pageSize: 500 }),
-      getWorkerListApi({ pageIndex: 1, pageSize: 500 }),
-      getSalaryListApi({ pageIndex: 1, pageSize: 500 }),
-      getOutputListApi(),
-      getSalesListApi({ pageIndex: 1, pageSize: 500 }),
-      getAdjustmentListApi()
-    ])
-
-    const products =
-      prodRes.status === 'fulfilled' && prodRes.value?.data?.list ? prodRes.value.data.list : []
-    const workers =
-      workerRes.status === 'fulfilled' && workerRes.value?.data?.list
-        ? workerRes.value.data.list
-        : []
-    const outputs =
-      outputRes.status === 'fulfilled' && outputRes.value?.data?.list
-        ? outputRes.value.data.list
-        : []
-    const sales =
-      salesRes.status === 'fulfilled' && salesRes.value?.data?.list ? salesRes.value.data.list : []
-
-    allRawSales.value = sales
-
-    // 1. Totals Calculation
-    const totalSales = sales.reduce(
-      (sum: number, s: any) => sum + (parseFloat(s.total_amount || s.total) || 0),
-      0
-    )
-    const totalInventoryRetail = products.reduce(
-      (sum: number, p: any) => sum + (p.price || 0) * (p.quantityInStock || 0),
-      0
-    )
-    const totalInventoryCost = products.reduce(
-      (sum: number, p: any) => sum + (p.cost || 0) * (p.quantityInStock || 0),
-      0
-    )
-
-    const costRatio = totalInventoryRetail > 0 ? totalInventoryCost / totalInventoryRetail : 0
-    const baseRevenue = totalSales > 0 ? totalSales : totalInventoryRetail || 0
-    const baseCOGS = totalSales > 0 ? baseRevenue * costRatio : totalInventoryCost || 0
-
-    // Accurate Staff Compensation Calculation (faqat haqiqiy aylanma yoki to'langan maoshlar mavjud bo'lsa):
-    const hasActivity = totalSales > 0 || totalInventoryRetail > 0
-    const activeStaffMonthly = hasActivity
-      ? workers
-          .filter((w: any) => w.status === 1)
-          .reduce((sum: number, w: any) => sum + (parseFloat(w.baseSalary) || 0), 0)
-      : 0
-
-    const baseSalaries = activeStaffMonthly * 6
-    const baseShortTerm = hasActivity
-      ? outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0) * 6
-      : 0
-
-    // 2. Generate Monthly Dynamics Trend Data
-    const months = [
-      t('analysis.march'),
-      t('analysis.april'),
-      t('analysis.may'),
-      t('analysis.june'),
-      t('analysis.july'),
-      t('analysis.august')
-    ]
-    const multipliers = [0.84, 0.9, 0.96, 1.06, 1.14, 1.22]
-
-    const revList: number[] = []
-    const cogsList: number[] = []
-    const staffList: number[] = []
-    const shortTermList: number[] = []
-    const profitList: number[] = []
-    const tableRows: any[] = []
-
-    months.forEach((m, idx) => {
-      const mult = multipliers[idx]
-      const mRev = parseFloat(((baseRevenue / 6) * mult).toFixed(2))
-      const mCOGS = parseFloat((mRev * costRatio).toFixed(2))
-      const mStaff =
-        baseRevenue > 0 ? parseFloat(((baseSalaries / 6) * (1 + idx * 0.02)).toFixed(2)) : 0
-      const mShortTerm = baseRevenue > 0 ? parseFloat(((baseShortTerm / 6) * mult).toFixed(2)) : 0
-      const mExpenses = parseFloat((mCOGS + mStaff + mShortTerm).toFixed(2))
-      const mProfit = parseFloat(Math.max(0, mRev - mExpenses).toFixed(2))
-      const mMargin = mRev > 0 ? parseFloat(((mProfit / mRev) * 100).toFixed(1)) : 0
-
-      revList.push(mRev)
-      cogsList.push(mCOGS)
-      staffList.push(mStaff)
-      shortTermList.push(mShortTerm)
-      profitList.push(mProfit)
-
-      tableRows.push({
-        month: `${m} 2026`,
-        revenue: mRev,
-        cogs: mCOGS,
-        staffSalaries: mStaff,
-        shortTermOutputs: mShortTerm,
-        totalExpenses: mExpenses,
-        netProfit: mProfit,
-        margin: mMargin
-      })
-    })
-
-    monthlyFinancialTable.value = tableRows.reverse()
-
-    // 3. Category Profitability Breakdown
-    const catMap: Record<string, { revenue: number; cost: number; profit: number }> = {}
-    products.forEach((p) => {
-      const cat = p.category || 'Boshqa'
-      if (!catMap[cat]) catMap[cat] = { revenue: 0, cost: 0, profit: 0 }
-      const rev = (p.price || 0) * (p.quantityInStock || 0)
-      const c = (p.cost || 0) * (p.quantityInStock || 0)
-      catMap[cat].revenue += rev
-      catMap[cat].cost += c
-      catMap[cat].profit += rev - c
-    })
-
-    const sortedCats = Object.keys(catMap)
-      .map((k) => ({ name: k, rev: catMap[k].revenue, profit: catMap[k].profit }))
-      .sort((a, b) => b.rev - a.rev)
-      .slice(0, 6)
-
-    const catNames = sortedCats.map((c) => c.name)
-    const catRevenues = sortedCats.map((c) => parseFloat(c.rev.toFixed(2)))
-    const catProfits = sortedCats.map((c) => parseFloat(c.profit.toFixed(2)))
-
-    const totalExpensesCalc = baseCOGS + baseSalaries + baseShortTerm
-    const netRetainedProfit = Math.max(0, baseRevenue - totalExpensesCalc)
-
-    cachedRawData.value = {
-      months,
-      revList,
-      cogsList,
-      staffList,
-      shortTermList,
-      profitList,
-      baseRevenue,
-      baseCOGS,
-      baseSalaries,
-      baseShortTerm,
-      netRetainedProfit,
-      catMap,
-      catNames,
-      catRevenues,
-      catProfits
+    const res = await getFinancialOverviewApi({ time_range: timeRange.value })
+    if (res && res.data) {
+      overviewData.value = res.data
+      monthlyFinancialTable.value = [...res.data.monthlyFinancials].reverse()
+      buildChartOptions()
     }
-
-    buildChartOptions()
-    updateComparisonCalculations()
-  } catch (error) {
-    console.error('Failed to load executive financial analytics:', error)
+  } catch (err) {
+    console.error('Failed to load standard overview:', err)
   } finally {
-    if (!silent) {
-      loading.value = false
-    }
+    if (!silent) loading.value = false
   }
+}
+
+// Load POS / Sales for Monthly Sales Table (fast month-filtered query)
+const loadRawSales = async (month?: string) => {
+  salesLoading.value = true
+  try {
+    const targetMonth = month || closeMonthInput.value
+    const res = await getSalesListApi({ pageIndex: 1, pageSize: 200, month: targetMonth })
+    if (res && res.data) {
+      allRawSales.value = Array.isArray(res.data.list) ? res.data.list : []
+    }
+  } catch (err) {
+    console.error('Failed to load sales list:', err)
+  } finally {
+    salesLoading.value = false
+  }
+}
+
+// Master reload function - fetches ALL sections at once in a SINGLE network request
+const loadAnalyticsData = async () => {
+  loading.value = true
+  closingLoading.value = true
+  comparisonLoading.value = true
+  try {
+    const res = await getAnalysisBundleApi({
+      time_range: timeRange.value,
+      month: closeMonthInput.value
+    })
+    if (res && res.data) {
+      const { overview, snapshots, monthSummary, comparison } = res.data
+      if (overview) {
+        overviewData.value = overview
+        monthlyFinancialTable.value = [...(overview.monthlyFinancials || [])].reverse()
+        buildChartOptions()
+      }
+      if (snapshots) {
+        savedSnapshots.value = snapshots
+      }
+      if (monthSummary) {
+        currentMonthSummary.value = monthSummary
+        buildArchiveCharts()
+      }
+      if (comparison) {
+        applyComparisonData(comparison)
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load analysis bundle:', err)
+  } finally {
+    loading.value = false
+    closingLoading.value = false
+    comparisonLoading.value = false
+  }
+  loadRawSales(closeMonthInput.value)
 }
 
 // Silently update live analytics when sales, payouts, or product stock updates occur
 useRealtimeSync(
   ['sale', 'salary', 'product'],
   () => {
-    loadAnalyticsData(true)
+    loadStandardOverview(true)
+    fetchMonthSummary()
+    loadRawSales()
+    updateComparisonCalculations()
   },
-  800
+  { debounceMs: 800 }
 )
 
 const handleExportFinancialExcel = () => {
@@ -1512,10 +1509,10 @@ const handleExportFinancialExcel = () => {
     month: item.month || item.period_month,
     revenue: item.revenue || item.grossRevenue || 0,
     cogs: item.cogs || 0,
-    payroll: item.payroll || item.totalPayroll || item.staffSalaries || 0,
-    expenses: item.expenses || item.totalExpenses || 0,
-    profit: item.profit || item.realNetProfit || 0,
-    margin: (item.margin || item.profitMargin || 0) + '%'
+    payroll: item.totalPayroll || item.staffSalaries || 0,
+    expenses: item.totalExpenses || item.expenses || 0,
+    profit: item.netProfit || item.profit || 0,
+    margin: (item.profitMargin !== undefined ? item.profitMargin : item.margin || 0) + '%'
   }))
   exportToExcel(
     'Oylik_Moliyaviy_Hisobotlar',
@@ -1535,9 +1532,9 @@ const handleExportFinancialExcel = () => {
 
 onMounted(() => {
   loadAnalyticsData()
-  fetchSavedSnapshots()
 })
 </script>
+
 <template>
   <div class="analysis-container">
     <!-- Top Mode Switch & Header Toolbar -->
@@ -1612,7 +1609,7 @@ onMounted(() => {
     <!-- ==================== VIEW 1: STANDART TAHLIL ==================== -->
     <div v-if="activeViewTab === 'standard'" class="fade-in-content">
       <!-- Executive KPI Summary Cards -->
-      <PanelGroup />
+      <PanelGroup :data="overviewData" :loading="loading" />
 
       <!-- Main Chart: Financial Dynamics & Net Profit Trend -->
       <ElRow :gutter="20" class="mb-20px">
@@ -1639,7 +1636,7 @@ onMounted(() => {
             </div>
             <div class="chart-body">
               <ElSkeleton :loading="loading" animated :rows="6">
-                <Echart :options="financialTrendOptions" :height="360" />
+                <Echart :options="financialTrendOptions as any" :height="360" />
               </ElSkeleton>
             </div>
           </div>
@@ -1662,7 +1659,7 @@ onMounted(() => {
             </div>
             <div class="chart-body">
               <ElSkeleton :loading="loading" animated :rows="5">
-                <Echart :options="expenseStructureOptions" :height="300" />
+                <Echart :options="expenseStructureOptions as any" :height="300" />
               </ElSkeleton>
             </div>
           </div>
@@ -1686,7 +1683,7 @@ onMounted(() => {
             </div>
             <div class="chart-body">
               <ElSkeleton :loading="loading" animated :rows="5">
-                <Echart :options="categoryProfitOptions" :height="300" />
+                <Echart :options="categoryProfitOptions as any" :height="300" />
               </ElSkeleton>
             </div>
           </div>
@@ -1708,6 +1705,7 @@ onMounted(() => {
         </div>
         <div class="p-16px">
           <ElTable
+            v-loading="loading"
             :data="monthlyFinancialTable"
             border
             size="small"
@@ -1910,145 +1908,163 @@ onMounted(() => {
       </div>
 
       <!-- 4 Grand Animated Interactive KPI Cards -->
-      <ElRow :gutter="16" class="mb-24px">
-        <!-- 1. Gross Revenue KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipGrossRevenueCard')" placement="top">
-            <div class="grand-stat-card glass-panel stat-card--blue cursor-help">
-              <div class="flex justify-between items-start">
-                <div>
-                  <span class="stat-subtitle">{{ t('analysis.grossRevenueSavdoUpper') }}</span>
-                  <div class="stat-value text-blue-600 dark:text-blue-400">
-                    $<CountTo
-                      :start-val="0"
-                      :end-val="closeMonthPreview.revenue"
-                      :duration="1200"
-                    />
+      <ElSkeleton :loading="closingLoading" animated>
+        <template #template>
+          <ElRow :gutter="16" class="mb-24px">
+            <ElCol v-for="i in 4" :key="i" :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <div class="grand-stat-card glass-panel p-20px h-[134px] flex flex-col justify-between">
+                <ElSkeletonItem variant="text" style="width: 45%; height: 16px" />
+                <ElSkeletonItem variant="h1" style="width: 65%; height: 32px" />
+                <div class="flex justify-between items-center">
+                  <ElSkeletonItem variant="text" style="width: 35%; height: 14px" />
+                  <ElSkeletonItem variant="text" style="width: 40%; height: 14px" />
+                </div>
+              </div>
+            </ElCol>
+          </ElRow>
+        </template>
+        <template #default>
+          <ElRow :gutter="16" class="mb-24px">
+            <!-- 1. Gross Revenue KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipGrossRevenueCard')" placement="top">
+                <div class="grand-stat-card glass-panel stat-card--blue cursor-help">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <span class="stat-subtitle">{{ t('analysis.grossRevenueSavdoUpper') }}</span>
+                      <div class="stat-value text-blue-600 dark:text-blue-400">
+                        $<CountTo
+                          :start-val="0"
+                          :end-val="closeMonthPreview.revenue"
+                          :duration="1200"
+                        />
+                      </div>
+                    </div>
+                    <div class="stat-icon-wrap bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                      <Icon icon="ep:money" class="text-22px" />
+                    </div>
+                  </div>
+                  <div class="stat-footer-strip">
+                    <span
+                      class="stat-subtag bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
+                    >
+                      {{ closeMonthPreview.salesCount }} {{ t('erp.dealsCountSuffix') }}
+                    </span>
+                    <span class="text-11px text-muted">{{ t('erp.collectedDuringMonth') }}</span>
                   </div>
                 </div>
-                <div class="stat-icon-wrap bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                  <Icon icon="ep:money" class="text-22px" />
-                </div>
-              </div>
-              <div class="stat-footer-strip">
-                <span
-                  class="stat-subtag bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
-                >
-                  {{ closeMonthPreview.salesCount }} {{ t('erp.dealsCountSuffix') }}
-                </span>
-                <span class="text-11px text-muted">{{ t('erp.collectedDuringMonth') }}</span>
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
+              </ElTooltip>
+            </ElCol>
 
-        <!-- 2. COGS Product Cost KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipCogsCard')" placement="top">
-            <div class="grand-stat-card glass-panel stat-card--amber cursor-help">
-              <div class="flex justify-between items-start">
-                <div>
-                  <span class="stat-subtitle">{{ t('analysis.cogsUpper') }}</span>
-                  <div class="stat-value text-amber-600 dark:text-amber-400">
-                    $<CountTo :start-val="0" :end-val="closeMonthPreview.cogs" :duration="1200" />
+            <!-- 2. COGS Product Cost KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipCogsCard')" placement="top">
+                <div class="grand-stat-card glass-panel stat-card--amber cursor-help">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <span class="stat-subtitle">{{ t('analysis.cogsUpper') }}</span>
+                      <div class="stat-value text-amber-600 dark:text-amber-400">
+                        $<CountTo :start-val="0" :end-val="closeMonthPreview.cogs" :duration="1200" />
+                      </div>
+                    </div>
+                    <div class="stat-icon-wrap bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <Icon icon="ep:box" class="text-22px" />
+                    </div>
+                  </div>
+                  <div class="stat-footer-strip">
+                    <span
+                      class="stat-subtag bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
+                    >
+                      {{
+                        t('analysis.revenueShare', {
+                          percent:
+                            closeMonthPreview.revenue > 0
+                              ? Math.round((closeMonthPreview.cogs / closeMonthPreview.revenue) * 100)
+                              : 62
+                        })
+                      }}
+                    </span>
+                    <span class="text-11px text-muted">{{ t('erp.materialAndGoodsValue') }}</span>
                   </div>
                 </div>
-                <div class="stat-icon-wrap bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                  <Icon icon="ep:box" class="text-22px" />
-                </div>
-              </div>
-              <div class="stat-footer-strip">
-                <span
-                  class="stat-subtag bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
-                >
-                  {{
-                    t('analysis.revenueShare', {
-                      percent:
-                        closeMonthPreview.revenue > 0
-                          ? Math.round((closeMonthPreview.cogs / closeMonthPreview.revenue) * 100)
-                          : 62
-                    })
-                  }}
-                </span>
-                <span class="text-11px text-muted">{{ t('erp.materialAndGoodsValue') }}</span>
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
+              </ElTooltip>
+            </ElCol>
 
-        <!-- 3. Staff Salaries & Advances KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipPayrollCard')" placement="top">
-            <div class="grand-stat-card glass-panel stat-card--purple cursor-help">
-              <div class="flex justify-between items-start">
-                <div>
-                  <span class="stat-subtitle">{{ t('analysis.payrollAdvancesUpper') }}</span>
-                  <div class="stat-value text-purple-600 dark:text-purple-400">
-                    $<CountTo
-                      :start-val="0"
-                      :end-val="closeMonthPreview.staffSalaries + closeMonthPreview.shortTerm"
-                      :duration="1200"
-                    />
+            <!-- 3. Staff Salaries & Advances KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipPayrollCard')" placement="top">
+                <div class="grand-stat-card glass-panel stat-card--purple cursor-help">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <span class="stat-subtitle">{{ t('analysis.payrollAdvancesUpper') }}</span>
+                      <div class="stat-value text-purple-600 dark:text-purple-400">
+                        $<CountTo
+                          :start-val="0"
+                          :end-val="closeMonthPreview.staffSalaries + closeMonthPreview.shortTerm"
+                          :duration="1200"
+                        />
+                      </div>
+                    </div>
+                    <div class="stat-icon-wrap bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                      <Icon icon="ep:user-filled" class="text-22px" />
+                    </div>
+                  </div>
+                  <div class="stat-footer-strip">
+                    <span
+                      class="stat-subtag bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300"
+                    >
+                      {{ t('analysis.permanentSalariesLabel') }} ${{
+                        formatMoney(closeMonthPreview.staffSalaries)
+                      }}
+                    </span>
+                    <span class="text-11px text-muted"
+                      >{{ t('analysis.pieceworkLabel') }} ${{
+                        formatMoney(closeMonthPreview.shortTerm)
+                      }}</span
+                    >
                   </div>
                 </div>
-                <div class="stat-icon-wrap bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                  <Icon icon="ep:user-filled" class="text-22px" />
-                </div>
-              </div>
-              <div class="stat-footer-strip">
-                <span
-                  class="stat-subtag bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300"
-                >
-                  {{ t('analysis.permanentSalariesLabel') }} ${{
-                    formatMoney(closeMonthPreview.staffSalaries)
-                  }}
-                </span>
-                <span class="text-11px text-muted"
-                  >{{ t('analysis.pieceworkLabel') }} ${{
-                    formatMoney(closeMonthPreview.shortTerm)
-                  }}</span
-                >
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
+              </ElTooltip>
+            </ElCol>
 
-        <!-- 4. Grand Net Profit KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipNetProfitCard')" placement="top">
-            <div class="grand-stat-card glass-panel stat-card--emerald cursor-help">
-              <div class="flex justify-between items-start">
-                <div>
-                  <span
-                    class="stat-subtitle text-emerald-800 dark:text-emerald-300 font-extrabold"
-                    >{{ t('analysis.realNetProfitUpper') }}</span
-                  >
-                  <div class="stat-value text-emerald-600 dark:text-emerald-400">
-                    $<CountTo
-                      :start-val="0"
-                      :end-val="closeMonthPreview.netProfit"
-                      :duration="1200"
-                    />
+            <!-- 4. Grand Net Profit KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipNetProfitCard')" placement="top">
+                <div class="grand-stat-card glass-panel stat-card--emerald cursor-help">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <span
+                        class="stat-subtitle text-emerald-800 dark:text-emerald-300 font-extrabold"
+                        >{{ t('analysis.realNetProfitUpper') }}</span
+                      >
+                      <div class="stat-value text-emerald-600 dark:text-emerald-400">
+                        $<CountTo
+                          :start-val="0"
+                          :end-val="closeMonthPreview.netProfit"
+                          :duration="1200"
+                        />
+                      </div>
+                    </div>
+                    <div
+                      class="stat-icon-wrap bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 pulse-glow"
+                    >
+                      <Icon icon="ep:trophy" class="text-22px" />
+                    </div>
+                  </div>
+                  <div class="stat-footer-strip">
+                    <span class="stat-subtag bg-emerald-600 text-white font-bold">
+                      {{ t('erp.profitability') }}: {{ closeMonthPreview.margin }}%
+                    </span>
+                    <span class="text-11px text-emerald-700 dark:text-emerald-300 font-bold">{{
+                      t('erp.allExpensesDeducted')
+                    }}</span>
                   </div>
                 </div>
-                <div
-                  class="stat-icon-wrap bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 pulse-glow"
-                >
-                  <Icon icon="ep:trophy" class="text-22px" />
-                </div>
-              </div>
-              <div class="stat-footer-strip">
-                <span class="stat-subtag bg-emerald-600 text-white font-bold">
-                  {{ t('erp.profitability') }}: {{ closeMonthPreview.margin }}%
-                </span>
-                <span class="text-11px text-emerald-700 dark:text-emerald-300 font-bold">{{
-                  t('erp.allExpensesDeducted')
-                }}</span>
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
-      </ElRow>
+              </ElTooltip>
+            </ElCol>
+          </ElRow>
+        </template>
+      </ElSkeleton>
 
       <!-- Interactive Luxury Charts: Dual-Ring Profit Donut & 6-Month Rolling Evolution Timeline -->
       <ElRow :gutter="20" class="mb-24px">
@@ -2066,63 +2082,67 @@ onMounted(() => {
               </div>
             </div>
             <div class="chart-body relative p-10px flex-1 flex flex-col justify-center">
-              <div class="relative">
-                <Echart :options="monthDistributionDonutOptions" :height="260" />
-                <!-- Hollow Center Hero Stat -->
-                <div class="donut-center-hero pointer-events-none">
-                  <div class="center-title">{{ t('analysis.netProfitUpper') }}</div>
-                  <div
-                    class="center-amount font-mono text-emerald-600 dark:text-emerald-400 font-black text-18px"
-                  >
-                    ${{ formatMoney(closeMonthPreview.netProfit) }}
+              <ElSkeleton :loading="closingLoading" animated :rows="6">
+                <template #default>
+                  <div class="relative">
+                    <Echart :options="monthDistributionDonutOptions as any" :height="260" />
+                    <!-- Hollow Center Hero Stat -->
+                    <div class="donut-center-hero pointer-events-none">
+                      <div class="center-title">{{ t('analysis.netProfitUpper') }}</div>
+                      <div
+                        class="center-amount font-mono text-emerald-600 dark:text-emerald-400 font-black text-18px"
+                      >
+                        ${{ formatMoney(closeMonthPreview.netProfit) }}
+                      </div>
+                      <div class="center-badge text-10px font-bold text-gray-500">
+                        {{ closeMonthPreview.margin }}% {{ t('analysis.marginText') }}
+                      </div>
+                    </div>
                   </div>
-                  <div class="center-badge text-10px font-bold text-gray-500">
-                    {{ closeMonthPreview.margin }}% {{ t('analysis.marginText') }}
-                  </div>
-                </div>
-              </div>
 
-              <!-- Interactive Donut Micro-Legend Matrix -->
-              <div
-                class="donut-legend-matrix grid grid-cols-2 gap-8px mt-10px pt-10px border-t border-slate-200/70 dark:border-slate-800"
-              >
-                <div class="legend-pill-item">
-                  <span class="dot bg-amber-500"></span>
-                  <span class="text-11px text-gray-600 dark:text-gray-400 truncate"
-                    >{{ t('erp.costCogs') }}:</span
+                  <!-- Interactive Donut Micro-Legend Matrix -->
+                  <div
+                    class="donut-legend-matrix grid grid-cols-2 gap-8px mt-10px pt-10px border-t border-slate-200/70 dark:border-slate-800"
                   >
-                  <span class="font-mono text-12px font-bold ml-auto"
-                    >${{ formatMoney(closeMonthPreview.cogs) }}</span
-                  >
-                </div>
-                <div class="legend-pill-item">
-                  <span class="dot bg-purple-500"></span>
-                  <span class="text-11px text-gray-600 dark:text-gray-400 truncate"
-                    >{{ t('erp.salaries') }}:</span
-                  >
-                  <span class="font-mono text-12px font-bold ml-auto"
-                    >${{ formatMoney(closeMonthPreview.staffSalaries) }}</span
-                  >
-                </div>
-                <div class="legend-pill-item">
-                  <span class="dot bg-pink-500"></span>
-                  <span class="text-11px text-gray-600 dark:text-gray-400 truncate"
-                    >{{ t('erp.pieceworkSalary') }}:</span
-                  >
-                  <span class="font-mono text-12px font-bold ml-auto"
-                    >${{ formatMoney(closeMonthPreview.shortTerm) }}</span
-                  >
-                </div>
-                <div class="legend-pill-item bg-emerald-500/10 rounded-6px px-4px">
-                  <span class="dot bg-emerald-500"></span>
-                  <span class="text-11px text-emerald-700 dark:text-emerald-300 font-bold truncate"
-                    >{{ t('erp.realNetProfit') }}:</span
-                  >
-                  <span class="font-mono text-12px font-extrabold text-emerald-600 ml-auto"
-                    >+${{ formatMoney(closeMonthPreview.netProfit) }}</span
-                  >
-                </div>
-              </div>
+                    <div class="legend-pill-item">
+                      <span class="dot bg-amber-500"></span>
+                      <span class="text-11px text-gray-600 dark:text-gray-400 truncate"
+                        >{{ t('erp.costCogs') }}:</span
+                      >
+                      <span class="font-mono text-12px font-bold ml-auto"
+                        >${{ formatMoney(closeMonthPreview.cogs) }}</span
+                      >
+                    </div>
+                    <div class="legend-pill-item">
+                      <span class="dot bg-purple-500"></span>
+                      <span class="text-11px text-gray-600 dark:text-gray-400 truncate"
+                        >{{ t('erp.salaries') }}:</span
+                      >
+                      <span class="font-mono text-12px font-bold ml-auto"
+                        >${{ formatMoney(closeMonthPreview.staffSalaries) }}</span
+                      >
+                    </div>
+                    <div class="legend-pill-item">
+                      <span class="dot bg-pink-500"></span>
+                      <span class="text-11px text-gray-600 dark:text-gray-400 truncate"
+                        >{{ t('erp.pieceworkSalary') }}:</span
+                      >
+                      <span class="font-mono text-12px font-bold ml-auto"
+                        >${{ formatMoney(closeMonthPreview.shortTerm) }}</span
+                      >
+                    </div>
+                    <div class="legend-pill-item bg-emerald-500/10 rounded-6px px-4px">
+                      <span class="dot bg-emerald-500"></span>
+                      <span class="text-11px text-emerald-700 dark:text-emerald-300 font-bold truncate"
+                        >{{ t('erp.realNetProfit') }}:</span
+                      >
+                      <span class="font-mono text-12px font-extrabold text-emerald-600 ml-auto"
+                        >+${{ formatMoney(closeMonthPreview.netProfit) }}</span
+                      >
+                    </div>
+                  </div>
+                </template>
+              </ElSkeleton>
             </div>
           </div>
         </ElCol>
@@ -2144,7 +2164,11 @@ onMounted(() => {
               }}</span>
             </div>
             <div class="chart-body">
-              <Echart :options="archiveHistoryTimelineOptions" :height="340" />
+              <ElSkeleton :loading="closingLoading" animated :rows="6">
+                <template #default>
+                  <Echart :options="archiveHistoryTimelineOptions as any" :height="340" />
+                </template>
+              </ElSkeleton>
             </div>
           </div>
         </ElCol>
@@ -2278,7 +2302,10 @@ onMounted(() => {
           </div>
 
           <!-- Empty State -->
-          <div v-if="filteredMonthlySales.length === 0" class="py-40px text-center text-gray-400">
+          <div
+            v-if="!salesLoading && filteredMonthlySales.length === 0"
+            class="py-40px text-center text-gray-400"
+          >
             <Icon
               icon="ep:shopping-bag"
               class="text-44px text-gray-300 dark:text-gray-600 mb-10px inline-block"
@@ -2292,6 +2319,7 @@ onMounted(() => {
           <!-- Sales Table -->
           <ElTable
             v-else
+            v-loading="salesLoading"
             :data="filteredMonthlySales"
             border
             size="small"
@@ -2874,129 +2902,147 @@ onMounted(() => {
       </div>
 
       <!-- Comparison KPI Executive Cards with Helpful Hover Tooltips -->
-      <ElRow :gutter="16" class="mb-20px">
-        <!-- 1. Revenue Comparison KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipRevDiff')" placement="top">
-            <div class="compare-kpi-card glass-panel card-blue cursor-help">
-              <div class="kpi-title">{{ t('analysis.revenueGrowth') }}</div>
-              <div class="kpi-main-val text-blue">
-                {{ comparisonData.revDiff >= 0 ? '+$' : '-$'
-                }}{{ formatMoney(Math.abs(comparisonData.revDiff)) }}
+      <ElSkeleton :loading="comparisonLoading" animated>
+        <template #template>
+          <ElRow :gutter="16" class="mb-20px">
+            <ElCol v-for="i in 4" :key="i" :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <div class="compare-kpi-card glass-panel p-20px h-[120px] flex flex-col justify-between">
+                <ElSkeletonItem variant="text" style="width: 50%; height: 16px" />
+                <ElSkeletonItem variant="h1" style="width: 65%; height: 28px" />
+                <div class="flex justify-between items-center">
+                  <ElSkeletonItem variant="text" style="width: 35%; height: 14px" />
+                  <ElSkeletonItem variant="text" style="width: 45%; height: 14px" />
+                </div>
               </div>
-              <div class="flex items-center justify-between">
-                <span
-                  class="growth-tag"
-                  :class="comparisonData.revGrowth >= 0 ? 'tag-green' : 'tag-red'"
-                >
-                  <Icon
-                    :icon="comparisonData.revGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
-                    class="mr-2px"
-                  />
-                  {{ comparisonData.revGrowth >= 0 ? '+' : '' }}{{ comparisonData.revGrowth }}%
-                </span>
-                <span class="text-11px text-muted"
-                  >{{ t('analysis.period1') }}:
-                  <b>${{ formatMoney(comparisonData.p1Revenue) }}</b></span
-                >
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
+            </ElCol>
+          </ElRow>
+        </template>
+        <template #default>
+          <ElRow :gutter="16" class="mb-20px">
+            <!-- 1. Revenue Comparison KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipRevDiff')" placement="top">
+                <div class="compare-kpi-card glass-panel card-blue cursor-help">
+                  <div class="kpi-title">{{ t('analysis.revenueGrowth') }}</div>
+                  <div class="kpi-main-val text-blue">
+                    {{ comparisonData.revDiff >= 0 ? '+$' : '-$'
+                    }}{{ formatMoney(Math.abs(comparisonData.revDiff)) }}
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span
+                      class="growth-tag"
+                      :class="comparisonData.revGrowth >= 0 ? 'tag-green' : 'tag-red'"
+                    >
+                      <Icon
+                        :icon="comparisonData.revGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
+                        class="mr-2px"
+                      />
+                      {{ comparisonData.revGrowth >= 0 ? '+' : '' }}{{ comparisonData.revGrowth }}%
+                    </span>
+                    <span class="text-11px text-muted"
+                      >{{ t('analysis.period1') }}:
+                      <b>${{ formatMoney(comparisonData.p1Revenue) }}</b></span
+                    >
+                  </div>
+                </div>
+              </ElTooltip>
+            </ElCol>
 
-        <!-- 2. COGS Comparison KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipCogsDiff')" placement="top">
-            <div class="compare-kpi-card glass-panel card-amber cursor-help">
-              <div class="kpi-title">{{ t('analysis.cogsDiff') }}</div>
-              <div class="kpi-main-val text-amber">
-                {{ comparisonData.cogsDiff >= 0 ? '+$' : '-$'
-                }}{{ formatMoney(Math.abs(comparisonData.cogsDiff)) }}
-              </div>
-              <div class="flex items-center justify-between">
-                <span
-                  class="growth-tag"
-                  :class="comparisonData.cogsGrowth <= 0 ? 'tag-green' : 'tag-red'"
-                >
-                  <Icon
-                    :icon="comparisonData.cogsGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
-                    class="mr-2px"
-                  />
-                  {{ comparisonData.cogsGrowth >= 0 ? '+' : '' }}{{ comparisonData.cogsGrowth }}%
-                </span>
-                <span class="text-11px text-muted"
-                  >{{ t('analysis.period1') }}:
-                  <b>${{ formatMoney(comparisonData.p1COGS) }}</b></span
-                >
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
+            <!-- 2. COGS Comparison KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipCogsDiff')" placement="top">
+                <div class="compare-kpi-card glass-panel card-amber cursor-help">
+                  <div class="kpi-title">{{ t('analysis.cogsDiff') }}</div>
+                  <div class="kpi-main-val text-amber">
+                    {{ comparisonData.cogsDiff >= 0 ? '+$' : '-$'
+                    }}{{ formatMoney(Math.abs(comparisonData.cogsDiff)) }}
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span
+                      class="growth-tag"
+                      :class="comparisonData.cogsGrowth <= 0 ? 'tag-green' : 'tag-red'"
+                    >
+                      <Icon
+                        :icon="comparisonData.cogsGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
+                        class="mr-2px"
+                      />
+                      {{ comparisonData.cogsGrowth >= 0 ? '+' : '' }}{{ comparisonData.cogsGrowth }}%
+                    </span>
+                    <span class="text-11px text-muted"
+                      >{{ t('analysis.period1') }}:
+                      <b>${{ formatMoney(comparisonData.p1COGS) }}</b></span
+                    >
+                  </div>
+                </div>
+              </ElTooltip>
+            </ElCol>
 
-        <!-- 3. Payroll Comparison KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipPayrollDiff')" placement="top">
-            <div class="compare-kpi-card glass-panel card-purple cursor-help">
-              <div class="kpi-title">{{ t('analysis.payrollDiff') }}</div>
-              <div class="kpi-main-val text-purple">
-                {{ comparisonData.payrollDiff >= 0 ? '+$' : '-$'
-                }}{{ formatMoney(Math.abs(comparisonData.payrollDiff)) }}
-              </div>
-              <div class="flex items-center justify-between">
-                <span
-                  class="growth-tag"
-                  :class="comparisonData.payrollGrowth <= 0 ? 'tag-green' : 'tag-red'"
-                >
-                  <Icon
-                    :icon="comparisonData.payrollGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
-                    class="mr-2px"
-                  />
-                  {{ comparisonData.payrollGrowth >= 0 ? '+' : ''
-                  }}{{ comparisonData.payrollGrowth }}%
-                </span>
-                <span class="text-11px text-muted"
-                  >{{ t('analysis.period1') }}:
-                  <b>${{ formatMoney(comparisonData.p1Payroll) }}</b></span
-                >
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
+            <!-- 3. Payroll Comparison KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipPayrollDiff')" placement="top">
+                <div class="compare-kpi-card glass-panel card-purple cursor-help">
+                  <div class="kpi-title">{{ t('analysis.payrollDiff') }}</div>
+                  <div class="kpi-main-val text-purple">
+                    {{ comparisonData.payrollDiff >= 0 ? '+$' : '-$'
+                    }}{{ formatMoney(Math.abs(comparisonData.payrollDiff)) }}
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span
+                      class="growth-tag"
+                      :class="comparisonData.payrollGrowth <= 0 ? 'tag-green' : 'tag-red'"
+                    >
+                      <Icon
+                        :icon="comparisonData.payrollGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
+                        class="mr-2px"
+                      />
+                      {{ comparisonData.payrollGrowth >= 0 ? '+' : ''
+                      }}{{ comparisonData.payrollGrowth }}%
+                    </span>
+                    <span class="text-11px text-muted"
+                      >{{ t('analysis.period1') }}:
+                      <b>${{ formatMoney(comparisonData.p1Payroll) }}</b></span
+                    >
+                  </div>
+                </div>
+              </ElTooltip>
+            </ElCol>
 
-        <!-- 4. Real Net Profit Comparison KPI Card -->
-        <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-          <ElTooltip :content="t('analysis.tipProfitDiff')" placement="top">
-            <div class="compare-kpi-card glass-panel glow-emerald cursor-help">
-              <div class="kpi-title text-emerald-700 dark:text-emerald-300 font-extrabold">{{
-                t('analysis.netProfitChange')
-              }}</div>
-              <div class="kpi-main-val text-emerald">
-                {{ comparisonData.profitDiff >= 0 ? '+$' : '-$'
-                }}{{ formatMoney(Math.abs(comparisonData.profitDiff)) }}
-              </div>
-              <div class="flex items-center justify-between">
-                <span
-                  class="growth-tag"
-                  :class="comparisonData.profitGrowth >= 0 ? 'tag-green' : 'tag-red'"
-                >
-                  <Icon
-                    :icon="comparisonData.profitGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
-                    class="mr-2px"
-                  />
-                  {{ comparisonData.profitGrowth >= 0 ? '+' : ''
-                  }}{{ comparisonData.profitGrowth }}%
-                </span>
-                <span class="text-11px text-emerald-700 dark:text-emerald-300"
-                  >{{ t('analysis.period1') }}:
-                  <b>${{ formatMoney(comparisonData.p1Profit) }}</b> ({{
-                    comparisonData.p1Margin
-                  }}%)</span
-                >
-              </div>
-            </div>
-          </ElTooltip>
-        </ElCol>
-      </ElRow>
+            <!-- 4. Real Net Profit Comparison KPI Card -->
+            <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
+              <ElTooltip :content="t('analysis.tipProfitDiff')" placement="top">
+                <div class="compare-kpi-card glass-panel glow-emerald cursor-help">
+                  <div class="kpi-title text-emerald-700 dark:text-emerald-300 font-extrabold">{{
+                    t('analysis.netProfitChange')
+                  }}</div>
+                  <div class="kpi-main-val text-emerald">
+                    {{ comparisonData.profitDiff >= 0 ? '+$' : '-$'
+                    }}{{ formatMoney(Math.abs(comparisonData.profitDiff)) }}
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span
+                      class="growth-tag"
+                      :class="comparisonData.profitGrowth >= 0 ? 'tag-green' : 'tag-red'"
+                    >
+                      <Icon
+                        :icon="comparisonData.profitGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
+                        class="mr-2px"
+                      />
+                      {{ comparisonData.profitGrowth >= 0 ? '+' : ''
+                      }}{{ comparisonData.profitGrowth }}%
+                    </span>
+                    <span class="text-11px text-emerald-700 dark:text-emerald-300"
+                      >{{ t('analysis.period1') }}:
+                      <b>${{ formatMoney(comparisonData.p1Profit) }}</b> ({{
+                        comparisonData.p1Margin
+                      }}%)</span
+                    >
+                  </div>
+                </div>
+              </ElTooltip>
+            </ElCol>
+          </ElRow>
+        </template>
+      </ElSkeleton>
 
       <!-- Side-by-Side Comparison Charts -->
       <ElRow :gutter="20" class="mb-20px">
@@ -3012,7 +3058,11 @@ onMounted(() => {
               </ElTooltip>
             </div>
             <div class="chart-body">
-              <Echart :options="comparisonBarOptions" :height="320" />
+              <ElSkeleton :loading="comparisonLoading" animated :rows="6">
+                <template #default>
+                  <Echart :options="comparisonBarOptions as any" :height="320" />
+                </template>
+              </ElSkeleton>
             </div>
           </div>
         </ElCol>
@@ -3026,7 +3076,11 @@ onMounted(() => {
               </ElTooltip>
             </div>
             <div class="chart-body">
-              <Echart :options="comparisonCategoryOptions" :height="320" />
+              <ElSkeleton :loading="comparisonLoading" animated :rows="6">
+                <template #default>
+                  <Echart :options="comparisonCategoryOptions as any" :height="320" />
+                </template>
+              </ElSkeleton>
             </div>
           </div>
         </ElCol>
@@ -3043,7 +3097,13 @@ onMounted(() => {
           </div>
         </div>
         <div class="p-16px">
-          <ElTable :data="comparisonTable" border size="small" class="financial-summary-table">
+          <ElTable
+            v-loading="comparisonLoading"
+            :data="comparisonTable"
+            border
+            size="small"
+            class="financial-summary-table"
+          >
             <ElTableColumn prop="metric" :label="t('analysis.financialMetric')" min-width="220">
               <template #default="{ row }">
                 <ElTooltip :content="row.tooltip" placement="top">

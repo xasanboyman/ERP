@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { ElRow, ElCol, ElSkeleton } from 'element-plus'
 import { CountTo } from '@/components/CountTo'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Icon } from '@/components/Icon'
 import { useI18n } from '@/hooks/web/useI18n'
-import { getProductListApi } from '@/api/product'
-import { getWorkerListApi } from '@/api/worker'
-import { getSalaryListApi } from '@/api/salary'
-import { getOutputListApi } from '@/api/staff_hr'
-import { getSalesListApi } from '@/api/sales'
+import { getFinancialOverviewApi } from '@/api/dashboard/analysis'
+import { watch } from 'vue'
+
+const props = defineProps<{
+  data?: any
+  loading?: boolean
+}>()
 
 const { t } = useI18n()
 const loading = ref(true)
+
+const isSkeletonLoading = computed(() => {
+  if (props.loading !== undefined) {
+    return props.loading
+  }
+  return loading.value
+})
 
 const financialData = ref({
   grossRevenue: 0,
@@ -28,75 +37,45 @@ const formatNum = (val: number) => {
   return parseFloat((val || 0).toFixed(2))
 }
 
+watch(
+  () => props.data,
+  (val) => {
+    if (val) {
+      financialData.value = {
+        grossRevenue: val.grossRevenue || 0,
+        cogs: val.cogs || 0,
+        staffSalaries: val.staffSalaries || 0,
+        shortTermOutputs: val.shortTermOutputs || 0,
+        totalPayroll: val.totalPayroll || 0,
+        totalExpenses: val.totalExpenses || 0,
+        realNetProfit: val.realNetProfit || 0,
+        profitMargin: val.profitMargin || 0
+      }
+      loading.value = false
+    }
+  },
+  { immediate: true, deep: true }
+)
+
 const loadData = async () => {
+  if (props.data) {
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
-    const [prodRes, workerRes, salaryRes, outputRes, salesRes] = await Promise.allSettled([
-      getProductListApi({ pageIndex: 1, pageSize: 500 }),
-      getWorkerListApi({ pageIndex: 1, pageSize: 500 }),
-      getSalaryListApi({ pageIndex: 1, pageSize: 500 }),
-      getOutputListApi(),
-      getSalesListApi({ pageIndex: 1, pageSize: 500 })
-    ])
-
-    const products =
-      prodRes.status === 'fulfilled' && prodRes.value?.data?.list ? prodRes.value.data.list : []
-    const workers =
-      workerRes.status === 'fulfilled' && workerRes.value?.data?.list
-        ? workerRes.value.data.list
-        : []
-    const salaries =
-      salaryRes.status === 'fulfilled' && salaryRes.value?.data?.list
-        ? salaryRes.value.data.list
-        : []
-    const outputs =
-      outputRes.status === 'fulfilled' && outputRes.value?.data?.list
-        ? outputRes.value.data.list
-        : []
-    const sales =
-      salesRes.status === 'fulfilled' && salesRes.value?.data?.list ? salesRes.value.data.list : []
-
-    // 1. Gross Revenue
-    const totalSales = sales.reduce(
-      (sum: number, s: any) => sum + (parseFloat(s.total_amount || s.total) || 0),
-      0
-    )
-    const totalInventoryRetail = products.reduce(
-      (sum: number, p: any) => sum + (p.price || 0) * (p.quantityInStock || 0),
-      0
-    )
-    const totalInventoryCost = products.reduce(
-      (sum: number, p: any) => sum + (p.cost || 0) * (p.quantityInStock || 0),
-      0
-    )
-
-    const costRatio = totalInventoryRetail > 0 ? totalInventoryCost / totalInventoryRetail : 0
-    const revenue = totalSales > 0 ? totalSales : totalInventoryRetail || 0
-    const cogs = totalSales > 0 ? revenue * costRatio : totalInventoryCost || 0
-
-    // 2. Staff Salaries (Faqat haqiqatda to'langan maoshlar)
-    const paidSalaries = salaries
-      .filter((s: any) => (s.status || '').toLowerCase() === 'paid')
-      .reduce((sum: number, s: any) => sum + (parseFloat(s.netSalary) || 0), 0)
-
-    // 3. Short-term Worker Outputs (Vyrabotka)
-    const shortTerm = outputs.reduce((sum: number, o: any) => sum + (parseFloat(o.amount) || 0), 0)
-
-    // 4. Totals & Real Net Profit
-    const payroll = paidSalaries + shortTerm
-    const expenses = cogs + payroll
-    const netProfit = revenue - expenses
-    const margin = revenue > 0 ? (netProfit / revenue) * 100 : 0
-
-    financialData.value = {
-      grossRevenue: revenue,
-      cogs: cogs,
-      staffSalaries: paidSalaries,
-      shortTermOutputs: shortTerm,
-      totalPayroll: payroll,
-      totalExpenses: expenses,
-      realNetProfit: netProfit,
-      profitMargin: parseFloat(margin.toFixed(1))
+    const res = await getFinancialOverviewApi({ time_range: '6m' })
+    if (res && res.data) {
+      financialData.value = {
+        grossRevenue: res.data.grossRevenue || 0,
+        cogs: res.data.cogs || 0,
+        staffSalaries: res.data.staffSalaries || 0,
+        shortTermOutputs: res.data.shortTermOutputs || 0,
+        totalPayroll: res.data.totalPayroll || 0,
+        totalExpenses: res.data.totalExpenses || 0,
+        realNetProfit: res.data.realNetProfit || 0,
+        profitMargin: res.data.profitMargin || 0
+      }
     }
   } catch (e) {
     console.error('Executive Panel Data Load Error:', e)
@@ -109,7 +88,9 @@ defineExpose({
   loadData
 })
 
-loadData()
+if (!props.data) {
+  loadData()
+}
 </script>
 
 <template>
@@ -117,7 +98,7 @@ loadData()
     <!-- Card 1: Jami Savdo Tushumi -->
     <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
       <div class="panel-card card-blue">
-        <ElSkeleton :loading="loading" animated :rows="2">
+        <ElSkeleton :loading="isSkeletonLoading" animated :rows="2">
           <template #default>
             <div class="panel-body">
               <div class="panel-meta">
@@ -149,7 +130,7 @@ loadData()
     <!-- Card 2: Mahsulotlar Tannarxi (COGS) -->
     <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
       <div class="panel-card card-amber">
-        <ElSkeleton :loading="loading" animated :rows="2">
+        <ElSkeleton :loading="isSkeletonLoading" animated :rows="2">
           <template #default>
             <div class="panel-body">
               <div class="panel-meta">
@@ -187,7 +168,7 @@ loadData()
     <!-- Card 3: Xodimlar va Ishchilar Maoshi -->
     <ElCol :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
       <div class="panel-card card-purple">
-        <ElSkeleton :loading="loading" animated :rows="2">
+        <ElSkeleton :loading="isSkeletonLoading" animated :rows="2">
           <template #default>
             <div class="panel-body">
               <div class="panel-meta">
@@ -237,7 +218,7 @@ loadData()
             : 'card-rose highlight-loss'
         "
       >
-        <ElSkeleton :loading="loading" animated :rows="2">
+        <ElSkeleton :loading="isSkeletonLoading" animated :rows="2">
           <template #default>
             <div class="panel-body">
               <div class="panel-meta">

@@ -2,7 +2,7 @@ import request from '@/axios'
 
 export interface SaleItemType {
   id?: string
-  product_id: string
+  product_id?: string
   product_name: string
   shtrix_code?: string
   price: number
@@ -36,6 +36,7 @@ export const getSalesListApi = (params: {
   search?: string
   payment_method?: string
   cashier_name?: string
+  month?: string
 }) => {
   return request.get({ url: '/sales/list', params })
 }

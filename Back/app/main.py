@@ -10,27 +10,13 @@ from .routers import auth, role, department, branch, product, worker, salary, an
 import datetime
 import os
 
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print("Database init notice:", e)
+from .database import is_sqlite
 
-# Auto-migrate optional columns if missing
-try:
-    from sqlalchemy import text
-    for alter_stmt in [
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS expiration_date VARCHAR",
-        "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS unit_name VARCHAR",
-        "ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS conversion_factor FLOAT DEFAULT 1.0",
-    ]:
-        try:
-            with engine.connect() as conn:
-                conn.execute(text(alter_stmt))
-                conn.commit()
-        except Exception:
-            pass
-except Exception as e:
-    print("Column migration notice:", e)
+if is_sqlite:
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print("Database init notice:", e)
 
 
 def seed_initial_roles_and_users():
@@ -177,6 +163,10 @@ async def on_startup():
         manager.set_loop(asyncio.get_running_loop())
     except Exception as e:
         print("WS loop bind notice:", e)
+
+    import threading
+    from .routers.analytics import warm_up_analytics_cache
+    threading.Thread(target=warm_up_analytics_cache, daemon=True).start()
 
 
 

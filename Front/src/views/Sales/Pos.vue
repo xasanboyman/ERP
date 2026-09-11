@@ -2108,6 +2108,7 @@ const handleCheckout = async () => {
   // Normalize all quantities and aggregate requirements
   const requiredStockByProduct: Record<string, number> = {}
   for (const item of cart.value) {
+    if (!item.product_id) continue
     const factor = item.conversion_factor || 1.0
     const qty = parseFloat(String(item.quantity)) || 1
     item.quantity = qty
