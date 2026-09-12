@@ -813,40 +813,78 @@ const updateComparisonCalculations = async () => {
   }
 }
 
-const applyComparisonData = (compData: PeriodComparisonData) => {
+const applyComparisonData = (compData: any) => {
   if (!compData) return
-  const { period1, period2, deltas } = compData
+  const period1 = compData.period1 || {}
+  const period2 = compData.period2 || {}
 
-  comparisonData.p1Revenue = period1.revenue
-  comparisonData.p2Revenue = period2.revenue
+  const p1Rev = Number(period1.revenue) || 0
+  const p2Rev = Number(period2.revenue) || 0
+  const p1Cogs = Number(period1.cogs) || 0
+  const p2Cogs = Number(period2.cogs) || 0
+  const p1Staff = Number(period1.staff_salaries ?? period1.staffSalaries) || 0
+  const p2Staff = Number(period2.staff_salaries ?? period2.staffSalaries) || 0
+  const p1Short = Number(period1.short_term_outputs ?? period1.shortTermOutputs) || 0
+  const p2Short = Number(period2.short_term_outputs ?? period2.shortTermOutputs) || 0
+  const p1Payroll = Number(period1.total_payroll ?? period1.totalPayroll) || (p1Staff + p1Short)
+  const p2Payroll = Number(period2.total_payroll ?? period2.totalPayroll) || (p2Staff + p2Short)
+  const p1Profit = Number(period1.net_profit ?? period1.netProfit) || (p1Rev - p1Cogs - p1Payroll)
+  const p2Profit = Number(period2.net_profit ?? period2.netProfit) || (p2Rev - p2Cogs - p2Payroll)
+  const p1Margin = Number(period1.profit_margin ?? period1.margin) || (p1Rev > 0 ? (p1Profit / p1Rev) * 100 : 0)
+  const p2Margin = Number(period2.profit_margin ?? period2.margin) || (p2Rev > 0 ? (p2Profit / p2Rev) * 100 : 0)
+
+  const calcGrowth = (p1Val: number, p2Val: number) => {
+    if (p2Val === 0) return p1Val === 0 ? 0 : 100
+    return Math.round(((p1Val - p2Val) / Math.abs(p2Val)) * 1000) / 10
+  }
+
+  const rawDeltas = compData.deltas || {}
+  const deltas = {
+    revDiff: rawDeltas.revDiff ?? Math.round((p1Rev - p2Rev) * 100) / 100,
+    revGrowth: rawDeltas.revGrowth ?? calcGrowth(p1Rev, p2Rev),
+    cogsDiff: rawDeltas.cogsDiff ?? Math.round((p1Cogs - p2Cogs) * 100) / 100,
+    cogsGrowth: rawDeltas.cogsGrowth ?? calcGrowth(p1Cogs, p2Cogs),
+    staffDiff: rawDeltas.staffDiff ?? Math.round((p1Staff - p2Staff) * 100) / 100,
+    staffGrowth: rawDeltas.staffGrowth ?? calcGrowth(p1Staff, p2Staff),
+    shortDiff: rawDeltas.shortDiff ?? Math.round((p1Short - p2Short) * 100) / 100,
+    shortGrowth: rawDeltas.shortGrowth ?? calcGrowth(p1Short, p2Short),
+    payrollDiff: rawDeltas.payrollDiff ?? Math.round((p1Payroll - p2Payroll) * 100) / 100,
+    payrollGrowth: rawDeltas.payrollGrowth ?? calcGrowth(p1Payroll, p2Payroll),
+    profitDiff: rawDeltas.profitDiff ?? Math.round((p1Profit - p2Profit) * 100) / 100,
+    profitGrowth: rawDeltas.profitGrowth ?? calcGrowth(p1Profit, p2Profit),
+    marginDiff: rawDeltas.marginDiff ?? Math.round((p1Margin - p2Margin) * 10) / 10
+  }
+
+  comparisonData.p1Revenue = p1Rev
+  comparisonData.p2Revenue = p2Rev
   comparisonData.revDiff = deltas.revDiff
   comparisonData.revGrowth = deltas.revGrowth
 
-  comparisonData.p1COGS = period1.cogs
-  comparisonData.p2COGS = period2.cogs
+  comparisonData.p1COGS = p1Cogs
+  comparisonData.p2COGS = p2Cogs
   comparisonData.cogsDiff = deltas.cogsDiff
   comparisonData.cogsGrowth = deltas.cogsGrowth
 
-  comparisonData.p1Payroll = period1.total_payroll
-  comparisonData.p2Payroll = period2.total_payroll
+  comparisonData.p1Payroll = p1Payroll
+  comparisonData.p2Payroll = p2Payroll
   comparisonData.payrollDiff = deltas.payrollDiff
   comparisonData.payrollGrowth = deltas.payrollGrowth
 
-  comparisonData.p1Profit = period1.net_profit
-  comparisonData.p2Profit = period2.net_profit
+  comparisonData.p1Profit = p1Profit
+  comparisonData.p2Profit = p2Profit
   comparisonData.profitDiff = deltas.profitDiff
   comparisonData.profitGrowth = deltas.profitGrowth
 
-  comparisonData.p1Margin = period1.profit_margin
-  comparisonData.p2Margin = period2.profit_margin
+  comparisonData.p1Margin = p1Margin
+  comparisonData.p2Margin = p2Margin
   comparisonData.marginDiff = deltas.marginDiff
 
   // Update comparison table with real data
   comparisonTable.value = [
     {
       metric: 'Жами Тушум (Gross Revenue)',
-      p1: period1.revenue,
-      p2: period2.revenue,
+      p1: p1Rev,
+      p2: p2Rev,
       diff: deltas.revDiff,
       growth: deltas.revGrowth,
       status: deltas.revGrowth >= 0 ? 'positive' : 'negative',
@@ -856,8 +894,8 @@ const applyComparisonData = (compData: PeriodComparisonData) => {
     },
     {
       metric: 'Маҳсулот Таннархи (COGS)',
-      p1: period1.cogs,
-      p2: period2.cogs,
+      p1: p1Cogs,
+      p2: p2Cogs,
       diff: deltas.cogsDiff,
       growth: deltas.cogsGrowth,
       status: deltas.cogsGrowth <= 0 ? 'positive' : 'negative',
@@ -867,8 +905,8 @@ const applyComparisonData = (compData: PeriodComparisonData) => {
     },
     {
       metric: 'Доимий Ишчиlar Маоши (Staff Salaries)',
-      p1: period1.staff_salaries,
-      p2: period2.staff_salaries,
+      p1: p1Staff,
+      p2: p2Staff,
       diff: deltas.staffDiff,
       growth: deltas.staffGrowth,
       status: 'neutral',
@@ -878,8 +916,8 @@ const applyComparisonData = (compData: PeriodComparisonData) => {
     },
     {
       metric: 'Қисқа Муддатли Ишчилар (Piece-rate / Выработка)',
-      p1: period1.short_term_outputs,
-      p2: period2.short_term_outputs,
+      p1: p1Short,
+      p2: p2Short,
       diff: deltas.shortDiff,
       growth: deltas.shortGrowth,
       status: 'neutral',
@@ -889,8 +927,8 @@ const applyComparisonData = (compData: PeriodComparisonData) => {
     },
     {
       metric: 'Жами Иш Ҳақи Харажатлари (Total Payroll)',
-      p1: period1.total_payroll,
-      p2: period2.total_payroll,
+      p1: p1Payroll,
+      p2: p2Payroll,
       diff: deltas.payrollDiff,
       growth: deltas.payrollGrowth,
       status: deltas.payrollGrowth <= 0 ? 'positive' : 'negative',
@@ -900,8 +938,8 @@ const applyComparisonData = (compData: PeriodComparisonData) => {
     },
     {
       metric: `${t('erp.realNetProfit')} (Real Net Profit)`,
-      p1: period1.net_profit,
-      p2: period2.net_profit,
+      p1: p1Profit,
+      p2: p2Profit,
       diff: deltas.profitDiff,
       growth: deltas.profitGrowth,
       status: deltas.profitGrowth >= 0 ? 'positive' : 'negative',
@@ -910,8 +948,8 @@ const applyComparisonData = (compData: PeriodComparisonData) => {
     },
     {
       metric: 'Рентабеллик Маржаси (Profit Margin %)',
-      p1: period1.profit_margin,
-      p2: period2.profit_margin,
+      p1: p1Margin,
+      p2: p2Margin,
       diff: deltas.marginDiff,
       growth: deltas.marginDiff,
       isPercentage: true,
@@ -1108,12 +1146,13 @@ const buildComparisonChartOptions = () => {
 const buildChartOptions = () => {
   if (!overviewData.value) return
   const data = overviewData.value
-  const months = data.monthlyFinancials.map((m) => m.month)
-  const revList = data.monthlyFinancials.map((m) => m.revenue)
-  const cogsList = data.monthlyFinancials.map((m) => m.cogs)
-  const staffList = data.monthlyFinancials.map((m) => m.staffSalaries)
-  const shortTermList = data.monthlyFinancials.map((m) => m.shortTermOutputs)
-  const profitList = data.monthlyFinancials.map((m) => m.netProfit)
+  const monthly = Array.isArray(data.monthlyFinancials) ? data.monthlyFinancials : []
+  const months = monthly.map((m) => m.month || m.period_month || '')
+  const revList = monthly.map((m) => m.revenue || 0)
+  const cogsList = monthly.map((m) => m.cogs || 0)
+  const staffList = monthly.map((m) => m.staffSalaries || m.staff_salaries || 0)
+  const shortTermList = monthly.map((m) => m.shortTermOutputs || m.short_term_outputs || 0)
+  const profitList = monthly.map((m) => m.netProfit || m.net_profit || 0)
 
   const dark = isDark.value
   const textColor = dark ? '#f1f5f9' : '#1e293b'
@@ -1422,7 +1461,7 @@ const loadStandardOverview = async (silent = false) => {
     const res = await getFinancialOverviewApi({ time_range: timeRange.value })
     if (res && res.data) {
       overviewData.value = res.data
-      monthlyFinancialTable.value = [...res.data.monthlyFinancials].reverse()
+      monthlyFinancialTable.value = [...(res.data.monthlyFinancials || [])].reverse()
       buildChartOptions()
     }
   } catch (err) {
