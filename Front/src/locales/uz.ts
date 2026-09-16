@@ -992,7 +992,7 @@ export default {
     analytics: 'Analitika',
     authorization: 'Huquqlar va Sozlamalar',
     role: 'Rollar va Ruxsatlar',
-    department: "Bo'limlar va Filiallar",
+    department: "Bo'limlar",
     user: 'Foydalanuvchilar',
     menuManagement: 'Menyular arxitekturasi',
     personalCenter: 'Shaxsiy profil',

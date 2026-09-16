@@ -2220,7 +2220,7 @@ onMounted(() => {
           <Icon icon="ep:warning-filled" class="text-24px text-red-600 shrink-0 mt-2px" />
           <div class="text-13px text-red-800 dark:text-red-300 leading-relaxed">
             <span class="font-extrabold block text-14px mb-2px">DIQQAT: Qaytarib bo'lmas xavfli amal!</span>
-            "<strong class="font-bold text-red-900 dark:text-red-200">{{ selectedCompanyForDelete.name }}</strong>" kompaniyasi va unga tegishli barcha filiallar, xodimlar, mahsulotlar hamda savdo hisobotlari butunlay o'chiriladi.
+            "<strong class="font-bold text-red-900 dark:text-red-200">{{ selectedCompanyForDelete.name }}</strong>" kompaniyasi va unga tegishli barcha xodimlar, mahsulotlar hamda savdo hisobotlari butunlay o'chiriladi.
           </div>
         </div>
 

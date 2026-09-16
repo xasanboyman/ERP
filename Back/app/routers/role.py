@@ -882,7 +882,7 @@ def get_menu_list():
                     },
                     "permissionList": [
                         {"label": "Rollar va ruxsatlarni boshqarish", "value": "role:manage", "icon": "vi-ep:lock"},
-                        {"label": "Do'kon filiallarini boshqarish", "value": "branch:manage", "icon": "vi-ep:office-building"}
+                        {"label": "Bo'limlarni boshqarish", "value": "department:manage", "icon": "vi-ep:folder"}
                     ],
                     "children": [
                         {
@@ -893,15 +893,15 @@ def get_menu_list():
                             "id": 201,
                             "type": 1,
                             "parentId": 200,
-                            "title": "Bo'limlar & Filiallar",
-                            "icon": "vi-ep:office-building",
+                            "title": "Bo'limlar",
+                            "icon": "vi-ep:folder",
                             "meta": {
-                                "title": "Bo'limlar & Filiallar",
+                                "title": "Bo'limlar",
                                 "noCache": True,
                                 "permission": []
                             },
                             "permissionList": [
-                                {"label": "Bo'limlar va filiallarni boshqarish", "value": "branch:manage", "icon": "vi-ep:office-building"}
+                                {"label": "Bo'limlarni boshqarish", "value": "department:manage", "icon": "vi-ep:folder"}
                             ]
                         },
                         {

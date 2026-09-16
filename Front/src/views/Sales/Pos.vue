@@ -258,100 +258,6 @@
       </div>
     </ContentWrap>
 
-    <!-- Branch Management & Selection Modal -->
-    <ResizeDialog
-      v-model="branchModalVisible"
-      title="Do'kon Filiallarini Boshqarish va Tahrirlash"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="500"
-      :min-resize-height="350"
-      class="branch-dialog-wrap"
-    >
-      <div class="branch-modal-body p-4px">
-        <div class="flex justify-between items-center mb-12px">
-          <span class="text-13px text-[var(--el-text-color-primary)] font-bold"
-            >Tizimdagi Filiallar Ro'yxati:</span
-          >
-          <ElButton type="primary" size="small" class="font-bold" @click="openCreateBranchForm">
-            + Yangi Filial Qo'shish
-          </ElButton>
-        </div>
-
-        <!-- Branch Table -->
-        <ElTable :data="branchList" border stripe size="small" class="mb-14px">
-          <ElTableColumn prop="code" label="Kodi" width="110" align="center">
-            <template #default="scope">
-              <span class="font-mono text-blue-500 dark:text-blue-400 font-bold">{{
-                scope.row.code
-              }}</span>
-            </template>
-          </ElTableColumn>
-          <ElTableColumn prop="name" label="Filial Nomi" min-width="180">
-            <template #default="scope">
-              <span class="font-bold text-[var(--el-text-color-primary)]">{{
-                scope.row.name
-              }}</span>
-            </template>
-          </ElTableColumn>
-          <ElTableColumn prop="address" label="Manzili" min-width="180" show-overflow-tooltip />
-          <ElTableColumn prop="phone" :label="t('erp.phone')" width="140" />
-          <ElTableColumn :label="t('erp.amallar')" width="130" align="center">
-            <template #default="scope">
-              <ElButton size="small" type="primary" plain @click="editBranch(scope.row)">{{
-                t('common.edit')
-              }}</ElButton>
-              <ElButton
-                size="small"
-                type="danger"
-                plain
-                class="!px-6px"
-                @click="deleteBranch(scope.row.id!)"
-              >
-                ×
-              </ElButton>
-            </template>
-          </ElTableColumn>
-        </ElTable>
-
-        <!-- Branch Edit / Create Form -->
-        <div
-          v-if="editingBranch"
-          class="branch-edit-card bg-[var(--el-fill-color-light)] p-14px rounded-xl border border-[var(--el-border-color-lighter)] dark:border-gray-700"
-        >
-          <div class="text-14px font-bold text-emerald-500 mb-10px">
-            {{ editingBranch.id ? "Filial Ma'lumotlarini Tahrirlash" : 'Yangi Filial Yaratish' }}
-          </div>
-          <ElForm label-position="top" size="small" class="grid grid-cols-2 gap-10px">
-            <ElFormItem label="Filial Nomi">
-              <ElInput v-model="editingBranch.name" placeholder="Masalan: Yunusobod Filiali" />
-            </ElFormItem>
-            <ElFormItem label="Filial Kodi / SKU">
-              <ElInput v-model="editingBranch.code" placeholder="FIL-01" />
-            </ElFormItem>
-            <ElFormItem label="Manzili">
-              <ElInput
-                v-model="editingBranch.address"
-                placeholder="Toshkent sh., Yunusobod 4-mavze"
-              />
-            </ElFormItem>
-            <ElFormItem label="Telefon Raqami">
-              <ElInput v-model="editingBranch.phone" placeholder="+998 71 200-11-22" />
-            </ElFormItem>
-          </ElForm>
-          <div class="flex justify-end gap-8px mt-10px">
-            <ElButton size="small" @click="editingBranch = null">{{ t('common.cancel') }}</ElButton>
-            <ElButton
-              size="small"
-              type="primary"
-              class="font-bold px-16px"
-              @click="saveBranchForm"
-              >{{ t('common.save') }}</ElButton
-            >
-          </div>
-        </div>
-      </div>
-    </ResizeDialog>
 
     <!-- Built-in Employee Authentication & Switcher Modal -->
     <ResizeDialog
@@ -939,12 +845,6 @@
           >
             OMBORXONA ERP POS
           </div>
-          <div class="text-center text-12px text-[var(--el-text-color-secondary)] mt-2px">
-            Filial:
-            <span class="font-bold text-[var(--el-text-color-primary)]">{{
-              activeBranchName
-            }}</span>
-          </div>
           <div
             class="inline-block bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 px-12px py-4px rounded-full text-15px text-emerald-500 font-bold mt-8px"
           >
@@ -1189,11 +1089,11 @@ import {
   getSalesListApi,
   checkoutSaleApi,
   getSaleReceiptApi,
+  getDebtorsApi,
   SaleItemType,
   SaleType
 } from '@/api/sales'
 import { getEmployeesAuthApi, loginApi } from '@/api/login'
-import { getBranchListApi, saveBranchApi, deleteBranchApi, BranchType } from '@/api/branch'
 import {
   getProductMainImage,
   getProductImageGallery,
@@ -1214,7 +1114,7 @@ const userStore = useUserStoreWithOut()
 
 const activeCashier = computed(() => {
   const info = userStore.getUserInfo
-  return info?.full_name || info?.username || 'Kassir_Sardor'
+  return info?.full_name || info?.username || 'Kassir'
 })
 
 const activeRole = computed(() => {
@@ -1229,17 +1129,6 @@ const posModalVisible = ref(false)
 const receiptModalVisible = ref(false)
 const receiptLoading = ref(false)
 const barcodeInputRef = ref<any>(null)
-
-// Branch Management & Selection State
-const branchList = ref<BranchType[]>([])
-const selectedBranchId = ref<string>('')
-const branchModalVisible = ref(false)
-const editingBranch = ref<BranchType | null>(null)
-
-const activeBranchName = computed(() => {
-  const b = branchList.value.find((item) => item.id === selectedBranchId.value)
-  return b ? b.name : 'Bosh Filial'
-})
 
 // Employee Authentication & Switcher State
 const authModalVisible = ref(false)
@@ -1279,64 +1168,6 @@ const getPaymentLabel = (method?: string) => {
   if (method === 'karta') return t('erp.card').toUpperCase()
   if (method === 'nasiya') return t('erp.debt').toUpperCase()
   return method.toUpperCase()
-}
-
-const fetchBranches = async () => {
-  try {
-    const res: any = await getBranchListApi()
-    const list = Array.isArray(res) ? res : res?.data?.list || res?.data || []
-    branchList.value = list
-    if (list.length > 0 && !selectedBranchId.value) {
-      selectedBranchId.value = list[0].id!
-    }
-  } catch (err) {
-    console.error('Failed to fetch branches', err)
-  }
-}
-
-const openCreateBranchForm = () => {
-  editingBranch.value = {
-    name: '',
-    code: `FIL-0${branchList.value.length + 1}`,
-    address: '',
-    phone: ''
-  }
-}
-
-const editBranch = (b: BranchType) => {
-  editingBranch.value = { ...b }
-}
-
-const saveBranchForm = async () => {
-  if (!editingBranch.value || !editingBranch.value.name.trim()) {
-    ElMessage.warning('Filial nomini kiriting!')
-    return
-  }
-  try {
-    const res: any = await saveBranchApi(editingBranch.value)
-    if (res && (res.code === 0 || res.data)) {
-      ElMessage.success(res.message || 'Filial muvaffaqiyatli saqlandi')
-      editingBranch.value = null
-      fetchBranches()
-    }
-  } catch (err: any) {
-    ElMessage.error(err?.message || 'Filialni saqlashda xatolik!')
-  }
-}
-
-const deleteBranch = async (bId: string) => {
-  try {
-    const res = await deleteBranchApi(bId)
-    if (res && res.code === 0) {
-      ElMessage.success("Filial o'chirildi")
-      if (selectedBranchId.value === bId) {
-        selectedBranchId.value = ''
-      }
-      fetchBranches()
-    }
-  } catch (err: any) {
-    ElMessage.error("Filialni o'chirishda xatolik!")
-  }
 }
 
 const getCartItemQty = (productId?: string) => {
@@ -1480,39 +1311,49 @@ const displayPaidAmount = computed({
   }
 })
 
+const debtorsList = ref<any[]>([])
+
+const fetchDebtors = async () => {
+  try {
+    const res: any = await getDebtorsApi({ status: 'active' })
+    if (res?.data) {
+      debtorsList.value = res.data.list || []
+    }
+  } catch (e) {
+    console.error('Failed to fetch debtors for POS', e)
+  }
+}
+
 const debtorOptionsList = computed(() => {
   const map: Record<string, { name: string; total_debt: number; phone?: string }> = {}
-  const list = salesList.value || []
 
-  list.forEach((s) => {
-    if (s.customer_name && s.customer_name.trim()) {
-      const name = s.customer_name.trim()
-      if (!map[name]) {
-        map[name] = { name, total_debt: 0, phone: s.customer_phone || '' }
+  // 1. Existing active debtors from API
+  ;(debtorsList.value || []).forEach((d) => {
+    if (d.name && d.name.trim() && (d.total_debt || 0) > 0) {
+      const name = d.name.trim()
+      map[name] = {
+        name,
+        total_debt: d.total_debt || 0,
+        phone: d.phone || ''
       }
-      map[name].total_debt += s.debt_amount || 0
     }
   })
 
-  const preseeded = [
-    { name: 'Kassir_Sardor', total_debt: 8131, phone: '+998901234567' },
-    { name: 'Jamshid Aka', total_debt: 1250, phone: '+998935551122' },
-    { name: 'Otabek Rahimov', total_debt: 430, phone: '+998974443322' }
-  ]
-
-  preseeded.forEach((p) => {
-    if (!map[p.name]) {
-      map[p.name] = p
+  // 2. Any recent sales with debt in current list
+  const list = salesList.value || []
+  list.forEach((s) => {
+    if (s.customer_name && s.customer_name.trim() && (s.debt_amount || 0) > 0) {
+      const name = s.customer_name.trim()
+      if (!map[name]) {
+        map[name] = { name, total_debt: s.debt_amount || 0, phone: s.customer_phone || '' }
+      }
     }
   })
 
   return Object.values(map).map((d) => ({
     name: d.name,
     total_debt: d.total_debt,
-    label:
-      d.total_debt > 0
-        ? `${d.name} (${t('erp.oldDebtColon')} $${formatMoney(d.total_debt)})`
-        : d.name
+    label: `${d.name} (${t('erp.oldDebtColon')} $${formatMoney(d.total_debt)})`
   }))
 })
 
@@ -1650,10 +1491,11 @@ const fetchProducts = async (silent = false) => {
   }
 }
 
-// Automatically sync latest products, sales, and pushes in background
-useRealtimeSync(['product', 'sale', 'sales_push'], () => {
+// Automatically sync latest products, sales, debtors, and pushes in background
+useRealtimeSync(['product', 'sale', 'sales_push', 'debt'], () => {
   fetchProducts(true)
   fetchSalesData(true)
+  fetchDebtors()
 })
 
 useEventBus({
@@ -1708,6 +1550,7 @@ const resetCheckoutState = () => {
 const openPosModal = () => {
   resetCheckoutState()
   fetchProducts()
+  fetchDebtors()
   posModalVisible.value = true
   setTimeout(() => {
     barcodeInputRef.value?.focus?.()
@@ -2166,7 +2009,7 @@ const handleCheckout = async () => {
 
       ElNotification({
         title: 'Sotuv muvaffaqiyatli!',
-        message: `Filial: ${activeBranchName.value} | Kassir: ${activeCashier.value} | Chek #${res.data.receipt_number} ($${formatMoney(res.data.total_amount)})`,
+        message: `Kassir: ${activeCashier.value} | Chek #${res.data.receipt_number} ($${formatMoney(res.data.total_amount)})`,
         type: 'success',
         duration: 5000
       })
@@ -2262,7 +2105,6 @@ const printReceipt = (mode: 'thermal' | 'a4' = 'thermal') => {
   const items = s.items || []
   const dateStr = s.created_at || new Date().toLocaleString()
   const cashier = s.cashier_name || activeCashier.value
-  const branch = activeBranchName.value
   const paymentMethodLabel = getPaymentLabel(s.payment_method)
   const totalAmount = formatMoney(s.total_amount)
   const paidAmount = formatMoney(
@@ -2445,7 +2287,6 @@ const printReceipt = (mode: 'thermal' | 'a4' = 'thermal') => {
       <body>
         <div class="text-center">
           <div class="brand-title">OMBORXONA ERP POS</div>
-          <div class="brand-sub">${branch}</div>
           <div class="check-no">CHEK #${s.receipt_number}</div>
         </div>
 
@@ -2614,7 +2455,6 @@ const printReceipt = (mode: 'thermal' | 'a4' = 'thermal') => {
         <div class="header-row">
           <div>
             <div class="company-name">OMBORXONA ERP POS</div>
-            <div style="color: #64748b; font-size: 13px; margin-top: 4px;">Filial: ${branch}</div>
           </div>
           <div>
             <div class="receipt-title">SOTUV CHEKI</div>
@@ -2735,7 +2575,6 @@ const printReceipt = (mode: 'thermal' | 'a4' = 'thermal') => {
 }
 
 const loadPendingCart = (customItems?: any[]) => {
-  fetchBranches()
   fetchSalesData()
   fetchProducts()
   const pendingCartStr = sessionStorage.getItem('PENDING_POS_CART')
@@ -2767,8 +2606,8 @@ const handlePendingCartEvent = (e: any) => {
 }
 
 onMounted(() => {
-  fetchBranches()
   fetchSalesData()
+  fetchDebtors()
   loadPendingCart()
   window.addEventListener('LOAD_PENDING_POS_CART', handlePendingCartEvent)
 })
@@ -2781,7 +2620,6 @@ onUnmounted(() => {
 <style lang="less">
 /* Clean Dynamic Dialog Wrappers for Light and Dark Modes */
 .pos-dialog-wrap,
-.branch-dialog-wrap,
 .auth-dialog-wrap,
 .receipt-dialog-wrap {
   &.el-dialog {
@@ -2844,7 +2682,6 @@ onUnmounted(() => {
 
 :global(.dark) {
   .pos-dialog-wrap,
-  .branch-dialog-wrap,
   .auth-dialog-wrap,
   .receipt-dialog-wrap {
     &.el-dialog {

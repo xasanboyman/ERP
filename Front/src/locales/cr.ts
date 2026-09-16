@@ -989,7 +989,7 @@ export default {
     analytics: 'Аналитика',
     authorization: 'Ҳуқуқлар ва Созламалар',
     role: 'Роллар ва Рухсатлар',
-    department: 'Бўлимлар ва Филиаллар',
+    department: 'Бўлимлар',
     user: 'Фойдаланувчилар',
     menuManagement: 'Менюлар архитектураси',
     personalCenter: 'Шахсий профил',

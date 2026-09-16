@@ -28,7 +28,6 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 import { useAppStore } from '@/store/modules/app'
 import { getSalesListApi, SaleType } from '@/api/sales'
-import { getBranchListApi, type BranchType } from '@/api/branch'
 import {
   getFinancialOverviewApi,
   getMonthSummaryApi,
@@ -57,24 +56,6 @@ const loading = ref(true)
 const closingLoading = ref(false)
 const comparisonLoading = ref(false)
 const timeRange = ref<'6m' | '1y'>('6m')
-
-const branchList = ref<BranchType[]>([])
-const selectedBranchId = ref<string>('')
-
-const loadBranches = async () => {
-  try {
-    const res = await getBranchListApi()
-    if (res && res.data) {
-      branchList.value = res.data
-    }
-  } catch (err) {
-    console.error('Failed to load branches:', err)
-  }
-}
-
-const onBranchChange = () => {
-  loadAnalyticsData()
-}
 
 // Standard ECharts Options
 const financialTrendOptions = ref<EChartsOption>({})
@@ -1476,8 +1457,7 @@ const loadStandardOverview = async (silent = false) => {
   if (!silent) loading.value = true
   try {
     const res = await getFinancialOverviewApi({
-      time_range: timeRange.value,
-      branch_id: selectedBranchId.value || undefined
+      time_range: timeRange.value
     })
     if (res && res.data) {
       overviewData.value = res.data
@@ -1499,8 +1479,7 @@ const loadRawSales = async (month?: string) => {
     const res = await getSalesListApi({
       pageIndex: 1,
       pageSize: 200,
-      month: targetMonth,
-      branch_id: selectedBranchId.value || undefined
+      month: targetMonth
     })
     if (res && res.data) {
       allRawSales.value = Array.isArray(res.data.list) ? res.data.list : []
@@ -1520,8 +1499,7 @@ const loadAnalyticsData = async () => {
   try {
     const res = await getAnalysisBundleApi({
       time_range: timeRange.value,
-      month: closeMonthInput.value,
-      branch_id: selectedBranchId.value || undefined
+      month: closeMonthInput.value
     })
     if (res && res.data) {
       const { overview, snapshots, monthSummary, comparison } = res.data
@@ -1534,21 +1512,20 @@ const loadAnalyticsData = async () => {
         savedSnapshots.value = snapshots
       }
       if (monthSummary) {
-        currentMonthSummary.value = monthSummary
-        buildArchiveCharts()
+        monthSummaryData.value = monthSummary
       }
       if (comparison) {
-        applyComparisonData(comparison)
+        periodComparisonData.value = comparison
+        buildComparisonChart()
       }
     }
   } catch (err) {
-    console.error('Failed to load analysis bundle:', err)
+    console.error('Failed to load analytics bundle:', err)
   } finally {
     loading.value = false
     closingLoading.value = false
     comparisonLoading.value = false
   }
-  loadRawSales(closeMonthInput.value)
 }
 
 // Silently update live analytics when sales, payouts, or product stock updates occur
@@ -1559,33 +1536,33 @@ useRealtimeSync(
   }
 )
 
+// Excel Financial Export
 const handleExportFinancialExcel = () => {
   if (!overviewData.value) {
-    ElMessage.warning('Hisobot yuklab olish uchun maʼlumot topilmadi')
+    ElMessage.warning('Eksport qilish uchun moliyaviy maʼlumotlar topilmadi')
     return
   }
-  const reportData = (overviewData.value.monthlyFinancials || []).map((item) => ({
+
+  const reportData = (overviewData.value.monthlyFinancials || []).map((item: any) => ({
     month: item.month,
-    revenue: item.revenue,
-    cogs: item.cogs,
-    salaries: item.staffSalaries,
-    outputs: item.shortTermOutputs,
-    payroll: item.totalPayroll,
-    expenses: item.totalExpenses,
-    profit: item.netProfit,
-    margin: `${item.profitMargin}%`
+    revenue: item.revenue || 0,
+    cogs: item.cogs || 0,
+    gross_profit: item.grossProfit || 0,
+    salary_expense: item.salaryExpense || 0,
+    other_expense: item.otherExpense || 0,
+    profit: item.netProfit || 0,
+    margin: `${(item.profitMargin || 0).toFixed(1)}%`
   }))
 
   exportToExcel(
-    'Moliya_va_Tahlil_Hisoboti',
+    `Moliyaviy_Tahlil_Hisoboti_${dayjs().format('YYYY-MM-DD')}`,
     [
-      { key: 'month', title: 'Davr (Oy)' },
-      { key: 'revenue', title: 'Jami Savdo Tushumi ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'cogs', title: 'Mahsulot Tannarxi (COGS) ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'salaries', title: 'Doimiy Xodimlar Maoshi ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'outputs', title: 'Qisqa Muddatli Ishchilar ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'payroll', title: 'Jami Ish Haqi Jamgʻarmasi ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'expenses', title: 'Jami Xarajatlar ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'month', title: 'Oy' },
+      { key: 'revenue', title: 'Tushum ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'cogs', title: 'Tannarx ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'gross_profit', title: 'Yalpi Foyda ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'salary_expense', title: 'Oylik Fondi ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'other_expense', title: 'Boshqa Xarajatlar ($)', formatter: (v) => formatMoney(v || 0) },
       { key: 'profit', title: 'Haqiqiy Sof Foyda ($)', formatter: (v) => formatMoney(v || 0) },
       { key: 'margin', title: 'Rentabellik (Marja)' }
     ],
@@ -1595,7 +1572,6 @@ const handleExportFinancialExcel = () => {
 }
 
 onMounted(() => {
-  loadBranches()
   loadAnalyticsData()
 })
 </script>
@@ -1655,21 +1631,6 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-10px flex-wrap">
-        <ElSelect
-          v-model="selectedBranchId"
-          placeholder="Barcha filiallar"
-          clearable
-          class="!w-200px shadow-sm"
-          @change="onBranchChange"
-        >
-          <ElOption label="Barcha filiallar" value="" />
-          <ElOption
-            v-for="b in branchList"
-            :key="b.id"
-            :label="b.name"
-            :value="b.id"
-          />
-        </ElSelect>
         <ElButton
           type="success"
           plain

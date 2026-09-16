@@ -388,14 +388,6 @@ def get_debtors(
 
     resultList = list(debtors_map.values())
 
-    # Pre-seed realistic sample debtors only if DB is empty and viewing default company
-    if len(resultList) == 0 and (not target_company or target_company == "comp-default"):
-        resultList = [
-            {"name": "Kassir_Sardor", "phone": "+998901234567", "total_initial_debt": 12450.0, "total_debt": 8131.0, "total_repaid": 4319.0, "sales_count": 4, "last_sale_date": "2026-08-04 16:08:48"},
-            {"name": "Jamshid Aka", "phone": "+998935551122", "total_initial_debt": 2500.0, "total_debt": 1250.0, "total_repaid": 1250.0, "sales_count": 2, "last_sale_date": "2026-08-03 14:20:10"},
-            {"name": "Otabek Rahimov", "phone": "+998974443322", "total_initial_debt": 980.0, "total_debt": 430.0, "total_repaid": 550.0, "sales_count": 1, "last_sale_date": "2026-08-02 11:15:00"}
-        ]
-
     # Filtering
     if search:
         s = search.strip().lower()

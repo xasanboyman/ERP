@@ -1512,6 +1512,11 @@ def delete_company(db: Session, company_id: str):
         pass
 
     try:
+        db.query(models.DebtPayment).filter(models.DebtPayment.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
         db.query(models.User).filter(models.User.company_id == company_id).delete(synchronize_session=False)
     except Exception:
         pass
