@@ -26,6 +26,8 @@ export interface MonthlyFinancialSnapshotItem {
   id: string
   period_month: string
   revenue: number
+  total_paid?: number
+  total_debt?: number
   cogs: number
   staff_salaries: number
   short_term_outputs: number
@@ -43,6 +45,8 @@ export interface MonthlyFinancialItem {
   month: string
   period_month: string
   revenue: number
+  totalPaid?: number
+  totalDebt?: number
   cogs: number
   staffSalaries: number
   shortTermOutputs: number
@@ -55,6 +59,9 @@ export interface MonthlyFinancialItem {
 
 export interface FinancialOverviewData {
   grossRevenue: number
+  totalPaid?: number
+  totalDebt?: number
+  totalSalesCount?: number
   cogs: number
   staffSalaries: number
   shortTermOutputs: number
@@ -72,6 +79,8 @@ export interface FinancialOverviewData {
 export interface MonthSummaryData {
   period_month: string
   revenue: number
+  totalPaid?: number
+  totalDebt?: number
   cogs: number
   staffSalaries: number
   shortTermOutputs: number

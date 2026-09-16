@@ -24,6 +24,8 @@ const isSkeletonLoading = computed(() => {
 
 const financialData = ref({
   grossRevenue: 0,
+  totalPaid: 0,
+  totalDebt: 0,
   cogs: 0,
   staffSalaries: 0,
   shortTermOutputs: 0,
@@ -43,6 +45,8 @@ watch(
     if (val) {
       financialData.value = {
         grossRevenue: val.grossRevenue || 0,
+        totalPaid: val.totalPaid || 0,
+        totalDebt: val.totalDebt || 0,
         cogs: val.cogs || 0,
         staffSalaries: val.staffSalaries || 0,
         shortTermOutputs: val.shortTermOutputs || 0,
@@ -68,6 +72,8 @@ const loadData = async () => {
     if (res && res.data) {
       financialData.value = {
         grossRevenue: res.data.grossRevenue || 0,
+        totalPaid: res.data.totalPaid || 0,
+        totalDebt: res.data.totalDebt || 0,
         cogs: res.data.cogs || 0,
         staffSalaries: res.data.staffSalaries || 0,
         shortTermOutputs: res.data.shortTermOutputs || 0,
@@ -114,7 +120,17 @@ if (!props.data) {
                   />
                 </div>
                 <div class="panel-subtext">
-                  <span class="badge-growth">{{ t('analysis.salesAndTurnover') }}</span>
+                  <div class="flex items-center gap-6px flex-wrap text-12px mt-2px">
+                    <span class="text-slate-600 dark:text-slate-300 font-medium">
+                      Naqd: <b>${{ Math.round(financialData.totalPaid).toLocaleString() }}</b>
+                    </span>
+                    <span
+                      v-if="financialData.totalDebt > 0"
+                      class="text-amber-700 dark:text-amber-300 font-bold bg-amber-50 dark:bg-amber-950/70 border border-amber-300/40 px-6px py-1px rounded"
+                    >
+                      Nasiya: ${{ Math.round(financialData.totalDebt).toLocaleString() }}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div class="panel-icon-box bg-blue-glow">
@@ -251,6 +267,13 @@ if (!props.data) {
                 </div>
                 <div class="panel-subtext">
                   <span
+                    v-if="financialData.totalDebt > 0"
+                    class="text-11px text-amber-700 dark:text-amber-300 font-semibold"
+                  >
+                    Kassada: ${{ Math.max(0, Math.round(financialData.totalPaid - financialData.totalExpenses)).toLocaleString() }} (Qarz yopilgach: +${{ Math.round(financialData.realNetProfit).toLocaleString() }})
+                  </span>
+                  <span
+                    v-else
                     :class="
                       financialData.realNetProfit >= 0
                         ? 'text-emerald-600 dark:text-emerald-400 font-semibold'

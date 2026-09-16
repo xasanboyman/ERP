@@ -147,6 +147,8 @@ export default {
     quickActions: 'Tezkor Harakatlar',
     totalVisits: 'Kirishlar Soni',
     activeTasks: 'Faol Topshiriqlar',
+    activeWorkersCount: 'Faol Xodimlar',
+    totalSalesCount: 'Savdo Bitimlari',
     heroSubtitle:
       'Bugun ERP tizimi orqali barcha jarayonlar va sotuvlarni nazorat qilishingiz mumkin.',
     reasonRemark: 'Sababi / Izoh',

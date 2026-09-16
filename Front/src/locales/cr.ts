@@ -147,6 +147,8 @@ export default {
     quickActions: 'Тезкор Ҳаракатлар',
     totalVisits: 'Киришлар Сони',
     activeTasks: 'Фаол Топшириқлар',
+    activeWorkersCount: 'Фаол Ходимлар',
+    totalSalesCount: 'Савдо Битимлари',
     heroSubtitle:
       'Бугун ERP тизими орқали барча жараёнлар ва сотувларни назорат қилишингиз мумкин.',
     reasonRemark: 'Сабаби / Изоҳ',

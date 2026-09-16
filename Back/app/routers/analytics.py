@@ -29,6 +29,18 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None, branch_id: 
         finally:
             s_db.close()
 
+    def q_debt_payments():
+        s_db = SessionLocal()
+        try:
+            q = s_db.query(models.DebtPayment).filter(
+                models.DebtPayment.created_at.like(f"{ym}%")
+            )
+            if company_id:
+                q = q.filter(models.DebtPayment.company_id == company_id)
+            return q.all()
+        finally:
+            s_db.close()
+
     def q_salaries():
         s_db = SessionLocal()
         try:
@@ -72,25 +84,27 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None, branch_id: 
         finally:
             s_db.close()
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         f_sales = executor.submit(q_sales)
+        f_debt_payments = executor.submit(q_debt_payments)
         f_salaries = executor.submit(q_salaries)
         f_outputs = executor.submit(q_outputs)
         f_adjustments = executor.submit(q_adjustments)
 
         sales = f_sales.result()
+        debt_payments = f_debt_payments.result()
         salaries = f_salaries.result()
         outputs = f_outputs.result()
         adjustments = f_adjustments.result()
 
     revenue = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
+    total_paid = sum(float(s.paid_amount or 0.0) for s in sales) + sum(float(dp.amount or 0.0) for dp in debt_payments)
+    total_debt = sum(float(s.debt_amount or 0.0) for s in sales)
     
     cogs = 0.0
     for s in sales:
         for it in s.items:
             cogs += float(it.cost or 0.0) * float(it.quantity or 1.0)
-    if cogs == 0.0 and revenue > 0:
-        cogs = revenue * 0.55
 
     staff_salaries = sum(float(s.netSalary or 0.0) for s in salaries)
     short_term_outputs = sum(float(o.amount or 0.0) for o in outputs)
@@ -105,6 +119,8 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None, branch_id: 
     return {
         "period_month": ym,
         "revenue": round(revenue, 2),
+        "total_paid": round(total_paid, 2),
+        "total_debt": round(total_debt, 2),
         "cogs": round(cogs, 2),
         "staff_salaries": round(staff_salaries, 2),
         "short_term_outputs": round(short_term_outputs, 2),
@@ -138,6 +154,19 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
                 q = q.filter(models.Sale.company_id == company_id)
             if branch_id:
                 q = q.filter(models.Sale.branch_id == branch_id)
+            return q.all()
+        finally:
+            s_db.close()
+
+    def q_debt_payments():
+        s_db = SessionLocal()
+        try:
+            q = s_db.query(models.DebtPayment).filter(
+                models.DebtPayment.created_at >= start_dt_str,
+                models.DebtPayment.created_at <= end_dt_str
+            )
+            if company_id:
+                q = q.filter(models.DebtPayment.company_id == company_id)
             return q.all()
         finally:
             s_db.close()
@@ -188,25 +217,27 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
         finally:
             s_db.close()
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         f_sales = executor.submit(q_sales)
+        f_debt_payments = executor.submit(q_debt_payments)
         f_salaries = executor.submit(q_salaries)
         f_outputs = executor.submit(q_outputs)
         f_adjustments = executor.submit(q_adjustments)
 
         sales = f_sales.result()
+        debt_payments = f_debt_payments.result()
         salaries = f_salaries.result()
         outputs = f_outputs.result()
         adjustments = f_adjustments.result()
 
     revenue = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
+    total_paid = sum(float(s.paid_amount or 0.0) for s in sales) + sum(float(dp.amount or 0.0) for dp in debt_payments)
+    total_debt = sum(float(s.debt_amount or 0.0) for s in sales)
 
     cogs = 0.0
     for s in sales:
         for it in s.items:
             cogs += float(it.cost or 0.0) * float(it.quantity or 1.0)
-    if cogs == 0.0 and revenue > 0:
-        cogs = revenue * 0.55
 
     staff_salaries = sum(float(s.netSalary or 0.0) for s in salaries)
     short_term_outputs = sum(float(o.amount or 0.0) for o in outputs)
@@ -221,6 +252,8 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
         "start_date": start_date,
         "end_date": end_date,
         "revenue": round(revenue, 2),
+        "total_paid": round(total_paid, 2),
+        "total_debt": round(total_debt, 2),
         "cogs": round(cogs, 2),
         "staff_salaries": round(staff_salaries, 2),
         "short_term_outputs": round(short_term_outputs, 2),
@@ -327,6 +360,19 @@ def get_financial_overview(
         finally:
             s_db.close()
 
+    def q_debt_payments():
+        s_db = SessionLocal()
+        try:
+            q = s_db.query(models.DebtPayment).filter(
+                models.DebtPayment.created_at >= start_dt,
+                models.DebtPayment.created_at <= end_dt
+            )
+            if target_company:
+                q = q.filter(models.DebtPayment.company_id == target_company)
+            return q.all()
+        finally:
+            s_db.close()
+
     def q_products():
         s_db = SessionLocal()
         try:
@@ -339,14 +385,16 @@ def get_financial_overview(
         finally:
             s_db.close()
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=6) as executor:
         f_sales = executor.submit(q_sales)
+        f_debt_payments = executor.submit(q_debt_payments)
         f_salaries = executor.submit(q_salaries)
         f_outputs = executor.submit(q_outputs)
         f_adjustments = executor.submit(q_adjustments)
         f_products = executor.submit(q_products)
 
         all_sales = f_sales.result()
+        all_debt_payments = f_debt_payments.result()
         all_salaries = f_salaries.result()
         all_outputs = f_outputs.result()
         all_adjustments = f_adjustments.result()
@@ -356,10 +404,11 @@ def get_financial_overview(
     monthly_data = []
     for ym, m_label in target_months:
         m_sales = [s for s in all_sales if s.created_at and s.created_at.startswith(ym)]
+        m_repayments = [dp for dp in all_debt_payments if dp.created_at and dp.created_at.startswith(ym)]
         m_rev = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in m_sales)
+        m_paid = round(sum(float(s.paid_amount or 0.0) for s in m_sales) + sum(float(dp.amount or 0.0) for dp in m_repayments), 2)
+        m_debt = round(sum(float(s.debt_amount or 0.0) for s in m_sales), 2)
         m_cogs = sum(sum(float(it.cost or 0.0) * float(it.quantity or 1.0) for it in s.items) for s in m_sales)
-        if m_cogs == 0.0 and m_rev > 0:
-            m_cogs = m_rev * 0.55
 
         m_sal = sum(float(s.netSalary or 0.0) for s in all_salaries if s.payDate and s.payDate.startswith(ym))
         m_out = sum(float(o.amount or 0.0) for o in all_outputs if o.createTime and o.createTime.startswith(ym))
@@ -374,6 +423,8 @@ def get_financial_overview(
             "month": m_label,
             "period_month": ym,
             "revenue": round(m_rev, 2),
+            "totalPaid": m_paid,
+            "totalDebt": m_debt,
             "cogs": round(m_cogs, 2),
             "staffSalaries": round(m_sal, 2),
             "shortTermOutputs": round(m_out, 2),
@@ -386,6 +437,10 @@ def get_financial_overview(
 
     # Overall Totals across the period
     gross_revenue = round(sum(m["revenue"] for m in monthly_data), 2)
+    total_sales_paid = sum(float(s.paid_amount or 0.0) for s in all_sales)
+    total_repayments = sum(float(dp.amount or 0.0) for dp in all_debt_payments)
+    total_paid = round(total_sales_paid + total_repayments, 2)
+    total_debt = round(sum(float(s.debt_amount or 0.0) for s in all_sales), 2)
     total_cogs = round(sum(m["cogs"] for m in monthly_data), 2)
     total_staff = round(sum(m["staffSalaries"] for m in monthly_data), 2)
     total_short = round(sum(m["shortTermOutputs"] for m in monthly_data), 2)
@@ -424,6 +479,9 @@ def get_financial_overview(
         "code": 0,
         "data": {
             "grossRevenue": gross_revenue,
+            "totalPaid": total_paid,
+            "totalDebt": total_debt,
+            "totalSalesCount": len(all_sales),
             "cogs": total_cogs,
             "staffSalaries": total_staff,
             "shortTermOutputs": total_short,
@@ -449,6 +507,60 @@ def get_financial_overview(
     }
     set_analytics_cache(cache_key, res)
     return res
+
+
+@router.get("/workplace/summary")
+def get_workplace_summary(
+    company_id: str = Query(None),
+    branch_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns real summary counts for the workplace hero header:
+    - productsCount: Distinct product catalog count
+    - activeWorkersCount: Active staff members
+    - salesCount: Total sales receipts
+    - debtorsCount: Customers/Sales with pending debt
+    - totalDebtAmount: Outstanding receivable total
+    """
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    prod_q = db.query(func.count(models.Product.id))
+    if target_company:
+        prod_q = prod_q.filter(models.Product.company_id == target_company)
+    products_count = prod_q.scalar() or 0
+
+    worker_q = db.query(func.count(models.Worker.id)).filter(models.Worker.status == 1)
+    if target_company:
+        worker_q = worker_q.filter(models.Worker.company_id == target_company)
+    workers_count = worker_q.scalar() or 0
+
+    sales_q = db.query(func.count(models.Sale.id))
+    if target_company:
+        sales_q = sales_q.filter(models.Sale.company_id == target_company)
+    sales_count = sales_q.scalar() or 0
+
+    debtors_q = db.query(func.count(models.Sale.id)).filter(models.Sale.debt_amount > 0)
+    if target_company:
+        debtors_q = debtors_q.filter(models.Sale.company_id == target_company)
+    debtors_count = debtors_q.scalar() or 0
+
+    debt_sum_q = db.query(func.sum(models.Sale.debt_amount))
+    if target_company:
+        debt_sum_q = debt_sum_q.filter(models.Sale.company_id == target_company)
+    total_debt_amount = float(debt_sum_q.scalar() or 0.0)
+
+    return {
+        "code": 0,
+        "data": {
+            "productsCount": products_count,
+            "activeWorkersCount": workers_count,
+            "salesCount": sales_count,
+            "debtorsCount": debtors_count,
+            "totalDebtAmount": round(total_debt_amount, 2)
+        }
+    }
 
 
 @router.get("/analysis/month-summary")
@@ -507,6 +619,8 @@ def get_month_summary(
         "data": {
             "period_month": data["period_month"],
             "revenue": data["revenue"],
+            "totalPaid": data.get("total_paid", 0.0),
+            "totalDebt": data.get("total_debt", 0.0),
             "cogs": data["cogs"],
             "staffSalaries": data["staff_salaries"],
             "shortTermOutputs": data["short_term_outputs"],

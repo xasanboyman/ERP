@@ -21,8 +21,7 @@ import { useI18n } from '@/hooks/web/useI18n'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { CountTo } from '@/components/CountTo'
-import { getCountApi } from '@/api/dashboard/workplace'
-import type { WorkplaceTotal } from '@/api/dashboard/workplace/types'
+import { getWorkplaceSummaryApi, type WorkplaceSummaryData } from '@/api/dashboard/workplace'
 import { getWorkerListApi, WorkerType } from '@/api/worker'
 import { getProductListApi, ProductType } from '@/api/product'
 import { getActivityListApi, ActivityLogType } from '@/api/activity'
@@ -37,17 +36,23 @@ const router = useRouter()
 
 const loading = ref(true)
 
-// Stats counters
-let totalSate = reactive<WorkplaceTotal>({
-  project: 0,
-  access: 0,
-  todo: 0
+// Stats counters - 100% Real Live Database Figures
+const workplaceStats = reactive<WorkplaceSummaryData>({
+  productsCount: 0,
+  activeWorkersCount: 0,
+  salesCount: 0,
+  debtorsCount: 0,
+  totalDebtAmount: 0
 })
 
-const getCount = async () => {
-  const res = await getCountApi().catch(() => {})
-  if (res && res.data) {
-    totalSate = Object.assign(totalSate, res.data)
+const getWorkplaceStats = async () => {
+  try {
+    const res = await getWorkplaceSummaryApi().catch(() => {})
+    if (res && res.data) {
+      Object.assign(workplaceStats, res.data)
+    }
+  } catch (err) {
+    console.error('Failed to get workplace stats:', err)
   }
 }
 
@@ -137,7 +142,7 @@ const getActivityLog = async () => {
 
 const getAllApi = async () => {
   await Promise.all([
-    getCount(),
+    getWorkplaceStats(),
     getActiveWorkers(),
     getTopProducts(),
     getActivityLog(),
@@ -377,28 +382,28 @@ const createFallbackReceiptData = (log: ActivityLogType, checkNum: string) => {
                 <CountTo
                   class="stat-value text-blue"
                   :start-val="0"
-                  :end-val="totalSate.project"
-                  :duration="2200"
+                  :end-val="workplaceStats.productsCount"
+                  :duration="2000"
                 />
               </div>
               <ElDivider direction="vertical" class="hero-divider" />
               <div class="hero-stat-item text-right">
-                <div class="stat-title">{{ t('erp.activeTasks') }}</div>
+                <div class="stat-title">{{ t('erp.activeWorkersCount') }}</div>
                 <CountTo
                   class="stat-value text-amber"
                   :start-val="0"
-                  :end-val="totalSate.todo"
-                  :duration="2200"
+                  :end-val="workplaceStats.activeWorkersCount"
+                  :duration="2000"
                 />
               </div>
               <ElDivider direction="vertical" class="hero-divider" />
               <div class="hero-stat-item text-right">
-                <div class="stat-title">{{ t('erp.totalVisits') }}</div>
+                <div class="stat-title">{{ t('erp.totalSalesCount') }}</div>
                 <CountTo
                   class="stat-value text-purple"
                   :start-val="0"
-                  :end-val="totalSate.access"
-                  :duration="2200"
+                  :end-val="workplaceStats.salesCount"
+                  :duration="2000"
                 />
               </div>
             </div>

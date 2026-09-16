@@ -90,9 +90,9 @@ def get_sales_list(
             "customer_name": s.customer_name,
             "customer_phone": s.customer_phone,
             "payment_method": s.payment_method,
-            "total_amount": s.total_amount,
-            "paid_amount": getattr(s, "paid_amount", s.total_amount) or s.total_amount,
-            "debt_amount": getattr(s, "debt_amount", 0.0) or 0.0,
+            "total_amount": float(s.total_amount or 0.0),
+            "paid_amount": float(s.paid_amount if s.paid_amount is not None else (0.0 if s.payment_method == "nasiya" else (s.total_amount or 0.0))),
+            "debt_amount": float(s.debt_amount if s.debt_amount is not None else ((s.total_amount or 0.0) if s.payment_method == "nasiya" else 0.0)),
             "total_items": s.total_items,
             "discount": s.discount,
             "remark": s.remark,
@@ -217,11 +217,11 @@ def create_sale(
 
     final_total = max(0.0, total_amount - (sale_in.discount or 0.0))
 
-    paid = sale_in.paid_amount if (sale_in.paid_amount is not None and sale_in.paid_amount >= 0) else final_total
-    if sale_in.payment_method != "nasiya":
-        paid = final_total
-    else:
+    if sale_in.payment_method == "nasiya":
+        paid = float(sale_in.paid_amount) if (sale_in.paid_amount is not None and sale_in.paid_amount >= 0) else 0.0
         paid = min(paid, final_total)
+    else:
+        paid = final_total
     debt = max(0.0, final_total - paid)
 
     target_branch = getattr(sale_in, 'branch_id', None)

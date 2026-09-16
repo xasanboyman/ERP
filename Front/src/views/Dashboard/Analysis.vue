@@ -70,8 +70,16 @@ const monthDistributionDonutOptions = ref<EChartsOption>({})
 
 // Comparison Mode States
 const comparePreset = ref<'mom' | 'qoq' | 'last30' | 'yoy' | 'custom'>('mom')
-const period1Dates = ref<[string, string]>(['2026-08-01', '2026-08-31'])
-const period2Dates = ref<[string, string]>(['2026-07-01', '2026-07-31'])
+const dNow = new Date()
+const p1StartDef = `${dNow.getFullYear()}-${String(dNow.getMonth() + 1).padStart(2, '0')}-01`
+const p1EndDef = `${dNow.getFullYear()}-${String(dNow.getMonth() + 1).padStart(2, '0')}-${String(dNow.getDate()).padStart(2, '0')}`
+const prevMonthDate = new Date(dNow.getFullYear(), dNow.getMonth() - 1, 1)
+const prevMonthLast = new Date(dNow.getFullYear(), dNow.getMonth(), 0)
+const p2StartDef = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}-01`
+const p2EndDef = `${prevMonthLast.getFullYear()}-${String(prevMonthLast.getMonth() + 1).padStart(2, '0')}-${String(prevMonthLast.getDate()).padStart(2, '0')}`
+
+const period1Dates = ref<[string, string]>([p1StartDef, p1EndDef])
+const period2Dates = ref<[string, string]>([p2StartDef, p2EndDef])
 const period1Label = ref('Period 1')
 const period2Label = ref('Period 2')
 
@@ -130,6 +138,13 @@ const formatDateStr = (d: Date) => {
   return `${y}-${m}-${day}`
 }
 
+const getCurrentMonth = () => {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
 const getLastMonth = () => {
   const d = new Date()
   d.setMonth(d.getMonth() - 1)
@@ -141,7 +156,7 @@ const getLastMonth = () => {
 // ══════════════════════════════════════════════════════════════
 // MONTHLY FINANCIAL CLOSING & SALES TABLE STATE
 // ══════════════════════════════════════════════════════════════
-const closeMonthInput = ref(getLastMonth())
+const closeMonthInput = ref(getCurrentMonth())
 const closeMonthRemark = ref('')
 const closingSubmitting = ref(false)
 const savedSnapshots = ref<MonthlyFinancialSnapshotItem[]>([])
@@ -287,6 +302,8 @@ const closeMonthPreview = computed(() => {
     const s = existingSnapshotForSelectedMonth.value
     return {
       revenue: s.revenue,
+      totalPaid: (s as any).total_paid ?? s.revenue,
+      totalDebt: (s as any).total_debt ?? 0,
       cogs: s.cogs,
       staffSalaries: s.staff_salaries,
       shortTerm: s.short_term_outputs,
@@ -303,6 +320,8 @@ const closeMonthPreview = computed(() => {
     const s = currentMonthSummary.value
     return {
       revenue: s.revenue,
+      totalPaid: (s as any).totalPaid ?? totalMonthlySalesPaid.value,
+      totalDebt: (s as any).totalDebt ?? totalMonthlySalesDebt.value,
       cogs: s.cogs,
       staffSalaries: s.staffSalaries,
       shortTerm: s.shortTermOutputs,
@@ -315,7 +334,9 @@ const closeMonthPreview = computed(() => {
   }
 
   return {
-    revenue: 0,
+    revenue: totalMonthlySalesRevenue.value,
+    totalPaid: totalMonthlySalesPaid.value,
+    totalDebt: totalMonthlySalesDebt.value,
     cogs: 0,
     staffSalaries: 0,
     shortTerm: 0,
@@ -1497,6 +1518,7 @@ const loadAnalyticsData = async () => {
   closingLoading.value = true
   comparisonLoading.value = true
   try {
+    loadRawSales(closeMonthInput.value)
     const res = await getAnalysisBundleApi({
       time_range: timeRange.value,
       month: closeMonthInput.value
@@ -1512,11 +1534,11 @@ const loadAnalyticsData = async () => {
         savedSnapshots.value = snapshots
       }
       if (monthSummary) {
-        monthSummaryData.value = monthSummary
+        currentMonthSummary.value = monthSummary
+        buildArchiveCharts()
       }
       if (comparison) {
-        periodComparisonData.value = comparison
-        buildComparisonChart()
+        applyComparisonData(comparison)
       }
     }
   } catch (err) {
@@ -2002,7 +2024,10 @@ onMounted(() => {
                     >
                       {{ closeMonthPreview.salesCount }} {{ t('erp.dealsCountSuffix') }}
                     </span>
-                    <span class="text-11px text-muted">{{ t('erp.collectedDuringMonth') }}</span>
+                    <span v-if="closeMonthPreview.totalDebt > 0" class="text-11px font-bold text-amber-700 dark:text-amber-300">
+                      Naqd: ${{ Math.round(closeMonthPreview.totalPaid).toLocaleString() }} | Nasiya: ${{ Math.round(closeMonthPreview.totalDebt).toLocaleString() }}
+                    </span>
+                    <span v-else class="text-11px text-muted">{{ t('erp.collectedDuringMonth') }}</span>
                   </div>
                 </div>
               </ElTooltip>
@@ -2115,7 +2140,10 @@ onMounted(() => {
                     <span class="stat-subtag bg-emerald-600 text-white font-bold">
                       {{ t('erp.profitability') }}: {{ closeMonthPreview.margin }}%
                     </span>
-                    <span class="text-11px text-emerald-700 dark:text-emerald-300 font-bold">{{
+                    <span v-if="closeMonthPreview.totalDebt > 0" class="text-11px text-amber-700 dark:text-amber-300 font-bold">
+                      Kassada: ${{ Math.max(0, Math.round(closeMonthPreview.totalPaid - closeMonthPreview.totalExpenses)).toLocaleString() }}
+                    </span>
+                    <span v-else class="text-11px text-emerald-700 dark:text-emerald-300 font-bold">{{
                       t('erp.allExpensesDeducted')
                     }}</span>
                   </div>
@@ -2502,9 +2530,11 @@ onMounted(() => {
                 <span class="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                   ${{
                     formatMoney(
-                      row.paid_amount !== undefined
+                      row.paid_amount !== undefined && row.paid_amount !== null
                         ? row.paid_amount
-                        : row.total_amount || row.total
+                        : row.payment_method === 'nasiya'
+                          ? 0
+                          : row.total_amount || row.total
                     )
                   }}
                 </span>
