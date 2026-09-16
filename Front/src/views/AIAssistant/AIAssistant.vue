@@ -97,7 +97,47 @@
 
         <!-- Chat / Transcript Logs -->
         <div class="panel-body" ref="logsContainer">
-          <div class="welcome-card" v-if="messages.length === 0">
+          <!-- Pro Plan Gatekeeper -->
+          <div v-if="isBasicPlan" class="plan-lock-overlay">
+            <div class="lock-card">
+              <div class="lock-badge">
+                <span class="pro-tag">PRO TARIF</span>
+              </div>
+              <div class="lock-icon text-amber-400">
+                <Icon icon="ep:lightning" :size="40" />
+              </div>
+              <h3 class="lock-title">AI Yordamchi — Faqat PRO Plan Uchun!</h3>
+              <p class="lock-desc">
+                Sizning korxonangiz (<strong>{{ currentCompanyName }}</strong>) hozirda <strong>Basic</strong> tarifida faoliyat yuritmoqda. AI ovozli boshqaruv, avtomatik ombor to'ldirish va intellektual tahlillar faqat <strong>PRO</strong> obunasida mavjud.
+              </p>
+              <div class="lock-perks">
+                <div class="perk-item">
+                  <Icon icon="ep:circle-check-filled" class="text-emerald-400 text-14px" />
+                  <span>Real vaqtda Gemini 2.0 Ovozli Assistent</span>
+                </div>
+                <div class="perk-item">
+                  <Icon icon="ep:circle-check-filled" class="text-emerald-400 text-14px" />
+                  <span>Ovozli buyruq orqali tovar va qoldiq qo'shish</span>
+                </div>
+                <div class="perk-item">
+                  <Icon icon="ep:circle-check-filled" class="text-emerald-400 text-14px" />
+                  <span>Barcha yangi va kelgusi imkoniyatlar birinchi navbatda</span>
+                </div>
+                <div class="perk-item">
+                  <Icon icon="ep:circle-check-filled" class="text-emerald-400 text-14px" />
+                  <span>Avtomatik kassa va moliyaviy prognozlar</span>
+                </div>
+              </div>
+              <el-button v-if="isSuperAdmin" type="primary" class="upgrade-action-btn" @click="goToUpgrade">
+                Kompaniya tarifini PRO ga ko'tarish
+              </el-button>
+              <p v-else class="lock-contact">
+                Tarifni oshirish va AI funksiyalarini faollashtirish uchun tizim administratoriga murojaat qiling.
+              </p>
+            </div>
+          </div>
+
+          <div class="welcome-card" v-else-if="messages.length === 0">
             <div class="welcome-icon"><Icon icon="ep:magic-stick" style="font-size: 32px" /></div>
             <h3>Qanday yordam bera olaman?</h3>
             <p>
@@ -200,8 +240,10 @@
           <!-- Connect / Mic Toggle -->
           <button
             class="action-voice-btn"
-            :class="{ 'is-active': clientStatus === 'connected' }"
+            :class="{ 'is-active': clientStatus === 'connected', 'is-disabled': isBasicPlan }"
+            :disabled="isBasicPlan"
             @click="toggleVoiceConnection"
+            :title="isBasicPlan ? 'Faqat PRO tarifda mavjud' : ''"
           >
             <span class="btn-icon">
               <svg
@@ -228,7 +270,7 @@
               </svg>
             </span>
             <span class="btn-text">
-              {{ clientStatus === 'connected' ? "Ovozni o'chirish" : 'Ovozli rejim' }}
+              {{ isBasicPlan ? 'Faqat PRO' : clientStatus === 'connected' ? "Ovozni o'chirish" : 'Ovozli rejim' }}
             </span>
           </button>
 
@@ -236,12 +278,13 @@
           <div class="text-input-box">
             <el-input
               v-model="textCommand"
-              placeholder="Savol yoki buyruq yozing..."
+              :placeholder="isBasicPlan ? 'AI ovozli va matnli rejim faqat PRO tarifida...' : 'Savol yoki buyruq yozing...'"
+              :disabled="isBasicPlan"
               clearable
               @keyup.enter="handleTextSubmit"
             >
               <template #append>
-                <el-button @click="handleTextSubmit" :disabled="isThinking">
+                <el-button @click="handleTextSubmit" :disabled="isThinking || isBasicPlan">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
@@ -263,14 +306,19 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '@/store/modules/user'
 import { AIVoiceClient } from './AIVoiceClient'
 import { dispatchAIFunction } from './aiDispatcher'
 import { getDebtorsApi, getSalesListApi } from '@/api/sales'
 import { getProductListApi } from '@/api/product'
 import { getWorkerListApi } from '@/api/worker'
 import request from '@/axios'
-import { ElButton, ElInput } from 'element-plus'
+import { ElButton, ElInput, ElMessage } from 'element-plus'
 import { Icon } from '@/components/Icon'
+
+const router = useRouter()
+const userStore = useUserStore()
 
 const isOpen = ref(false)
 const clientStatus = ref<'disconnected' | 'connecting' | 'connected'>('disconnected')
@@ -279,6 +327,26 @@ const isThinking = ref(false)
 const messages = ref<{ role: 'user' | 'model' | 'api'; text: string; requests?: string[] }[]>([])
 const waveCanvas = ref<HTMLCanvasElement>()
 const logsContainer = ref<HTMLElement>()
+
+const isSuperAdmin = computed(() => {
+  const u = userStore.getUserInfo
+  return !!(u?.is_super_admin || u?.role?.toLowerCase().includes('super') || u?.username === 'admin')
+})
+
+const isBasicPlan = computed(() => {
+  if (isSuperAdmin.value) return false
+  const plan = userStore.getUserInfo?.company_plan
+  return plan === 'basic'
+})
+
+const currentCompanyName = computed(() => {
+  return userStore.getUserInfo?.company_name || 'Korxona'
+})
+
+const goToUpgrade = () => {
+  isOpen.value = false
+  router.push('/company/management')
+}
 
 const currentFreqData = ref<{
   raw: Uint8Array
@@ -378,6 +446,10 @@ const togglePanel = async () => {
 }
 
 const toggleVoiceConnection = async () => {
+  if (isBasicPlan.value) {
+    ElMessage.warning("AI xususiyatlari faqat PRO tarifida mavjud. Iltimos, tarifingizni PRO ga ko'taring.")
+    return
+  }
   if (clientStatus.value === 'connected') {
     client.disconnect()
   } else {
@@ -390,11 +462,19 @@ const clearMessages = () => {
 }
 
 const sendQuickChip = (promptText: string) => {
+  if (isBasicPlan.value) {
+    ElMessage.warning("AI xususiyatlari faqat PRO tarifida mavjud.")
+    return
+  }
   textCommand.value = promptText
   handleTextSubmit()
 }
 
 const handleTextSubmit = async () => {
+  if (isBasicPlan.value) {
+    ElMessage.warning("AI xususiyatlari faqat PRO tarifida mavjud. Iltimos, tarifingizni PRO ga ko'taring.")
+    return
+  }
   const query = textCommand.value.trim()
   if (!query) return
 
@@ -1423,6 +1503,125 @@ onUnmounted(() => {
 
 .text-input-box :deep(.el-input__inner::placeholder) {
   color: #64748b !important;
+}
+
+.action-voice-btn.is-disabled {
+  background: #334155 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Plan Lock Overlay */
+.plan-lock-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.lock-card {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 0 24px rgba(245, 158, 11, 0.15);
+  border-radius: 18px;
+  padding: 28px 20px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lock-badge {
+  margin-bottom: 12px;
+}
+
+.pro-tag {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+}
+
+.lock-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.6));
+}
+
+.lock-title {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+}
+
+.lock-desc {
+  color: #94a3b8;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+}
+
+.lock-desc strong {
+  color: #f1f5f9;
+}
+
+.lock-perks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+
+.perk-item {
+  font-size: 12px;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upgrade-action-btn {
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  border: none !important;
+  color: #fff !important;
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+  transition: all 0.2s ease;
+}
+
+.upgrade-action-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.lock-contact {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
 }
 
 /* Transition Animations */

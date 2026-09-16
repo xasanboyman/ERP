@@ -476,7 +476,6 @@ export default {
     loginOutMessage: 'Ҳақиқатан ҳам тизимдан чиқмоқчимисиз?',
     back: 'Орқага',
     ok: 'Тасдиқлаш',
-    cancel: 'Бекор қилиш',
     reload: 'Янгилаш',
     closeTab: 'Ёпиш',
     closeTheLeftTab: 'Чапдаги барча варақларни ёпиш',
@@ -492,7 +491,6 @@ export default {
     tagsView: 'Саҳифа варақлари',
     tool: 'Асбоблар',
     query: 'Қидириш',
-    reset: 'Тозалаш',
     shrink: 'Торайтириш',
     expand: 'Кенгайтириш',
     delMessage: "Ҳақиқатан ҳам танланган ма'лумотларни ўчирмоқчимисиз?",
@@ -1003,6 +1001,7 @@ export default {
     sales: 'Сотувлар',
     pos: 'Сотув Терминали (POS)',
     debtors: 'Қарздорлик (Насия)',
+    companyManagement: 'Компаниялар Бошқаруви',
     mobileScanner: 'Мобил Сканер'
   },
 

@@ -614,6 +614,7 @@ export default {
     sales: 'Sales',
     pos: 'Sales Terminal (POS)',
     debtors: 'Debtors & Credits',
+    companyManagement: 'Company Management',
     mobileScanner: 'Mobile Scanner',
     // 权限测试页面
     permission: 'Permission test page',

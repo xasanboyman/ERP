@@ -169,14 +169,16 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
         : undefined,
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:8000',
+          target: 'https://xn--dr8haa.uz/oracle/erp-api',
           changeOrigin: true,
+          secure: false,
           ws: true,
           rewrite: (path) => path.replace(/^\/api/, '')
         },
         '/uploads': {
-          target: 'http://127.0.0.1:8000',
-          changeOrigin: true
+          target: 'https://xn--dr8haa.uz/oracle/erp-api',
+          changeOrigin: true,
+          secure: false
         }
       },
       hmr: {

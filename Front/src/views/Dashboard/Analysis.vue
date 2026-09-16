@@ -826,12 +826,14 @@ const applyComparisonData = (compData: any) => {
   const p2Staff = Number(period2.staff_salaries ?? period2.staffSalaries) || 0
   const p1Short = Number(period1.short_term_outputs ?? period1.shortTermOutputs) || 0
   const p2Short = Number(period2.short_term_outputs ?? period2.shortTermOutputs) || 0
-  const p1Payroll = Number(period1.total_payroll ?? period1.totalPayroll) || (p1Staff + p1Short)
-  const p2Payroll = Number(period2.total_payroll ?? period2.totalPayroll) || (p2Staff + p2Short)
-  const p1Profit = Number(period1.net_profit ?? period1.netProfit) || (p1Rev - p1Cogs - p1Payroll)
-  const p2Profit = Number(period2.net_profit ?? period2.netProfit) || (p2Rev - p2Cogs - p2Payroll)
-  const p1Margin = Number(period1.profit_margin ?? period1.margin) || (p1Rev > 0 ? (p1Profit / p1Rev) * 100 : 0)
-  const p2Margin = Number(period2.profit_margin ?? period2.margin) || (p2Rev > 0 ? (p2Profit / p2Rev) * 100 : 0)
+  const p1Payroll = Number(period1.total_payroll ?? period1.totalPayroll) || p1Staff + p1Short
+  const p2Payroll = Number(period2.total_payroll ?? period2.totalPayroll) || p2Staff + p2Short
+  const p1Profit = Number(period1.net_profit ?? period1.netProfit) || p1Rev - p1Cogs - p1Payroll
+  const p2Profit = Number(period2.net_profit ?? period2.netProfit) || p2Rev - p2Cogs - p2Payroll
+  const p1Margin =
+    Number(period1.profit_margin ?? period1.margin) || (p1Rev > 0 ? (p1Profit / p1Rev) * 100 : 0)
+  const p2Margin =
+    Number(period2.profit_margin ?? period2.margin) || (p2Rev > 0 ? (p2Profit / p2Rev) * 100 : 0)
 
   const calcGrowth = (p1Val: number, p2Val: number) => {
     if (p2Val === 0) return p1Val === 0 ? 0 : 100
@@ -911,8 +913,7 @@ const applyComparisonData = (compData: any) => {
       growth: deltas.staffGrowth,
       status: 'neutral',
       desc: 'Доимий штатдаги ходимларнинг белгиланган тариф ойликлари',
-      tooltip:
-        'Ҳар ой ходимларга тўланадиган қатъий белгиланган асосий ойлик маошлар йиғиндиси.'
+      tooltip: 'Ҳар ой ходимларга тўланадиган қатъий белгиланган асосий ойлик маошлар йиғиндиси.'
     },
     {
       metric: 'Қисқа Муддатли Ишчилар (Piece-rate / Выработка)',
@@ -922,8 +923,7 @@ const applyComparisonData = (compData: any) => {
       growth: deltas.shortGrowth,
       status: 'neutral',
       desc: 'Ҳосил ёки бажарилган иш ҳажми бўйича тўланган иш ҳақи',
-      tooltip:
-        'Вақтинча ёки донабай (выработка) ишчилар бажарган ҳажмларига қараб олган тўловлар.'
+      tooltip: 'Вақтинча ёки донабай (выработка) ишчилар бажарган ҳажмларига қараб олган тўловлар.'
     },
     {
       metric: 'Жами Иш Ҳақи Харажатлари (Total Payroll)',
@@ -933,8 +933,7 @@ const applyComparisonData = (compData: any) => {
       growth: deltas.payrollGrowth,
       status: deltas.payrollGrowth <= 0 ? 'positive' : 'negative',
       desc: 'Компаниянинг барча ойлик тўловлари йиғиндиси',
-      tooltip:
-        'Доимий ойликлар ва қўшимча иш ҳажми учун тўланган барча меҳнат харажатлари суммаси.'
+      tooltip: 'Доимий ойликлар ва қўшимча иш ҳажми учун тўланган барча меҳнат харажатлари суммаси.'
     },
     {
       metric: `${t('erp.realNetProfit')} (Real Net Profit)`,
@@ -962,7 +961,6 @@ const applyComparisonData = (compData: any) => {
 
   buildComparisonChartOptions()
 }
-
 
 const buildComparisonChartOptions = () => {
   const dark = isDark.value
@@ -1950,8 +1948,19 @@ onMounted(() => {
       <ElSkeleton :loading="closingLoading" animated>
         <template #template>
           <ElRow :gutter="16" class="mb-24px">
-            <ElCol v-for="i in 4" :key="i" :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-              <div class="grand-stat-card glass-panel p-20px h-[134px] flex flex-col justify-between">
+            <ElCol
+              v-for="i in 4"
+              :key="i"
+              :xl="6"
+              :lg="6"
+              :md="12"
+              :sm="12"
+              :xs="24"
+              class="mb-14px"
+            >
+              <div
+                class="grand-stat-card glass-panel p-20px h-[134px] flex flex-col justify-between"
+              >
                 <ElSkeletonItem variant="text" style="width: 45%; height: 16px" />
                 <ElSkeletonItem variant="h1" style="width: 65%; height: 32px" />
                 <div class="flex justify-between items-center">
@@ -2003,7 +2012,11 @@ onMounted(() => {
                     <div>
                       <span class="stat-subtitle">{{ t('analysis.cogsUpper') }}</span>
                       <div class="stat-value text-amber-600 dark:text-amber-400">
-                        $<CountTo :start-val="0" :end-val="closeMonthPreview.cogs" :duration="1200" />
+                        $<CountTo
+                          :start-val="0"
+                          :end-val="closeMonthPreview.cogs"
+                          :duration="1200"
+                        />
                       </div>
                     </div>
                     <div class="stat-icon-wrap bg-amber-500/10 text-amber-600 dark:text-amber-400">
@@ -2018,7 +2031,9 @@ onMounted(() => {
                         t('analysis.revenueShare', {
                           percent:
                             closeMonthPreview.revenue > 0
-                              ? Math.round((closeMonthPreview.cogs / closeMonthPreview.revenue) * 100)
+                              ? Math.round(
+                                  (closeMonthPreview.cogs / closeMonthPreview.revenue) * 100
+                                )
                               : 62
                         })
                       }}
@@ -2044,7 +2059,9 @@ onMounted(() => {
                         />
                       </div>
                     </div>
-                    <div class="stat-icon-wrap bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                    <div
+                      class="stat-icon-wrap bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                    >
                       <Icon icon="ep:user-filled" class="text-22px" />
                     </div>
                   </div>
@@ -2172,7 +2189,8 @@ onMounted(() => {
                     </div>
                     <div class="legend-pill-item bg-emerald-500/10 rounded-6px px-4px">
                       <span class="dot bg-emerald-500"></span>
-                      <span class="text-11px text-emerald-700 dark:text-emerald-300 font-bold truncate"
+                      <span
+                        class="text-11px text-emerald-700 dark:text-emerald-300 font-bold truncate"
                         >{{ t('erp.realNetProfit') }}:</span
                       >
                       <span class="font-mono text-12px font-extrabold text-emerald-600 ml-auto"
@@ -2944,8 +2962,19 @@ onMounted(() => {
       <ElSkeleton :loading="comparisonLoading" animated>
         <template #template>
           <ElRow :gutter="16" class="mb-20px">
-            <ElCol v-for="i in 4" :key="i" :xl="6" :lg="6" :md="12" :sm="12" :xs="24" class="mb-14px">
-              <div class="compare-kpi-card glass-panel p-20px h-[120px] flex flex-col justify-between">
+            <ElCol
+              v-for="i in 4"
+              :key="i"
+              :xl="6"
+              :lg="6"
+              :md="12"
+              :sm="12"
+              :xs="24"
+              class="mb-14px"
+            >
+              <div
+                class="compare-kpi-card glass-panel p-20px h-[120px] flex flex-col justify-between"
+              >
                 <ElSkeletonItem variant="text" style="width: 50%; height: 16px" />
                 <ElSkeletonItem variant="h1" style="width: 65%; height: 28px" />
                 <div class="flex justify-between items-center">
@@ -3005,7 +3034,8 @@ onMounted(() => {
                         :icon="comparisonData.cogsGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
                         class="mr-2px"
                       />
-                      {{ comparisonData.cogsGrowth >= 0 ? '+' : '' }}{{ comparisonData.cogsGrowth }}%
+                      {{ comparisonData.cogsGrowth >= 0 ? '+' : ''
+                      }}{{ comparisonData.cogsGrowth }}%
                     </span>
                     <span class="text-11px text-muted"
                       >{{ t('analysis.period1') }}:
@@ -3031,7 +3061,9 @@ onMounted(() => {
                       :class="comparisonData.payrollGrowth <= 0 ? 'tag-green' : 'tag-red'"
                     >
                       <Icon
-                        :icon="comparisonData.payrollGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
+                        :icon="
+                          comparisonData.payrollGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'
+                        "
                         class="mr-2px"
                       />
                       {{ comparisonData.payrollGrowth >= 0 ? '+' : ''
@@ -3063,7 +3095,9 @@ onMounted(() => {
                       :class="comparisonData.profitGrowth >= 0 ? 'tag-green' : 'tag-red'"
                     >
                       <Icon
-                        :icon="comparisonData.profitGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'"
+                        :icon="
+                          comparisonData.profitGrowth >= 0 ? 'ep:caret-top' : 'ep:caret-bottom'
+                        "
                         class="mr-2px"
                       />
                       {{ comparisonData.profitGrowth >= 0 ? '+' : ''

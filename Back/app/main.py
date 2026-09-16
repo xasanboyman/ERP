@@ -4,8 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
-from .database import engine, Base
-from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, cutting, qr, staff_hr, ai, classifier, sales, device, ws
+from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, cutting, qr, staff_hr, ai, classifier, sales, device, ws, company
 
 import datetime
 import os
@@ -144,6 +143,7 @@ all_routers = [
     (sales.router, ["Sales & POS Terminal"]),
     (device.router, ["Device Management"]),
     (ws.router, ["Real-Time WebSockets"]),
+    (company.router, ["Company Management"]),
 ]
 
 for router_obj, router_tags in all_routers:

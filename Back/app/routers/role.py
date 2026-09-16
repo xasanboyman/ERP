@@ -4,17 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 
-SECRET_KEY = "super-secret-key-that-is-hard-to-guess"
-ALGORITHM = "HS256"
-
-def decode_access_token(token: str):
-    try:
-        if token.startswith("Bearer "):
-            token = token[7:]
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except jwt.PyJWTError:
-        return None
+from app.auth import decode_access_token
 
 def get_current_user_from_header(authorization: str = Header(None), db: Session = Depends(get_db)):
     if not authorization:
@@ -113,10 +103,8 @@ DEFAULT_ADMIN_ROUTES = [
             }
         ]
     },
-
     {
         "path": "/hr",
-
         "component": "#",
         "redirect": "/hr/workers",
         "name": "HRRoot",
@@ -205,6 +193,30 @@ DEFAULT_ADMIN_ROUTES = [
         ]
     }
 ]
+
+COMPANY_MANAGEMENT_ROUTE = {
+    "path": "/company",
+    "component": "#",
+    "redirect": "/company/list",
+    "name": "CompanyRoot",
+    "meta": {
+        "title": "router.companyManagement",
+        "icon": "vi-ep:office-building",
+        "alwaysShow": True
+    },
+    "children": [
+        {
+            "path": "list",
+            "component": "views/Company/CompanyManagement",
+            "name": "CompanyManagement",
+            "meta": {
+                "title": "router.companyManagement",
+                "icon": "vi-ep:office-building",
+                "noCache": True
+            }
+        }
+    ]
+}
 
 
 # For student portal, restrict access to student portal routes only
@@ -307,125 +319,220 @@ MODULE_ACTION_MAP = {
     "/authorization/role": ["role:manage", "role"]
 }
 
+COMPANY_USER_ROUTES = [
+    {
+        "path": "/dashboard",
+        "component": "#",
+        "redirect": "/dashboard/analysis",
+        "name": "Dashboard",
+        "meta": {
+            "title": "router.dashboard",
+            "icon": "vi-ant-design:dashboard-filled",
+            "alwaysShow": True
+        },
+        "children": [
+            {
+                "path": "analysis",
+                "component": "views/Dashboard/Analysis",
+                "name": "Analysis",
+                "meta": {
+                    "title": "router.analysis",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "workplace",
+                "component": "views/Dashboard/Workplace",
+                "name": "Workplace",
+                "meta": {
+                    "title": "router.workplace",
+                    "noCache": True
+                }
+            }
+        ]
+    },
+    {
+        "path": "/product",
+        "component": "#",
+        "redirect": "/product/list",
+        "name": "ProductRoot",
+        "meta": {
+            "title": "router.product",
+            "icon": "vi-ep:goods",
+            "alwaysShow": True
+        },
+        "children": [
+            {
+                "path": "list",
+                "component": "views/Product/Product",
+                "name": "ProductManagement",
+                "meta": {
+                    "title": "router.product",
+                    "noCache": True
+                }
+            }
+        ]
+    },
+    {
+        "path": "/sales",
+        "component": "#",
+        "redirect": "/sales/pos",
+        "name": "SalesRoot",
+        "meta": {
+            "title": "router.sales",
+            "icon": "vi-ep:shopping-cart-full",
+            "alwaysShow": True
+        },
+        "children": [
+            {
+                "path": "pos",
+                "component": "views/Sales/Pos",
+                "name": "SalesPos",
+                "meta": {
+                    "title": "router.pos",
+                    "icon": "vi-ep:sell",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "debtors",
+                "component": "views/Sales/Debtors",
+                "name": "SalesDebtors",
+                "meta": {
+                    "title": "router.debtors",
+                    "icon": "vi-ep:credit-card",
+                    "noCache": True
+                }
+            }
+        ]
+    },
+    {
+        "path": "/hr",
+        "component": "#",
+        "redirect": "/hr/workers",
+        "name": "HRRoot",
+        "meta": {
+            "title": "router.worker",
+            "icon": "vi-ep:avatar",
+            "alwaysShow": True
+        },
+        "children": [
+            {
+                "path": "workers",
+                "component": "views/Worker/Worker",
+                "name": "WorkerManagement",
+                "meta": {
+                    "title": "router.worker",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "timesheets",
+                "component": "views/StaffHR/Timesheet",
+                "name": "TimesheetManagement",
+                "meta": {
+                    "title": "router.timesheet",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "outputs",
+                "component": "views/StaffHR/Output",
+                "name": "OutputManagement",
+                "meta": {
+                    "title": "router.output",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "adjustments",
+                "component": "views/StaffHR/Adjustment",
+                "name": "AdjustmentManagement",
+                "meta": {
+                    "title": "Korrektirovka (Bonus/Shtraf)",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "salary",
+                "component": "views/Salary/Salary",
+                "name": "SalaryManagement",
+                "meta": {
+                    "title": "Ish haqi",
+                    "noCache": True
+                }
+            }
+        ]
+    },
+    {
+        "path": "/authorization",
+        "component": "#",
+        "redirect": "/authorization/department",
+        "name": "Authorization",
+        "meta": {
+            "title": "router.authorization",
+            "icon": "vi-eos-icons:role-binding",
+            "alwaysShow": True
+        },
+        "children": [
+            {
+                "path": "department",
+                "component": "views/Authorization/Department/Department",
+                "name": "Department",
+                "meta": {
+                    "title": "router.department",
+                    "noCache": True
+                }
+            },
+            {
+                "path": "role",
+                "component": "views/Authorization/Role/Role",
+                "name": "Role",
+                "meta": {
+                    "title": "Rollar",
+                    "noCache": True
+                }
+            }
+        ]
+    }
+]
+
 @router.get("/role/list")
 def get_role_menu_list(
-    roleName: str = Query("admin"),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    user = db.query(models.User).filter(models.User.username == roleName).first()
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+
+    user = get_current_user_from_header(authorization, db)
     if not user:
-        worker = db.query(models.Worker).filter(
-            (models.Worker.account == roleName) |
-            (models.Worker.name == roleName) |
-            (models.Worker.employee_code == roleName)
-        ).first()
-        if worker:
-            user = db.query(models.User).filter(
-                (models.User.username == worker.account) |
-                (models.User.full_name == worker.name)
-            ).first()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
 
-    if not user:
-        return {"code": 0, "data": []}
-
-    db_role = None
-    if user.roleId:
-        db_role = db.query(models.Role).filter(models.Role.id == str(user.roleId)).first()
-    if not db_role and user.role:
-        db_role = db.query(models.Role).filter(
-            (models.Role.roleName.ilike(user.role)) |
-            (models.Role.id == str(user.role))
-        ).first()
-
-    is_super_admin = (user.role and user.role.lower() in ["super administrator", "superadmin", "admin"])
-    if not is_super_admin and db_role and db_role.permissions:
-        role_perms = db_role.permissions if isinstance(db_role.permissions, list) else []
-        for p in role_perms:
-            if isinstance(p, str) and p in ['*.*.*', '*']:
-                is_super_admin = True
-                break
+    comp_id = getattr(user, "company_id", None) or "comp-default"
+    is_super_admin = False
+    if user.username in ["admin", "anvars"]:
+        is_super_admin = True
+    elif comp_id == "comp-default":
+        role_str = (user.role or "").lower()
+        if "super" in role_str or getattr(user, "is_super_admin", False) is True:
+            is_super_admin = True
 
     if is_super_admin:
-        return {"code": 0, "data": DEFAULT_ADMIN_ROUTES}
+        routes = list(DEFAULT_ADMIN_ROUTES)
+        routes.insert(1, COMPANY_MANAGEMENT_ROUTE)
+        return {"code": 0, "data": routes}
 
-    raw_permissions = []
-    if db_role and db_role.permissions:
-        raw_permissions = db_role.permissions
-    elif user.permissions:
-        raw_permissions = user.permissions
-
-    if isinstance(raw_permissions, str):
-        try:
-            import json
-            raw_permissions = json.loads(raw_permissions)
-        except Exception:
-            raw_permissions = [raw_permissions]
-
-    if "*.*.*" in raw_permissions and is_super_admin:
-        return {"code": 0, "data": DEFAULT_ADMIN_ROUTES}
-
-    perm_set = set()
-    for p in raw_permissions:
-        if isinstance(p, str):
-            perm_set.add(p.lower())
-        elif isinstance(p, dict):
-            if "path" in p:
-                perm_set.add(p["path"].lower())
-            if "children" in p and isinstance(p["children"], list):
-                for c in p["children"]:
-                    if isinstance(c, dict) and "path" in c:
-                        perm_set.add(c["path"].lower())
-                    elif isinstance(c, str):
-                        perm_set.add(c.lower())
-
-    filtered_routes = []
-    for route in DEFAULT_ADMIN_ROUTES:
-        r_path = route["path"].lower()
-        r_clean = r_path.replace("/", "")
-
-        filtered_children = []
-        if "children" in route:
-            for child in route["children"]:
-                c_path = child["path"].lower()
-                full_path = f"{r_path}/{c_path}".lower()
-                r_clean_child = f"{r_clean}:{c_path}"
-
-                action_triggers = MODULE_ACTION_MAP.get(full_path, [c_path, full_path, r_clean_child])
-
-                allowed = (
-                    full_path in perm_set or
-                    r_clean_child in perm_set or
-                    r_path in perm_set or
-                    any(act in perm_set for act in action_triggers) or
-                    any(
-                        p == full_path or
-                        p == f"/{c_path}" or
-                        p == r_clean_child or
-                        p.endswith(f":{c_path}") or
-                        p.endswith(f"/{c_path}")
-                        for p in perm_set if isinstance(p, str)
-                    )
-                )
-                if allowed:
-                    filtered_children.append(child)
-
-        parent_explicit = r_path in perm_set or r_clean in perm_set
-        if filtered_children or parent_explicit:
-            new_route = dict(route)
-            if "children" in route:
-                new_route["children"] = filtered_children
-                if filtered_children:
-                    first_child = filtered_children[0]["path"]
-                    new_route["redirect"] = f"{r_path}/{first_child}".replace("//", "/")
-            
-            if "children" not in route or len(new_route.get("children", [])) > 0:
-                filtered_routes.append(new_route)
-
-    return {
-        "code": 0,
-        "data": filtered_routes
-    }
+    # For Company Admins and Company Users (e.g. idk, delta_admin, test):
+    # Returns the standard operational ERP modules (Dashboard, Product, Sales, HR)
+    # Strictly omitting /company route.
+    return {"code": 0, "data": COMPANY_USER_ROUTES}
 
 @router.get("/role/list2")
 def get_role_list2(roleName: str = Query("admin")):
@@ -442,14 +549,21 @@ def get_role_list2(roleName: str = Query("admin")):
 
 
 @router.get("/role/table")
-def get_roles_table(db: Session = Depends(get_db)):
-    roles = crud.get_roles(db)
+def get_roles_table(
+    authorization: str = Header(None),
+    company_id: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    from app.auth import get_user_company_id
+    target_company = get_user_company_id(authorization, db, company_id)
+    roles = crud.get_roles(db, company_id=target_company)
     return {
         "code": 0,
         "data": {
             "list": [
                 {
                     "id": r.id,
+                    "company_id": getattr(r, "company_id", "comp-default"),
                     "roleName": r.roleName,
                     "status": r.status,
                     "remark": r.remark,
@@ -816,20 +930,33 @@ def get_menu_list():
     }
 
 @router.post("/role/save")
-def role_save(role_in: schemas.RoleCreate, db: Session = Depends(get_db)):
-    r = crud.create_role(db, role_in)
-    # Sync ALL users with this role
-    users_with_role = db.query(models.User).filter(
+def role_save(
+    role_in: schemas.RoleCreate,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.auth import get_user_company_id, get_current_user_optional
+    target_company = get_user_company_id(authorization, db, getattr(role_in, "company_id", None))
+    current_user = get_current_user_optional(authorization, db)
+    r = crud.create_role(db, role_in, company_id=target_company)
+
+    # Sync users in target_company with this role
+    user_query = db.query(models.User).filter(
         (models.User.roleId == r.id) | (models.User.role.ilike(r.roleName))
-    ).all()
+    )
+    if target_company and target_company != "comp-default":
+        user_query = user_query.filter(models.User.company_id == target_company)
+    users_with_role = user_query.all()
     for u in users_with_role:
         u.permissions = r.permissions or []
         u.role = r.roleName
         u.roleId = r.id
-    # Also sync workers
-    workers_with_role = db.query(models.Worker).filter(
-        models.Worker.role.ilike(r.roleName)
-    ).all()
+
+    # Also sync workers in target_company
+    worker_query = db.query(models.Worker).filter(models.Worker.role.ilike(r.roleName))
+    if target_company and target_company != "comp-default":
+        worker_query = worker_query.filter(models.Worker.company_id == target_company)
+    workers_with_role = worker_query.all()
     for w in workers_with_role:
         w.role = r.roleName
     db.commit()
@@ -837,33 +964,51 @@ def role_save(role_in: schemas.RoleCreate, db: Session = Depends(get_db)):
     from app.routers.activity import log_activity
     log_activity(
         db=db,
-        actor="admin",
+        actor=current_user.username if current_user else "admin",
         action="saved",
         entity="role",
         entity_id=r.id,
-        entity_name=r.roleName
+        entity_name=r.roleName,
+        company_id=target_company
     )
 
     return {"code": 0, "data": r.id}
 
 @router.post("/role/delete")
-def role_delete(body: dict = Body(...), db: Session = Depends(get_db)):
+def role_delete(
+    body: dict = Body(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.auth import get_user_company_id, get_current_user_optional
+    target_company = get_user_company_id(authorization, db)
+    current_user = get_current_user_optional(authorization, db)
     role_id = body.get("id")
     if not role_id:
         return {"code": 500, "message": "ID is required"}
+
     role = db.query(models.Role).filter(models.Role.id == str(role_id)).first()
-    if role:
-        role_name = role.roleName
-        db.delete(role)
-        db.commit()
-        from app.routers.activity import log_activity
-        log_activity(
-            db=db,
-            actor="admin",
-            action="deleted",
-            entity="role",
-            entity_id=str(role_id),
-            entity_name=role_name
-        )
-        return {"code": 0, "data": True}
-    return {"code": 500, "message": "Role not found"}
+    if not role:
+        return {"code": 500, "message": "Role not found"}
+
+    # Base system roles cannot be deleted
+    if str(role.id) in ["1", "2", "3"] or (role.company_id == "comp-default" and target_company != "comp-default"):
+        return {"code": 403, "message": "Tizim asosiy rollarini o'chirib bo'lmaydi!"}
+
+    if target_company and target_company != "comp-default" and role.company_id != target_company:
+        return {"code": 403, "message": "Siz faqat o'z tashkilotingiz rollarini o'chira olasiz!"}
+
+    role_name = role.roleName
+    db.delete(role)
+    db.commit()
+    from app.routers.activity import log_activity
+    log_activity(
+        db=db,
+        actor=current_user.username if current_user else "admin",
+        action="deleted",
+        entity="role",
+        entity_id=str(role_id),
+        entity_name=role_name,
+        company_id=target_company
+    )
+    return {"code": 0, "data": True}

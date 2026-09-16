@@ -41,7 +41,15 @@ else:
             db_url = db_url.replace("postgresql+pg8000://", "postgresql://", 1)
         if "sslmode=" not in db_url:
             separator = "&" if "?" in db_url else "?"
-            db_url = f"{db_url}{separator}sslmode=require"
+            if "127.0.0.1" in db_url or "localhost" in db_url:
+                db_url = f"{db_url}{separator}sslmode=disable"
+            else:
+                db_url = f"{db_url}{separator}sslmode=require"
+        connect_args["connect_timeout"] = 10
+        connect_args["keepalives"] = 1
+        connect_args["keepalives_idle"] = 30
+        connect_args["keepalives_interval"] = 10
+        connect_args["keepalives_count"] = 5
     else:
         # Fallback to pure Python pg8000 driver for serverless environments
         if db_url.startswith("postgres://"):
@@ -57,11 +65,11 @@ else:
 engine_kwargs = {
     "connect_args": connect_args,
     "pool_pre_ping": True,
-    "pool_recycle": 300,
+    "pool_recycle": 1800,
 }
 if not is_sqlite:
-    engine_kwargs["pool_size"] = 15
-    engine_kwargs["max_overflow"] = 25
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
 
 engine = create_engine(db_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

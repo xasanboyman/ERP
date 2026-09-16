@@ -1,63 +1,76 @@
-# BRIEFING — 2026-08-09T10:16:30Z
+# BRIEFING — 2026-09-15T17:50:00Z
 
 ## Mission
-Implement Mobile QR/Barcode scanning system for ERP with connected device token management in Personal Center, dual-mode sales (Mobile POS vs PC POS Push with Accept/Decline alert), and full transaction capabilities.
+Harden, complete, and verify the multi-tenant ERP system at /home/xasanboy/ERP with full company data isolation, Super Admin control over company accounts, Oracle VPS backend synchronization, modern zero-emoji UI, and comprehensive automated testing.
 
 ## 🔒 My Identity
-- Archetype: Project Orchestrator
+- Archetype: orchestrator
 - Roles: orchestrator, user_liaison, human_reporter, successor
 - Working directory: /home/xasanboy/ERP/.agents/orchestrator
-- Original parent: main agent
-- Original parent conversation ID: 53559177-113a-44d3-8f42-12de356ddc80
+- Original parent: Sentinel
+- Original parent conversation ID: 86e5600b-6d24-472e-a5fa-abf70e9ac548
 
 ## 🔒 My Workflow
-- **Pattern**: Project Pattern
+- **Pattern**: Project Orchestration Pattern (Dual Track: Implementation Track + E2E Testing Track)
 - **Scope document**: /home/xasanboy/ERP/PROJECT.md
-1. **Decompose**: Split system into core milestones:
-   - Milestone 1: E2E Test Track (Infrastructure & Test Cases for R1, R2, R3)
-   - Milestone 2: Backend Device Token Management & Verification API (R1) [DONE]
-   - Milestone 3: Frontend Personal Center Connected Devices Section (R1) [IN_PROGRESS]
-   - Milestone 4: Backend Real-Time Notification & Sales Handover API (R2/R3) [IN_PROGRESS]
-   - Milestone 5: Frontend Mobile Dual Sales Mode & PC POS Handover Modal (R2/R3)
-   - Milestone 6: E2E Verification & Hardening (All Tests & Forensic Audit)
-2. **Dispatch & Execute**:
-   - Decompose & delegate or run Explorer -> Worker -> Reviewer -> Challenger -> Auditor loop per milestone
-3. **On failure**: Retry -> Replace -> Skip -> Redistribute -> Redesign
-4. **Succession**: Spawn count threshold: 16
+1. **Survey**: Spawn 3 Explorers in parallel to survey full codebase, existing state, APIs, and frontend.
+2. **Decompose & Plan**: Synthesize survey reports into PROJECT.md with Architecture, Feature Inventory, Milestones, and Interface Contracts.
+3. **Dispatch & Execute**:
+   - Implementation Track: Sequential milestones (M1 Data Isolation & Route Security, M2 Super Admin Management, M3 Modern UI & Zero-Emoji, M4 Oracle VPS Sync & Prod Parity, M5 Full E2E Test Pass).
+   - E2E Testing Track: Parallel track creating comprehensive opaque-box automated test suite (Tiers 1-4) publishing TEST_READY.md.
+4. **On failure**: Retry -> Replace -> Skip (non-critical) -> Redistribute -> Redesign. Forensic Auditor verdict is a non-negotiable binary veto.
+5. **Succession**: Spawn successor if spawn count reaches 16.
+- **Milestones**:
+  - M0: Initial Survey & System Mapping [in-progress]
+  - M1: Multi-Tenancy Hardening & Data Isolation [planned]
+  - M2: Super Admin Account & Subscription Management [planned]
+  - M3: Modern UI Standards & Zero-Emoji Enforcement [planned]
+  - M4: Oracle VPS Backend Synchronization & Deployment [planned]
+  - M5: Full E2E Test Suite Pass & Adversarial Hardening [planned]
+- **Current phase**: 0 (Survey)
+- **Current focus**: Comprehensive survey across Backend, Frontend, and Oracle VPS deployment
 
 ## 🔒 Key Constraints
-- Never reuse a subagent after it has delivered its handoff — always spawn fresh
-- All implementations must be genuine — no hardcoded test outputs
-- Forensic auditor veto is non-negotiable
+- NEVER write, modify, or create source code files directly.
+- NEVER run build/test commands yourself — require workers to do so.
+- NEVER investigate or explore the problem at the code level — dispatch Explorers for technical investigation.
+- File-editing tools ONLY for metadata/state files (.md) in .agents/ folder.
+- ZERO TOLERANCE for cheating/dummy facades; Forensic Auditor is mandatory and binary veto.
+- Always include path to ORIGINAL_REQUEST.md in every subagent dispatch.
+- Self-succeed at 16 spawns.
 
 ## Current Parent
-- Conversation ID: 53559177-113a-44d3-8f42-12de356ddc80
-- Updated: 2026-08-09T10:16:30Z
+- Conversation ID: 86e5600b-6d24-472e-a5fa-abf70e9ac548
+- Updated: 2026-09-15T17:45:00Z
 
 ## Key Decisions Made
-- Milestone 2 (Backend Token Auth) completed successfully.
-- Dispatched Milestone 3 (conv ID `3b0e559d-209c-497a-9d57-5b14601efbac`) and Milestone 4 (conv ID `f7a82c7d-b22b-48dd-bf8a-d4e79a3a5684`) in parallel.
+- Established dual-track orchestration: Implementation Track and E2E Testing Track.
+- Dispatched Phase 0 Survey with 3 parallel Explorers: Backend Isolation Explorer, Frontend UI Explorer, and DevOps/VPS Explorer.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| sub_orch_e2e | self | Milestone 1: E2E Testing Track | in-progress | 4cf3a592-f1eb-45f3-b9a6-bc6cd8781d86 |
-| sub_orch_m2 | self | Milestone 2: Backend Device Token Management | completed | 7c16da8c-7a6f-4cd6-aa5e-0fd5434764b9 |
-| sub_orch_m3 | self | Milestone 3: Frontend Personal Center UI | in-progress | 3b0e559d-209c-497a-9d57-5b14601efbac |
-| sub_orch_m4 | self | Milestone 4: Backend Sales Push & Checkout API | in-progress | f7a82c7d-b22b-48dd-bf8a-d4e79a3a5684 |
+| survey_explorer_backend | teamwork_preview_explorer | Survey Backend Isolation & API Routing | in-progress | 90ad0bea-fd04-4088-9629-09187292d51d |
+| survey_explorer_frontend | teamwork_preview_explorer | Survey Frontend Navigation & Zero-Emoji UI | in-progress | 97c44c35-3ab9-409d-8fb1-d1ea8baa9b05 |
+| survey_explorer_devops | teamwork_preview_explorer | Survey Test Harness & Oracle VPS Deployment | in-progress | d9597ab3-4782-4ed1-9c55-acafa3e5bc1d |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 4 / 16
-- Pending subagents: 4cf3a592-f1eb-45f3-b9a6-bc6cd8781d86, 3b0e559d-209c-497a-9d57-5b14601efbac, f7a82c7d-b22b-48dd-bf8a-d4e79a3a5684
+- Spawn count: 3 / 16
+- Pending subagents: 90ad0bea-fd04-4088-9629-09187292d51d, 97c44c35-3ab9-409d-8fb1-d1ea8baa9b05, d9597ab3-4782-4ed1-9c55-acafa3e5bc1d
 - Predecessor: none
 - Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: task-17 (active)
+- Heartbeat cron: 7315d56a-41ae-4165-9a16-f58475938b1f/task-12
 - Safety timer: none
 
 ## Artifact Index
-- /home/xasanboy/ERP/PROJECT.md — Project Scope & Milestones
-- /home/xasanboy/ERP/.agents/orchestrator/plan.md — Project Execution Plan
-- /home/xasanboy/ERP/.agents/orchestrator/progress.md — Project Progress Log
+- /home/xasanboy/ERP/.agents/ORIGINAL_REQUEST.md — Authoritative User Request
+- /home/xasanboy/ERP/.agents/orchestrator/DISPATCH.md — Incoming Dispatch Log
+- /home/xasanboy/ERP/.agents/orchestrator/plan.md — Orchestrator Execution Plan
+- /home/xasanboy/ERP/.agents/orchestrator/progress.md — Liveness Heartbeat & Progress Checkpoint
+- /home/xasanboy/ERP/PROJECT.md — Global Project Scope & Architecture Document
+- /home/xasanboy/ERP/.agents/survey_explorer_backend_1/DISPATCH.md — Backend Explorer Dispatch
+- /home/xasanboy/ERP/.agents/survey_explorer_frontend_1/DISPATCH.md — Frontend Explorer Dispatch
+- /home/xasanboy/ERP/.agents/survey_explorer_devops_1/DISPATCH.md — DevOps Explorer Dispatch

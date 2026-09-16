@@ -198,4 +198,3 @@ export const getAnalysisBundleApi = (params?: {
 }): Promise<IResponse<AnalysisBundleData>> => {
   return request.get({ url: '/analysis/bundle', params })
 }
-

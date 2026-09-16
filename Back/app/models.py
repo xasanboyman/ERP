@@ -6,6 +6,7 @@ from .database import Base
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    company_id = Column(String, default="comp-default", index=True)
     actor = Column(String, default="admin")          # who did it
     action = Column(String)                          # created | updated | deleted
     entity = Column(String)                          # worker | product | salary | department
@@ -14,9 +15,27 @@ class ActivityLog(Base):
     timestamp = Column(String, default=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
+class Company(Base):
+    __tablename__ = "companies"
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, index=True)
+    code = Column(String, unique=True, index=True)
+    plan = Column(String, default="basic", index=True)  # basic | pro
+    billing_cycle = Column(String, default="monthly")   # monthly | yearly
+    subscription_expires_at = Column(String, nullable=True)
+    status = Column(Integer, default=1)                 # 1 = active, 0 = inactive/suspended
+    max_users = Column(Integer, default=10)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    features = Column(JSON, default=lambda: {"ai": False, "upcoming": False})
+    created_at = Column(String, default=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String, nullable=True)          # e.g. "Alibek Hasanov"
@@ -29,9 +48,12 @@ class User(Base):
     create_time = Column(String, default=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     permissions = Column(JSON, default=list)
 
+    company = relationship("Company", foreign_keys=[company_id])
+
 class Role(Base):
     __tablename__ = "roles"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     roleName = Column(String, unique=True)
     status = Column(Integer, default=1)  # 1 = enable, 0 = disable
     remark = Column(Text, nullable=True)
@@ -41,6 +63,7 @@ class Role(Base):
 class Department(Base):
     __tablename__ = "departments"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     departmentName = Column(String)
     parentId = Column(String, nullable=True)
     status = Column(Integer, default=1)  # 1 = active, 0 = inactive
@@ -50,6 +73,7 @@ class Department(Base):
 class Branch(Base):
     __tablename__ = "branches"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     name = Column(String, index=True)
     code = Column(String, unique=True, index=True)
     address = Column(String, nullable=True)
@@ -75,14 +99,15 @@ class ProductPackaging(Base):
 class Product(Base):
     __tablename__ = "products"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id", ondelete="CASCADE"), default="comp-default", index=True)
     productName = Column(String, index=True)
-    SKU = Column(String, unique=True, index=True)
+    SKU = Column(String, index=True)
     category = Column(String, index=True)
     price = Column(Float, default=0.0)
     cost = Column(Float, default=0.0)
     quantityInStock = Column(Float, default=0.0)
     status = Column(Integer, default=1)  # 1 = in stock, 0 = out of stock
-    classifier_id = Column(Integer, ForeignKey("classifier_items.id", ondelete="SET NULL"), nullable=True)
+    classifier_id = Column(String, nullable=True)
     shtrix_code = Column(String, index=True, nullable=True)
     mxik_code = Column(String, index=True, nullable=True)
     brand_name = Column(String, index=True, nullable=True)
@@ -94,12 +119,14 @@ class Product(Base):
     createTime = Column(String, default=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     packagings = relationship("ProductPackaging", back_populates="product", cascade="all, delete-orphan")
+    company = relationship("Company", foreign_keys=[company_id])
 
 
 
 class Worker(Base):
     __tablename__ = "workers"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id", ondelete="CASCADE"), default="comp-default", index=True)
     name = Column(String, index=True)
     account = Column(String, unique=True, index=True)
     employee_code = Column(String, unique=True, index=True, nullable=True)
@@ -116,6 +143,7 @@ class Worker(Base):
 class Salary(Base):
     __tablename__ = "salaries"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     workerId = Column(String, ForeignKey("workers.id", ondelete="CASCADE"))
     baseSalary = Column(Float, default=0.0)
     allowance = Column(Float, default=0.0)
@@ -180,6 +208,7 @@ class Todo(Base):
 class Position(Base):
     __tablename__ = "positions"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     positionName = Column(String, index=True)
     departmentId = Column(String, nullable=True)
     baseSalary = Column(Float, default=0.0)
@@ -291,6 +320,7 @@ class QrCode(Base):
 class StaffAdjustment(Base):
     __tablename__ = "staff_adjustments"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     workerId = Column(String, ForeignKey("workers.id", ondelete="CASCADE"))
     document_type = Column(String)  # bonus, fine, advance
     amount = Column(Float, default=0.0)
@@ -304,6 +334,7 @@ class StaffAdjustment(Base):
 class StaffTimesheet(Base):
     __tablename__ = "staff_timesheets"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     date = Column(String, index=True)  # YYYY-MM-DD
     status = Column(String, default="active")  # active, archived
     records = Column(JSON, default=list)  # list of worker attendance (workerId, status, hours)
@@ -313,6 +344,7 @@ class StaffTimesheet(Base):
 class StaffOutput(Base):
     __tablename__ = "staff_outputs"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     workerId = Column(String, nullable=True)
     workerName = Column(String, nullable=True)
     name = Column(String)  # operation name / task description
@@ -325,7 +357,7 @@ class StaffOutput(Base):
 
 class ClassifierItem(Base):
     __tablename__ = "classifier_items"
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id = Column(String, primary_key=True, index=True)
     group_name = Column(String, nullable=True, index=True)
     class_name = Column(String, nullable=True, index=True)
     position_name = Column(String, nullable=True, index=True)
@@ -345,6 +377,7 @@ class ClassifierItem(Base):
 class Sale(Base):
     __tablename__ = "sales"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, ForeignKey("companies.id", ondelete="CASCADE"), default="comp-default", index=True)
     receipt_number = Column(String, unique=True, index=True)
     cashier_name = Column(String, index=True, default="admin")
     customer_name = Column(String, nullable=True)
@@ -359,6 +392,7 @@ class Sale(Base):
     created_at = Column(String, default=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
+    company = relationship("Company", foreign_keys=[company_id])
 
 
 
@@ -383,6 +417,7 @@ class SaleItem(Base):
 class DebtPayment(Base):
     __tablename__ = "debt_payments"
     id = Column(String, primary_key=True, index=True)
+    company_id = Column(String, default="comp-default", index=True)
     receipt_number = Column(String, unique=True, index=True)
     customer_name = Column(String, index=True)
     customer_phone = Column(String, nullable=True)
@@ -428,7 +463,8 @@ class MonthlyFinancialSnapshot(Base):
     __tablename__ = "monthly_financial_snapshots"
 
     id = Column(String, primary_key=True, index=True)
-    period_month = Column(String, unique=True, index=True, nullable=False)  # e.g. "2026-07"
+    company_id = Column(String, default="comp-default", index=True)
+    period_month = Column(String, index=True, nullable=False)  # e.g. "2026-07"
     revenue = Column(Float, default=0.0)
     cogs = Column(Float, default=0.0)
     staff_salaries = Column(Float, default=0.0)

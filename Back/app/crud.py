@@ -1,8 +1,9 @@
 import uuid
 import datetime
 import secrets
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from passlib.context import CryptContext
 from . import models, schemas
 
@@ -10,9 +11,17 @@ from . import models, schemas
 import hashlib
 
 def verify_password(plain_password, hashed_password):
+    if not hashed_password or not plain_password:
+        return False
     if ":" in hashed_password:
-        salt, h_pass = hashed_password.split(":")
+        salt, h_pass = hashed_password.split(":", 1)
         return hashlib.sha256((salt + plain_password).encode()).hexdigest() == h_pass
+    if hashed_password.startswith("$2a$") or hashed_password.startswith("$2b$") or hashed_password.startswith("$2y$"):
+        try:
+            import bcrypt
+            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+        except Exception:
+            pass
     # fallback for raw SHA-256 or matching plain
     if hashed_password == plain_password:
          return True
@@ -42,6 +51,7 @@ def create_user(db: Session, user: schemas.UserCreate):
         email=user.email,
         phone=getattr(user, 'phone', None),
         department_id=user.department_id,
+        company_id=getattr(user, 'company_id', None) or 'comp-default',
         permissions=user.permissions,
         avatar=getattr(user, 'avatar', None)
     )
@@ -50,22 +60,87 @@ def create_user(db: Session, user: schemas.UserCreate):
     db.refresh(db_user)
     return db_user
 
-# Role CRUD
-def get_roles(db: Session):
-    return db.query(models.Role).all()
+def seed_default_roles_for_company(db: Session, company_id: str):
+    if not company_id or company_id == "comp-default":
+        return []
+    # Fetch template roles from comp-default (excluding Super Administrator)
+    templates = db.query(models.Role).filter(
+        (models.Role.company_id == "comp-default") &
+        (~models.Role.roleName.ilike("%super%")) &
+        (models.Role.id != "1")
+    ).all()
+    created = []
+    if not templates:
+        templates_data = [
+            ("Administrator", "Tashkilot administratori", ["/dashboard", "/dashboard/analysis", "/dashboard/workplace", "/product", "/product/list", "/sales", "/sales/pos", "/sales/debtors", "/hr", "/hr/workers", "/hr/timesheets", "/hr/outputs", "/hr/adjustments", "/hr/salary", "/authorization", "/authorization/department", "/authorization/role"]),
+            ("Oddiy xodim", "Oddiy xodim", ["/dashboard", "/dashboard/workplace", "/product", "/product/list"]),
+            ("Cashier", "Kassir roli", ["/dashboard", "/sales", "/sales/pos", "pos:sell", "pos:nasiya"])
+        ]
+        for name, remark, perms in templates_data:
+            r = models.Role(
+                id=str(uuid.uuid4()),
+                company_id=company_id,
+                roleName=name,
+                status=1,
+                remark=remark,
+                permissions=perms
+            )
+            db.add(r)
+            created.append(r)
+    else:
+        for t in templates:
+            r = models.Role(
+                id=str(uuid.uuid4()),
+                company_id=company_id,
+                roleName=t.roleName,
+                status=1,
+                remark=t.remark,
+                permissions=list(t.permissions or [])
+            )
+            db.add(r)
+            created.append(r)
+    db.commit()
+    for r in created:
+        db.refresh(r)
+    return created
 
-def create_role(db: Session, role: schemas.RoleCreate):
+# Role CRUD
+def get_roles(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.Role)
+    if company_id:
+        if company_id == "comp-default":
+            return query.filter((models.Role.company_id == "comp-default") | (models.Role.company_id == None)).all()
+        else:
+            company_roles = query.filter(models.Role.company_id == company_id).all()
+            if not company_roles:
+                comp_obj = db.query(models.Company).filter(models.Company.id == company_id).first()
+                if comp_obj and isinstance(comp_obj.features, dict) and comp_obj.features.get("roles_initialized"):
+                    return []
+                company_roles = seed_default_roles_for_company(db, company_id)
+                if comp_obj:
+                    feats = dict(comp_obj.features or {})
+                    feats["roles_initialized"] = True
+                    comp_obj.features = feats
+                    db.commit()
+            return company_roles
+    return query.all()
+
+def create_role(db: Session, role: schemas.RoleCreate, company_id: Optional[str] = None):
     db_role = db.query(models.Role).filter(models.Role.id == role.id).first()
+    comp = company_id or getattr(role, "company_id", None) or "comp-default"
     if db_role:
         # Update
         db_role.roleName = role.roleName
         db_role.status = role.status
         db_role.remark = role.remark
         db_role.permissions = role.permissions
+        if company_id and (not db_role.company_id or db_role.company_id == "comp-default"):
+            db_role.company_id = company_id
     else:
         # Create
         db_role = models.Role(
             id=role.id or str(uuid.uuid4()),
+            company_id=comp,
             roleName=role.roleName,
             status=role.status,
             remark=role.remark,
@@ -77,23 +152,30 @@ def create_role(db: Session, role: schemas.RoleCreate):
     return db_role
 
 # Department CRUD
-def get_departments(db: Session):
-    return db.query(models.Department).all()
+def get_departments(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.Department)
+    if company_id:
+        query = query.filter(models.Department.company_id == company_id)
+    return query.all()
 
-def create_department(db: Session, dept: schemas.DepartmentCreate):
+def create_department(db: Session, dept: schemas.DepartmentCreate, company_id: Optional[str] = None):
     dept_id = dept.id
     db_dept = None
     if dept_id:
         db_dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
     
+    comp = company_id or getattr(dept, "company_id", None) or "comp-default"
     if db_dept:
         db_dept.departmentName = dept.departmentName
         db_dept.parentId = dept.parentId
         db_dept.status = dept.status
         db_dept.remark = dept.remark
+        if company_id and (not db_dept.company_id or db_dept.company_id == "comp-default"):
+            db_dept.company_id = company_id
     else:
         db_dept = models.Department(
             id=dept_id or str(uuid.uuid4())[:8],
+            company_id=comp,
             departmentName=dept.departmentName,
             parentId=dept.parentId,
             status=dept.status,
@@ -118,30 +200,76 @@ def delete_department(db: Session, dept_id: str):
     return False
 
 # Product CRUD
-def get_products(db: Session):
-    return db.query(models.Product).all()
+def get_products(db: Session, company_id: Optional[str] = None):
+    q = db.query(models.Product)
+    if company_id:
+        q = q.filter(models.Product.company_id == company_id)
+    return q.all()
 
-def create_product(db: Session, prod: schemas.ProductCreate):
+def create_product(db: Session, prod: schemas.ProductCreate, company_id: Optional[str] = None):
     prod_id = getattr(prod, 'id', None)
     shtrix = getattr(prod, 'shtrix_code', None)
-    classifier_id = getattr(prod, 'classifier_id', None)
+    raw_classifier = getattr(prod, 'classifier_id', None)
+    mxik_code = getattr(prod, 'mxik_code', None)
     sku = getattr(prod, 'SKU', None)
+    target_company_id = company_id or getattr(prod, 'company_id', None) or 'comp-default'
 
-    # Consolidate duplicate checks into a single round-trip query
+    # Cluster Database Synchronization:
+    # If the added item does not exist in the shared cluster catalog (classifier_items), add it!
+    clean_shtrix = str(shtrix).strip() if shtrix else None
+    clean_mxik = str(mxik_code).strip() if mxik_code else None
+    clean_name = str(prod.productName).strip() if prod.productName else None
+
+    cluster_item = None
+    if clean_shtrix:
+        cluster_item = db.query(models.ClassifierItem).filter(models.ClassifierItem.shtrix_code == clean_shtrix).first()
+    if not cluster_item and clean_mxik:
+        cluster_item = db.query(models.ClassifierItem).filter(models.ClassifierItem.mxik_code == clean_mxik).first()
+    if not cluster_item and raw_classifier:
+        cluster_item = db.query(models.ClassifierItem).filter(models.ClassifierItem.id == str(raw_classifier)).first()
+
+    if not cluster_item and (clean_name or clean_shtrix or clean_mxik):
+        new_cls_id = str(raw_classifier) if raw_classifier else f"cls_{uuid.uuid4().hex[:10]}"
+        try:
+            cluster_item = models.ClassifierItem(
+                id=new_cls_id,
+                group_name=prod.category or "Boshqalar",
+                class_name=prod.category or "Boshqalar",
+                position_name=prod.productName or "Yangi Mahsulot",
+                subposition_name=prod.productName or "Yangi Mahsulot",
+                brand_name=getattr(prod, 'brand_name', None) or "",
+                attribute_name=getattr(prod, 'attribute_name', None) or "",
+                mxik_code=clean_mxik or "",
+                mxik_name=prod.productName or "",
+                shtrix_code=clean_shtrix or "",
+                unit=getattr(prod, 'unit', None) or "dona"
+            )
+            db.add(cluster_item)
+            db.flush()
+        except Exception as cls_err:
+            db.rollback()
+            cluster_item = None
+
+    safe_classifier_id = str(cluster_item.id) if cluster_item else (str(raw_classifier) if raw_classifier else None)
+
+    # Consolidate duplicate checks strictly isolated to this company
     conditions = []
     if prod_id:
         conditions.append(models.Product.id == prod_id)
     else:
-        if shtrix and str(shtrix).strip():
-            conditions.append(models.Product.shtrix_code == str(shtrix).strip())
-        if classifier_id:
-            conditions.append(models.Product.classifier_id == classifier_id)
+        if clean_shtrix:
+            conditions.append(models.Product.shtrix_code == clean_shtrix)
+        if clean_mxik:
+            conditions.append(models.Product.mxik_code == clean_mxik)
         if sku and str(sku).strip():
             conditions.append(models.Product.SKU == str(sku).strip())
 
     db_prod = None
     if conditions:
-        db_prod = db.query(models.Product).filter(or_(*conditions)).first()
+        query = db.query(models.Product).filter(or_(*conditions))
+        if target_company_id:
+            query = query.filter(models.Product.company_id == target_company_id)
+        db_prod = query.first()
 
     is_existing = (db_prod is not None) and (not prod_id)
 
@@ -156,17 +284,17 @@ def create_product(db: Session, prod: schemas.ProductCreate):
         if sku:
             db_prod.SKU = sku
         db_prod.category = prod.category or db_prod.category
-        if prod.price and prod.price > 0:
+        if prod.price is not None and prod.price > 0:
             db_prod.price = prod.price
-        if prod.cost and prod.cost > 0:
+        if prod.cost is not None and prod.cost > 0:
             db_prod.cost = prod.cost
         db_prod.status = 1
-        if classifier_id:
-            db_prod.classifier_id = classifier_id
-        if shtrix:
-            db_prod.shtrix_code = shtrix
-        if getattr(prod, 'mxik_code', None):
-            db_prod.mxik_code = prod.mxik_code
+        if safe_classifier_id is not None:
+            db_prod.classifier_id = safe_classifier_id
+        if clean_shtrix:
+            db_prod.shtrix_code = clean_shtrix
+        if clean_mxik:
+            db_prod.mxik_code = clean_mxik
         if getattr(prod, 'brand_name', None):
             db_prod.brand_name = prod.brand_name
         if getattr(prod, 'attribute_name', None):
@@ -179,22 +307,25 @@ def create_product(db: Session, prod: schemas.ProductCreate):
             db_prod.expiration_date = prod.expiration_date
         if prod.remark:
             db_prod.remark = prod.remark
+        db_prod.company_id = target_company_id
     else:
+        new_sku = sku or f"SKU-{str(uuid.uuid4().int)[:6]}"
         db_prod = models.Product(
             id=prod_id or ("PROD-" + str(uuid.uuid4().int)[:6]),
+            company_id=target_company_id,
             productName=prod.productName,
-            SKU=sku or f"SKU-{str(uuid.uuid4().int)[:6]}",
-            category=prod.category,
+            SKU=new_sku,
+            category=prod.category or "Boshqalar",
             price=prod.price or 0.0,
             cost=prod.cost or 0.0,
             quantityInStock=prod.quantityInStock or 1,
             status=1,
-            classifier_id=classifier_id,
-            shtrix_code=shtrix,
-            mxik_code=getattr(prod, 'mxik_code', None),
+            classifier_id=safe_classifier_id,
+            shtrix_code=clean_shtrix,
+            mxik_code=clean_mxik,
             brand_name=getattr(prod, 'brand_name', None),
             attribute_name=getattr(prod, 'attribute_name', None),
-            unit=getattr(prod, 'unit', None),
+            unit=getattr(prod, 'unit', None) or 'dona',
             image_url=getattr(prod, 'image_url', None),
             expiration_date=getattr(prod, 'expiration_date', None),
             remark=prod.remark
@@ -232,8 +363,11 @@ def delete_product(db: Session, prod_id: str):
     return False
 
 # Worker CRUD
-def get_workers(db: Session):
-    return db.query(models.Worker).all()
+def get_workers(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.Worker)
+    if company_id:
+        query = query.filter(models.Worker.company_id == company_id)
+    return query.all()
 
 def generate_unique_employee_code(db: Session) -> str:
     import random
@@ -243,9 +377,10 @@ def generate_unique_employee_code(db: Session) -> str:
         return code
     return str(random.randint(100000, 999999))
 
-def create_worker(db: Session, worker: schemas.WorkerCreate):
+def create_worker(db: Session, worker: schemas.WorkerCreate, company_id: Optional[str] = None):
     import datetime
     w_id = worker.id
+    comp = company_id or getattr(worker, "company_id", None) or "comp-default"
     db_w = None
     if w_id:
         db_w = db.query(models.Worker).filter(models.Worker.id == w_id).first()
@@ -253,6 +388,8 @@ def create_worker(db: Session, worker: schemas.WorkerCreate):
     if db_w:
         db_w.name = worker.name
         db_w.account = worker.account
+        if comp and (not db_w.company_id or db_w.company_id == "comp-default"):
+            db_w.company_id = comp
         if not db_w.employee_code:
             db_w.employee_code = worker.employee_code or generate_unique_employee_code(db)
         elif worker.employee_code:
@@ -271,6 +408,7 @@ def create_worker(db: Session, worker: schemas.WorkerCreate):
     else:
         db_w = models.Worker(
             id=w_id or "W" + str(uuid.uuid4().int)[:6],
+            company_id=comp,
             name=worker.name,
             account=worker.account,
             employee_code=worker.employee_code or generate_unique_employee_code(db),
@@ -308,6 +446,8 @@ def create_worker(db: Session, worker: schemas.WorkerCreate):
         db_user.phone = worker.phone
         db_user.role = role_str
         db_user.roleId = role_id
+        if comp and not db_user.company_id:
+            db_user.company_id = comp
         if role_perms:
             db_user.permissions = role_perms
         if worker.password:
@@ -316,6 +456,7 @@ def create_worker(db: Session, worker: schemas.WorkerCreate):
         pwd = worker.password if worker.password else "123456"
         db_user = models.User(
             username=worker.account,
+            company_id=comp,
             hashed_password=get_password_hash(pwd),
             full_name=worker.name,
             role=role_str,
@@ -338,11 +479,15 @@ def delete_worker(db: Session, worker_id: str):
     return False
 
 # Salary CRUD
-def get_salaries(db: Session):
-    return db.query(models.Salary).order_by(models.Salary.payDate.desc(), models.Salary.id.desc()).all()
+def get_salaries(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.Salary)
+    if company_id:
+        query = query.join(models.Worker, models.Salary.workerId == models.Worker.id).filter(models.Worker.company_id == company_id)
+    return query.order_by(models.Salary.payDate.desc(), models.Salary.id.desc()).all()
 
-def create_salary(db: Session, sal: schemas.SalaryCreate):
+def create_salary(db: Session, sal: schemas.SalaryCreate, company_id: Optional[str] = None):
     sal_id = sal.id
+    comp = company_id or getattr(sal, "company_id", None) or "comp-default"
     db_sal = None
     if sal_id:
         db_sal = db.query(models.Salary).filter(models.Salary.id == sal_id).first()
@@ -358,9 +503,12 @@ def create_salary(db: Session, sal: schemas.SalaryCreate):
             db_sal.payDate = sal.payDate
         db_sal.status = sal.status
         db_sal.remark = sal.remark
+        if comp and hasattr(db_sal, "company_id"):
+            db_sal.company_id = comp
     else:
         db_sal = models.Salary(
             id=sal_id or "S" + str(uuid.uuid4().int)[:6],
+            company_id=comp,
             workerId=sal.workerId,
             baseSalary=sal.baseSalary,
             allowance=sal.allowance,
@@ -384,11 +532,18 @@ def delete_salary(db: Session, sal_id: str):
 
 
 # Position CRUD
-def get_positions(db: Session):
-    return db.query(models.Position).all()
+def get_positions(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.Position)
+    if company_id:
+        if company_id == "comp-default":
+            query = query.filter((models.Position.company_id == "comp-default") | (models.Position.company_id == None))
+        else:
+            query = query.filter(models.Position.company_id == company_id)
+    return query.all()
 
-def create_position(db: Session, pos: schemas.PositionCreate):
+def create_position(db: Session, pos: schemas.PositionCreate, company_id: Optional[str] = None):
     pos_id = pos.id
+    comp = company_id or getattr(pos, "company_id", None) or "comp-default"
     db_pos = None
     if pos_id:
         db_pos = db.query(models.Position).filter(models.Position.id == pos_id).first()
@@ -399,9 +554,12 @@ def create_position(db: Session, pos: schemas.PositionCreate):
         db_pos.baseSalary = pos.baseSalary
         db_pos.status = pos.status
         db_pos.remark = pos.remark
+        if comp and hasattr(db_pos, "company_id"):
+            db_pos.company_id = comp
     else:
         db_pos = models.Position(
             id=pos_id or "P" + str(uuid.uuid4().int)[:6],
+            company_id=comp,
             positionName=pos.positionName,
             departmentId=pos.departmentId,
             baseSalary=pos.baseSalary,
@@ -722,11 +880,15 @@ def delete_qr_code(db: Session, qr_id: str):
 
 
 # Staff Adjustment CRUD
-def get_staff_adjustments(db: Session):
-    return db.query(models.StaffAdjustment).all()
+def get_staff_adjustments(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.StaffAdjustment)
+    if company_id:
+        query = query.filter(models.StaffAdjustment.company_id == company_id)
+    return query.all()
 
-def create_staff_adjustment(db: Session, adj: schemas.StaffAdjustmentCreate):
+def create_staff_adjustment(db: Session, adj: schemas.StaffAdjustmentCreate, company_id: Optional[str] = None):
     adj_id = adj.id
+    comp = company_id or getattr(adj, "company_id", None) or "comp-default"
     db_adj = None
     if adj_id:
         db_adj = db.query(models.StaffAdjustment).filter(models.StaffAdjustment.id == adj_id).first()
@@ -737,9 +899,12 @@ def create_staff_adjustment(db: Session, adj: schemas.StaffAdjustmentCreate):
         db_adj.amount = adj.amount
         db_adj.period_month = adj.period_month
         db_adj.description = adj.description
+        if comp and hasattr(db_adj, "company_id"):
+            db_adj.company_id = comp
     else:
         db_adj = models.StaffAdjustment(
             id=adj_id or "ADJ" + str(uuid.uuid4().int)[:6],
+            company_id=comp,
             workerId=adj.workerId,
             document_type=adj.document_type,
             amount=adj.amount,
@@ -761,11 +926,15 @@ def delete_staff_adjustment(db: Session, adj_id: str):
 
 
 # Staff Timesheet CRUD
-def get_staff_timesheets(db: Session):
-    return db.query(models.StaffTimesheet).all()
+def get_staff_timesheets(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.StaffTimesheet)
+    if company_id:
+        query = query.filter(models.StaffTimesheet.company_id == company_id)
+    return query.all()
 
-def create_staff_timesheet(db: Session, ts: schemas.StaffTimesheetCreate):
+def create_staff_timesheet(db: Session, ts: schemas.StaffTimesheetCreate, company_id: Optional[str] = None):
     ts_id = ts.id
+    comp = company_id or getattr(ts, "company_id", None) or "comp-default"
     db_ts = None
     if ts_id:
         db_ts = db.query(models.StaffTimesheet).filter(models.StaffTimesheet.id == ts_id).first()
@@ -774,9 +943,12 @@ def create_staff_timesheet(db: Session, ts: schemas.StaffTimesheetCreate):
         db_ts.date = ts.date
         db_ts.status = ts.status
         db_ts.records = ts.records
+        if comp and hasattr(db_ts, "company_id"):
+            db_ts.company_id = comp
     else:
         db_ts = models.StaffTimesheet(
             id=ts_id or "TS" + str(uuid.uuid4().int)[:6],
+            company_id=comp,
             date=ts.date,
             status=ts.status,
             records=ts.records
@@ -796,11 +968,15 @@ def delete_staff_timesheet(db: Session, ts_id: str):
 
 
 # Staff Output CRUD
-def get_staff_outputs(db: Session):
-    return db.query(models.StaffOutput).all()
+def get_staff_outputs(db: Session, company_id: Optional[str] = None):
+    query = db.query(models.StaffOutput)
+    if company_id:
+        query = query.filter(models.StaffOutput.company_id == company_id)
+    return query.all()
 
-def create_staff_output(db: Session, out: schemas.StaffOutputCreate):
+def create_staff_output(db: Session, out: schemas.StaffOutputCreate, company_id: Optional[str] = None):
     out_id = out.id
+    comp = company_id or getattr(out, "company_id", None) or "comp-default"
     db_out = None
     if out_id:
         db_out = db.query(models.StaffOutput).filter(models.StaffOutput.id == out_id).first()
@@ -814,9 +990,12 @@ def create_staff_output(db: Session, out: schemas.StaffOutputCreate):
         db_out.amount = out.amount
         db_out.period_month = out.period_month
         db_out.comment = out.comment
+        if comp and hasattr(db_out, "company_id"):
+            db_out.company_id = comp
     else:
         db_out = models.StaffOutput(
             id=out_id or "OUT" + str(uuid.uuid4().int)[:6],
+            company_id=comp,
             workerId=out.workerId or worker_name,
             workerName=worker_name,
             name=out.name,
@@ -1069,6 +1248,235 @@ def revoke_device_token(db: Session, device_id: int, user_id: int | None = None)
 def update_device_token_last_used(db: Session, device_token: models.DeviceToken):
     device_token.last_used_at = datetime.datetime.utcnow()
     db.commit()
+
+# =========================================================
+# Company & Multi-Tenancy CRUD
+# =========================================================
+
+def get_companies(db: Session):
+    companies = db.query(models.Company).order_by(models.Company.created_at.desc()).all()
+    results = []
+    now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    for c in companies:
+        u_count = db.query(models.User).filter(models.User.company_id == c.id).count()
+        w_count = db.query(models.Worker).filter(models.Worker.company_id == c.id).count()
+        p_count = db.query(models.Product).filter(models.Product.company_id == c.id).count()
+        s_count = db.query(models.Sale).filter(models.Sale.company_id == c.id).count()
+        revenue = db.query(func.coalesce(func.sum(models.Sale.paid_amount), 0.0)).filter(models.Sale.company_id == c.id).scalar() or 0.0
+        
+        is_expired = False
+        if c.subscription_expires_at:
+            is_expired = c.subscription_expires_at < now_str
+
+        # Default features per plan
+        base_features = {"ai": True, "upcoming": True, "advanced_analytics": True} if c.plan == "pro" else {"ai": False, "upcoming": False, "advanced_analytics": False}
+        merged_features = {**base_features, **(c.features or {})}
+
+        admin_u = db.query(models.User).filter(
+            models.User.company_id == c.id,
+            models.User.username != 'admin'
+        ).order_by(models.User.id.asc()).first()
+        if not admin_u and c.id == 'comp-default':
+            admin_u = db.query(models.User).filter(models.User.username == 'admin').first()
+
+        results.append({
+            "id": c.id,
+            "name": c.name,
+            "code": c.code,
+            "plan": c.plan or "basic",
+            "billing_cycle": c.billing_cycle or "monthly",
+            "subscription_expires_at": c.subscription_expires_at,
+            "status": c.status if c.status is not None else 1,
+            "max_users": c.max_users or 10,
+            "phone": c.phone,
+            "email": c.email,
+            "address": c.address,
+            "features": merged_features,
+            "created_at": c.created_at,
+            "admin_username": admin_u.username if admin_u else "",
+            "admin_full_name": (admin_u.full_name or admin_u.username) if admin_u else "",
+            "admin_id": admin_u.id if admin_u else None,
+            "employees_count": w_count + u_count,
+            "workers_count": w_count,
+            "users_count": u_count,
+            "products_count": p_count,
+            "total_sales_count": s_count,
+            "total_revenue": float(revenue),
+            "is_expired": is_expired
+        })
+    return results
+
+def get_company_by_id(db: Session, company_id: str):
+    return db.query(models.Company).filter(models.Company.id == company_id).first()
+
+def get_company_by_code(db: Session, code: str):
+    return db.query(models.Company).filter(models.Company.code == code).first()
+
+def create_or_update_company(db: Session, comp_in: schemas.CompanyCreate):
+    comp_id = getattr(comp_in, "id", None)
+    db_comp = None
+    if comp_id:
+        db_comp = db.query(models.Company).filter(models.Company.id == comp_id).first()
+    if not db_comp and comp_in.code:
+        db_comp = db.query(models.Company).filter(models.Company.code == comp_in.code.strip()).first()
+
+    now = datetime.datetime.utcnow()
+    # Default expires: 1 month or 1 year
+    if not comp_in.subscription_expires_at:
+        if comp_in.billing_cycle == "yearly":
+            default_exp = (now + datetime.timedelta(days=365)).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            default_exp = (now + datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        default_exp = comp_in.subscription_expires_at
+
+    plan_features = {"ai": True, "upcoming": True} if comp_in.plan == "pro" else {"ai": False, "upcoming": False}
+    final_features = {**plan_features, **(comp_in.features or {})}
+
+    if db_comp:
+        db_comp.name = comp_in.name
+        db_comp.code = comp_in.code.strip()
+        db_comp.plan = comp_in.plan or db_comp.plan
+        db_comp.billing_cycle = comp_in.billing_cycle or db_comp.billing_cycle
+        if comp_in.subscription_expires_at:
+            db_comp.subscription_expires_at = comp_in.subscription_expires_at
+        if comp_in.status is not None:
+            db_comp.status = comp_in.status
+        if comp_in.max_users:
+            db_comp.max_users = comp_in.max_users
+        if comp_in.phone is not None:
+            db_comp.phone = comp_in.phone
+        if comp_in.email is not None:
+            db_comp.email = comp_in.email
+        if comp_in.address is not None:
+            db_comp.address = comp_in.address
+        if comp_in.features is not None:
+            db_comp.features = final_features
+        db.commit()
+        db.refresh(db_comp)
+    else:
+        new_id = comp_id or f"comp-{uuid.uuid4().hex[:8]}"
+        db_comp = models.Company(
+            id=new_id,
+            name=comp_in.name,
+            code=comp_in.code.strip(),
+            plan=comp_in.plan or "basic",
+            billing_cycle=comp_in.billing_cycle or "monthly",
+            subscription_expires_at=default_exp,
+            status=comp_in.status if comp_in.status is not None else 1,
+            max_users=comp_in.max_users or 10,
+            phone=comp_in.phone,
+            email=comp_in.email,
+            address=comp_in.address,
+            features=final_features,
+            created_at=now.strftime("%Y-%m-%d %H:%M:%S")
+        )
+        db.add(db_comp)
+        db.commit()
+        db.refresh(db_comp)
+
+        # Seed isolated default roles for this new company
+        seed_default_roles_for_company(db, new_id)
+        if isinstance(db_comp.features, dict):
+            db_comp.features["roles_initialized"] = True
+            db.commit()
+
+    # Optional initial company admin user creation or password update
+    if comp_in.admin_username and comp_in.admin_password:
+        clean_user = comp_in.admin_username.strip().lower()
+        existing_u = db.query(models.User).filter(models.User.username == clean_user).first()
+        hashed = get_password_hash(comp_in.admin_password)
+        company_permissions = [
+            "/dashboard", "/dashboard/analysis", "/dashboard/workplace",
+            "/product", "/product/list",
+            "/sales", "/sales/pos", "/sales/debtors",
+            "/hr", "/hr/workers", "/hr/timesheets", "/hr/outputs", "/hr/adjustments", "/hr/salary"
+        ]
+        if not existing_u:
+            new_u = models.User(
+                username=clean_user,
+                hashed_password=hashed,
+                full_name=comp_in.admin_full_name or f"{comp_in.name} Administrator",
+                role="Administrator",
+                roleId="10",
+                company_id=db_comp.id,
+                permissions=company_permissions,
+                create_time=now.strftime("%Y-%m-%d %H:%M:%S")
+            )
+            db.add(new_u)
+            db.commit()
+        else:
+            existing_u.company_id = db_comp.id
+            existing_u.hashed_password = hashed
+            if comp_in.admin_full_name:
+                existing_u.full_name = comp_in.admin_full_name
+            db.commit()
+
+    return db_comp
+
+def update_company_tier(db: Session, tier_in: schemas.CompanyTierUpdate):
+    comp = db.query(models.Company).filter(models.Company.id == tier_in.company_id).first()
+    if not comp:
+        return None
+
+    now = datetime.datetime.utcnow()
+    comp.plan = tier_in.plan
+    if tier_in.billing_cycle:
+        comp.billing_cycle = tier_in.billing_cycle
+
+    if tier_in.max_users is not None:
+        comp.max_users = tier_in.max_users
+
+    # Features: grant AI + upcoming to Pro, remove from Basic unless overridden
+    plan_features = {"ai": True, "upcoming": True} if tier_in.plan == "pro" else {"ai": False, "upcoming": False}
+    comp.features = {**plan_features, **(tier_in.features or {})}
+
+    # Adjust expiration
+    if tier_in.subscription_expires_at:
+        comp.subscription_expires_at = tier_in.subscription_expires_at
+    elif tier_in.duration_months:
+        # If currently active, extend from current expiration; otherwise extend from now
+        base_date = now
+        if comp.subscription_expires_at:
+            try:
+                parsed = datetime.datetime.strptime(comp.subscription_expires_at, "%Y-%m-%d %H:%M:%S")
+                if parsed > now:
+                    base_date = parsed
+            except Exception:
+                base_date = now
+        days = int(tier_in.duration_months * 30.5)
+        comp.subscription_expires_at = (base_date + datetime.timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+    db.commit()
+    db.refresh(comp)
+    return comp
+
+def delete_company(db: Session, company_id: str):
+    comp = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if not comp:
+        return False
+
+    # Detach or delete associated records
+    db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id.in_(
+        db.query(models.Product.id).filter(models.Product.company_id == company_id)
+    )).delete(synchronize_session=False)
+
+    db.query(models.SaleItem).filter(models.SaleItem.sale_id.in_(
+        db.query(models.Sale.id).filter(models.Sale.company_id == company_id)
+    )).delete(synchronize_session=False)
+
+    db.query(models.Product).filter(models.Product.company_id == company_id).delete(synchronize_session=False)
+    db.query(models.Sale).filter(models.Sale.company_id == company_id).delete(synchronize_session=False)
+    db.query(models.Worker).filter(models.Worker.company_id == company_id).delete(synchronize_session=False)
+    db.query(models.Department).filter(models.Department.company_id == company_id).delete(synchronize_session=False)
+    db.query(models.Branch).filter(models.Branch.company_id == company_id).delete(synchronize_session=False)
+    db.query(models.User).filter(models.User.company_id == company_id).delete(synchronize_session=False)
+
+    db.delete(comp)
+    db.commit()
+    return True
+
     db.refresh(device_token)
     return device_token
 

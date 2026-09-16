@@ -1,15 +1,16 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, Body
+from fastapi import APIRouter, Depends, Query, HTTPException, Body, Header
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from app.database import get_db, SessionLocal
 from app import models, schemas
 from app.cache import get_analytics_cache, set_analytics_cache, invalidate_analytics
+from app.routers.product import get_user_company_id
 from concurrent.futures import ThreadPoolExecutor
 import datetime
 
 router = APIRouter()
 
-def calc_month_metrics(db: Session, ym: str):
+def calc_month_metrics(db: Session, ym: str, company_id: str = None):
     """
     ym: 'YYYY-MM' e.g. '2026-08'
     Calculates exact real figures for that month with concurrent database queries.
@@ -17,37 +18,49 @@ def calc_month_metrics(db: Session, ym: str):
     def q_sales():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
+            q = s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
                 models.Sale.created_at.like(f"{ym}%")
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Sale.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
     def q_salaries():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Salary).filter(
+            q = s_db.query(models.Salary).join(models.Worker, models.Salary.workerId == models.Worker.id).filter(
                 models.Salary.status == "paid",
                 (models.Salary.payDate.like(f"{ym}%") | models.Salary.remark.like(f"%{ym}%"))
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Worker.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
     def q_outputs():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.StaffOutput).filter(
+            q = s_db.query(models.StaffOutput).join(models.Worker, models.StaffOutput.workerId == models.Worker.id).filter(
                 (models.StaffOutput.createTime.like(f"{ym}%") | models.StaffOutput.period_month.like(f"{ym}%"))
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Worker.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
     def q_adjustments():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.StaffAdjustment).filter(
+            q = s_db.query(models.StaffAdjustment).join(models.Worker, models.StaffAdjustment.workerId == models.Worker.id).filter(
                 (models.StaffAdjustment.period_month == ym) | (models.StaffAdjustment.createTime.like(f"{ym}%"))
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Worker.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
@@ -97,7 +110,7 @@ def calc_month_metrics(db: Session, ym: str):
     }
 
 
-def calc_date_range_metrics(db: Session, start_date: str, end_date: str):
+def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company_id: str = None):
     """
     start_date: 'YYYY-MM-DD'
     end_date: 'YYYY-MM-DD'
@@ -109,41 +122,53 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str):
     def q_sales():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
+            q = s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
                 models.Sale.created_at >= start_dt_str,
                 models.Sale.created_at <= end_dt_str
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Sale.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
     def q_salaries():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Salary).filter(
+            q = s_db.query(models.Salary).join(models.Worker, models.Salary.workerId == models.Worker.id).filter(
                 models.Salary.status == "paid",
                 models.Salary.payDate >= start_date,
                 models.Salary.payDate <= end_date
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Worker.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
     def q_outputs():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.StaffOutput).filter(
+            q = s_db.query(models.StaffOutput).join(models.Worker, models.StaffOutput.workerId == models.Worker.id).filter(
                 models.StaffOutput.createTime >= start_dt_str,
                 models.StaffOutput.createTime <= end_dt_str
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Worker.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
     def q_adjustments():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.StaffAdjustment).filter(
+            q = s_db.query(models.StaffAdjustment).join(models.Worker, models.StaffAdjustment.workerId == models.Worker.id).filter(
                 models.StaffAdjustment.createTime >= start_dt_str,
                 models.StaffAdjustment.createTime <= end_dt_str
-            ).all()
+            )
+            if company_id:
+                q = q.filter(models.Worker.company_id == company_id)
+            return q.all()
         finally:
             s_db.close()
 
@@ -194,9 +219,12 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str):
 @router.get("/analysis/financial-overview")
 def get_financial_overview(
     time_range: str = Query("6m"),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    cache_key = f"financial_overview:{time_range}"
+    target_company = get_user_company_id(authorization, db, company_id)
+    cache_key = f"financial_overview:{target_company}:{time_range}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
@@ -228,48 +256,63 @@ def get_financial_overview(
     def q_sales():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
+            q = s_db.query(models.Sale).options(joinedload(models.Sale.items)).filter(
                 models.Sale.created_at >= start_dt,
                 models.Sale.created_at <= end_dt
-            ).all()
+            )
+            if target_company:
+                q = q.filter(models.Sale.company_id == target_company)
+            return q.all()
         finally:
             s_db.close()
 
     def q_salaries():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Salary).filter(
+            q = s_db.query(models.Salary).join(models.Worker, models.Salary.workerId == models.Worker.id).filter(
                 models.Salary.status == "paid",
                 models.Salary.payDate >= f"{start_ym}-01",
                 models.Salary.payDate <= f"{end_ym}-31"
-            ).all()
+            )
+            if target_company:
+                q = q.filter(models.Worker.company_id == target_company)
+            return q.all()
         finally:
             s_db.close()
 
     def q_outputs():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.StaffOutput).filter(
+            q = s_db.query(models.StaffOutput).join(models.Worker, models.StaffOutput.workerId == models.Worker.id).filter(
                 models.StaffOutput.createTime >= start_dt,
                 models.StaffOutput.createTime <= end_dt
-            ).all()
+            )
+            if target_company:
+                q = q.filter(models.Worker.company_id == target_company)
+            return q.all()
         finally:
             s_db.close()
 
     def q_adjustments():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.StaffAdjustment).filter(
+            q = s_db.query(models.StaffAdjustment).join(models.Worker, models.StaffAdjustment.workerId == models.Worker.id).filter(
                 models.StaffAdjustment.createTime >= start_dt,
                 models.StaffAdjustment.createTime <= end_dt
-            ).all()
+            )
+            if target_company:
+                q = q.filter(models.Worker.company_id == target_company)
+            return q.all()
         finally:
             s_db.close()
 
     def q_products():
         s_db = SessionLocal()
         try:
-            return s_db.query(models.Product).all()
+            q = s_db.query(models.Product)
+            if target_company:
+                q = q.filter(models.Product.company_id == target_company)
+            return q.all()
         finally:
             s_db.close()
 
@@ -365,7 +408,10 @@ def get_financial_overview(
             "totalExpenses": total_expenses,
             "realNetProfit": real_net_profit,
             "profitMargin": profit_margin,
-            "activeWorkersCount": db.query(models.Worker).filter(models.Worker.status == 1).count(),
+            "activeWorkersCount": db.query(models.Worker).filter(
+                models.Worker.status == 1,
+                (models.Worker.company_id == target_company) if target_company else True
+            ).count(),
             "shortTermTasksCount": len(all_outputs),
             "monthlyFinancials": monthly_data,
             "expenseBreakdown": [
@@ -382,20 +428,29 @@ def get_financial_overview(
 
 
 @router.get("/analysis/month-summary")
-def get_month_summary(month: str = Query(...), db: Session = Depends(get_db)):
+def get_month_summary(
+    month: str = Query(...),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     """
     Returns exact real calculations for a specific month (e.g. '2026-08').
     If month is officially closed, returns the frozen snapshot.
     """
+    target_company = get_user_company_id(authorization, db, company_id)
     month = month.strip()
-    cache_key = f"month_summary:{month}"
+    cache_key = f"month_summary:{target_company}:{month}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
 
-    snapshot = db.query(models.MonthlyFinancialSnapshot).filter(
+    snap_q = db.query(models.MonthlyFinancialSnapshot).filter(
         models.MonthlyFinancialSnapshot.period_month == month
-    ).first()
+    )
+    if target_company:
+        snap_q = snap_q.filter(models.MonthlyFinancialSnapshot.company_id == target_company)
+    snapshot = snap_q.first()
 
     if snapshot:
         res = {
@@ -421,7 +476,7 @@ def get_month_summary(month: str = Query(...), db: Session = Depends(get_db)):
         set_analytics_cache(cache_key, res)
         return res
 
-    data = calc_month_metrics(db, month)
+    data = calc_month_metrics(db, month, company_id=target_company)
     res = {
         "code": 0,
         "data": {
@@ -451,6 +506,8 @@ def get_analysis_bundle(
     p1_end: str = Query(None),
     p2_start: str = Query(None),
     p2_end: str = Query(None),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -461,16 +518,16 @@ def get_analysis_bundle(
     curr_ym = f"{now.year:04d}-{now.month:02d}"
     target_month = (month or curr_ym).strip()
 
-    overview_res = get_financial_overview(time_range=time_range, db=db)
-    snapshots_res = get_financial_snapshots(db=db)
-    month_summary_res = get_month_summary(month=target_month, db=db)
+    overview_res = get_financial_overview(time_range=time_range, company_id=company_id, authorization=authorization, db=db)
+    snapshots_res = get_financial_snapshots(company_id=company_id, authorization=authorization, db=db)
+    month_summary_res = get_month_summary(month=target_month, company_id=company_id, authorization=authorization, db=db)
     comp_req = schemas.PeriodCompareRequest(
         period1_start=p1_start,
         period1_end=p1_end,
         period2_start=p2_start,
         period2_end=p2_end
     )
-    compare_res = compare_periods(req=comp_req, db=db)
+    compare_res = compare_periods(req=comp_req, company_id=company_id, authorization=authorization, db=db)
 
     return {
         "code": 0,
@@ -485,11 +542,17 @@ def get_analysis_bundle(
 
 
 @router.post("/analysis/compare")
-def compare_periods(req: schemas.PeriodCompareRequest, db: Session = Depends(get_db)):
+def compare_periods(
+    req: schemas.PeriodCompareRequest,
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     """
     Calculates exact real metrics for Period 1 and Period 2, and their growth/delta percentages.
     Includes smart fallbacks to prevent 422 errors when dates are incomplete.
     """
+    target_company = get_user_company_id(authorization, db, company_id)
     now = datetime.datetime.now()
     curr_ym = f"{now.year:04d}-{now.month:02d}"
     prev_month = now.month - 1 or 12
@@ -501,14 +564,14 @@ def compare_periods(req: schemas.PeriodCompareRequest, db: Session = Depends(get
     p2_s = (req.period2_start or f"{prev_ym}-01").strip()
     p2_e = (req.period2_end or f"{prev_ym}-28").strip()
 
-    cache_key = f"compare:{p1_s}:{p1_e}:{p2_s}:{p2_e}"
+    cache_key = f"compare:{target_company}:{p1_s}:{p1_e}:{p2_s}:{p2_e}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        f_p1 = executor.submit(calc_date_range_metrics, db, p1_s, p1_e)
-        f_p2 = executor.submit(calc_date_range_metrics, db, p2_s, p2_e)
+        f_p1 = executor.submit(calc_date_range_metrics, db, p1_s, p1_e, target_company)
+        f_p2 = executor.submit(calc_date_range_metrics, db, p2_s, p2_e, target_company)
         p1 = f_p1.result()
         p2 = f_p2.result()
 
@@ -562,14 +625,17 @@ def compare_periods(req: schemas.PeriodCompareRequest, db: Session = Depends(get
 def get_date_range_analysis(
     start_date: str = Query(...),
     end_date: str = Query(...),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    cache_key = f"date_range:{start_date}:{end_date}"
+    target_company = get_user_company_id(authorization, db, company_id)
+    cache_key = f"date_range:{target_company}:{start_date}:{end_date}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
 
-    data = calc_date_range_metrics(db, start_date, end_date)
+    data = calc_date_range_metrics(db, start_date, end_date, target_company)
     res = {
         "code": 0,
         "data": data
@@ -579,22 +645,38 @@ def get_date_range_analysis(
 
 
 @router.get("/analysis/total")
-def get_analysis_total(db: Session = Depends(get_db)):
-    cached = get_analytics_cache("analysis_total")
+def get_analysis_total(
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, company_id)
+    cache_key = f"analysis_total:{target_company}"
+    cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
 
-    products_count = db.query(models.Product).count()
-    workers_count = db.query(models.Worker).filter(models.Worker.status == 1).count()
+    pq = db.query(models.Product)
+    if target_company:
+        pq = pq.filter(models.Product.company_id == target_company)
+    products = pq.all()
+    products_count = len(products)
+
+    wq = db.query(models.Worker).filter(models.Worker.status == 1)
+    if target_company:
+        wq = wq.filter(models.Worker.company_id == target_company)
+    workers_count = wq.count()
     
-    products = db.query(models.Product).all()
     inventory_val = sum((p.price or 0.0) * (p.quantityInStock or 0) for p in products)
     
-    salaries_sum = db.query(func.sum(models.Salary.netSalary)).filter(models.Salary.status == 'paid').scalar() or 0.0
+    sal_q = db.query(func.sum(models.Salary.netSalary)).join(models.Worker, models.Salary.workerId == models.Worker.id).filter(models.Salary.status == 'paid')
+    if target_company:
+        sal_q = sal_q.filter(models.Worker.company_id == target_company)
+    salaries_sum = sal_q.scalar() or 0.0
     if salaries_sum == 0:
-        salaries_sum = sum((w.baseSalary or 0.0) for w in db.query(models.Worker).filter(models.Worker.status == 1).all())
+        salaries_sum = sum((w.baseSalary or 0.0) for w in wq.all())
         
-    return {
+    res = {
         "code": 0,
         "data": {
             "users": products_count,
@@ -603,10 +685,17 @@ def get_analysis_total(db: Session = Depends(get_db)):
             "shoppings": int(salaries_sum)
         }
     }
+    set_analytics_cache(cache_key, res)
+    return res
 
 
 @router.get("/analysis/monthlySales")
-def get_monthly_sales(db: Session = Depends(get_db)):
+def get_monthly_sales(
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, company_id)
     now = datetime.datetime.now()
     data = []
     for i in range(5, -1, -1):
@@ -616,7 +705,10 @@ def get_monthly_sales(db: Session = Depends(get_db)):
             m_calc += 12
             y_calc -= 1
         ym = f"{y_calc:04d}-{m_calc:02d}"
-        sales = db.query(models.Sale).filter(models.Sale.created_at.like(f"{ym}%")).all()
+        sq = db.query(models.Sale).filter(models.Sale.created_at.like(f"{ym}%"))
+        if target_company:
+            sq = sq.filter(models.Sale.company_id == target_company)
+        sales = sq.all()
         rev = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
         data.append({
             "name": ym,
@@ -630,9 +722,21 @@ def get_monthly_sales(db: Session = Depends(get_db)):
 
 
 @router.get("/workplace/total")
-def get_workplace_total(db: Session = Depends(get_db)):
-    total_products = db.query(models.Product).count()
-    total_workers = db.query(models.Worker).count()
+def get_workplace_total(
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, company_id)
+    pq = db.query(models.Product)
+    if target_company:
+        pq = pq.filter(models.Product.company_id == target_company)
+    total_products = pq.count()
+
+    wq = db.query(models.Worker)
+    if target_company:
+        wq = wq.filter(models.Worker.company_id == target_company)
+    total_workers = wq.count()
     total_todos = db.query(models.Todo).filter(models.Todo.completed == 0).count()
     
     return {
@@ -719,13 +823,21 @@ def get_workplace_radar(db: Session = Depends(get_db)):
 # MONTHLY FINANCIAL CLOSING & ARCHIVE SNAPSHOTS
 # ══════════════════════════════════════════════════════════════
 @router.get("/analysis/snapshot/list")
-def get_financial_snapshots(db: Session = Depends(get_db)):
-    cache_key = "analysis:snapshot:list"
+def get_financial_snapshots(
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, company_id)
+    cache_key = f"analysis:snapshot:list:{target_company}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
 
-    snapshots = db.query(models.MonthlyFinancialSnapshot).order_by(models.MonthlyFinancialSnapshot.period_month.desc()).all()
+    q = db.query(models.MonthlyFinancialSnapshot)
+    if target_company:
+        q = q.filter(models.MonthlyFinancialSnapshot.company_id == target_company)
+    snapshots = q.order_by(models.MonthlyFinancialSnapshot.period_month.desc()).all()
     res = {
         "code": 0,
         "data": [
@@ -753,12 +865,18 @@ def get_financial_snapshots(db: Session = Depends(get_db)):
 
 
 @router.post("/analysis/snapshot/close")
-def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose, db: Session = Depends(get_db)):
+def close_monthly_financial_snapshot(
+    req: schemas.MonthlyFinancialSnapshotClose,
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, getattr(req, "company_id", None) or company_id)
     month = req.period_month.strip()
     if not month:
         return {"code": 1, "message": "Hisobot oyi (period_month) kiritilishi shart"}
 
-    real_data = calc_month_metrics(db, month)
+    real_data = calc_month_metrics(db, month, company_id=target_company)
 
     revenue = req.override_revenue if req.override_revenue is not None else real_data["revenue"]
     cogs = req.override_cogs if req.override_cogs is not None else real_data["cogs"]
@@ -770,9 +888,12 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
     profit_margin = round((net_profit / revenue * 100), 1) if revenue > 0 else 0.0
     sales_count = real_data["sales_count"]
 
-    existing = db.query(models.MonthlyFinancialSnapshot).filter(
+    q = db.query(models.MonthlyFinancialSnapshot).filter(
         models.MonthlyFinancialSnapshot.period_month == month
-    ).first()
+    )
+    if target_company:
+        q = q.filter(models.MonthlyFinancialSnapshot.company_id == target_company)
+    existing = q.first()
 
     if existing:
         existing.revenue = revenue
@@ -791,7 +912,8 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
         snap = existing
     else:
         snap = models.MonthlyFinancialSnapshot(
-            id=f"MFS-{month}",
+            id=f"MFS-{target_company or 'comp-default'}-{month}",
+            company_id=target_company or "comp-default",
             period_month=month,
             revenue=revenue,
             cogs=cogs,
@@ -841,15 +963,24 @@ def close_monthly_financial_snapshot(req: schemas.MonthlyFinancialSnapshotClose,
 
 
 @router.post("/analysis/snapshot/delete")
-def delete_financial_snapshot(data: dict = Body(...), db: Session = Depends(get_db)):
+def delete_financial_snapshot(
+    data: dict = Body(...),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, data.get("company_id") or company_id)
     snap_id = data.get("id") or data.get("period_month")
     if not snap_id:
         return {"code": 1, "message": "ID ko'rsatilmadi"}
-    
-    item = db.query(models.MonthlyFinancialSnapshot).filter(
+
+    q = db.query(models.MonthlyFinancialSnapshot).filter(
         (models.MonthlyFinancialSnapshot.id == snap_id) | (models.MonthlyFinancialSnapshot.period_month == snap_id)
-    ).first()
-    
+    )
+    if target_company:
+        q = q.filter(models.MonthlyFinancialSnapshot.company_id == target_company)
+    item = q.first()
+
     if item:
         db.delete(item)
         db.commit()
@@ -866,16 +997,16 @@ def warm_up_analytics_cache():
         db = SessionLocal()
         try:
             get_financial_snapshots(db)
-            get_financial_overview("6m", db)
-            get_financial_overview("1y", db)
+            get_financial_overview(time_range="6m", db=db)
+            get_financial_overview(time_range="1y", db=db)
             now = datetime.datetime.now()
             curr_ym = f"{now.year:04d}-{now.month:02d}"
             prev_m = now.month - 1 or 12
             prev_y = now.year if now.month > 1 else now.year - 1
             prev_ym = f"{prev_y:04d}-{prev_m:02d}"
-            get_month_summary(curr_ym, db)
-            get_month_summary(prev_ym, db)
-            compare_periods(schemas.PeriodCompareRequest(), db)
+            get_month_summary(month_str=curr_ym, db=db)
+            get_month_summary(month_str=prev_ym, db=db)
+            compare_periods(request=schemas.PeriodCompareRequest(), db=db)
         finally:
             db.close()
     except Exception as e:

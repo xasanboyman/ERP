@@ -144,6 +144,22 @@ def ai_config(username: str = Query(None), db: Session = Depends(get_db)):
             user_name = db_user.username
             role_name = db_user.role or "Foydalanuvchi"
             is_super = (db_user.role == "admin" or str(db_user.roleId) == "1" or "*.*.*" in (db_user.permissions or []))
+
+            # Company plan check: AI is strictly Pro-only
+            comp_id = getattr(db_user, "company_id", None) or "comp-default"
+            comp = db.query(models.Company).filter(models.Company.id == comp_id).first()
+            if comp and comp.plan != "pro" and not is_super:
+                return {
+                    "code": 403,
+                    "message": "AI yordamchisi faqat 'Pro' tarifida mavjud. Iltimos, tarifingizni oshirish uchun ma'muriyatga murojaat qiling.",
+                    "data": {
+                        "gemini_api_key": None,
+                        "has_access": False,
+                        "plan": comp.plan,
+                        "company_name": comp.name,
+                        "user": {"name": user_name, "role": role_name}
+                    }
+                }
             
             db_role = db.query(models.Role).filter(models.Role.id == str(db_user.roleId)).first()
             role_perms = db_role.permissions if db_role and db_role.permissions else []
@@ -237,6 +253,13 @@ def ai_execute(body: dict = Body(...), db: Session = Depends(get_db)):
             db_user = db.query(models.User).filter(models.User.username == username).first()
             if db_user:
                 is_super = (db_user.role == "admin" or str(db_user.roleId) == "1" or "*.*.*" in (db_user.permissions or []))
+                comp_id = getattr(db_user, "company_id", None) or "comp-default"
+                comp = db.query(models.Company).filter(models.Company.id == comp_id).first()
+                if comp and comp.plan != "pro" and not is_super:
+                    return {
+                        "code": 403,
+                        "message": "AI buyruqlarini bajarish faqat 'Pro' tarifida mavjud. Iltimos, kompaniya tarifini 'Pro' ga oshiring."
+                    }
                 db_role = db.query(models.Role).filter(models.Role.id == str(db_user.roleId)).first()
                 role_perms = db_role.permissions if db_role and db_role.permissions else []
                 user_permissions = list(set(role_perms + (db_user.permissions or [])))

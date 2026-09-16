@@ -119,6 +119,30 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
     ]
   },
   {
+    path: '/company',
+    component: Layout,
+    redirect: '/company/list',
+    name: 'CompanyRoot',
+    meta: {
+      title: 'router.companyManagement',
+      icon: 'vi-ep:office-building',
+      alwaysShow: false,
+      hidden: true
+    },
+    children: [
+      {
+        path: 'list',
+        component: () => import('@/views/Company/CompanyManagement.vue'),
+        name: 'CompanyManagement',
+        meta: {
+          title: 'router.companyManagement',
+          icon: 'vi-ep:office-building',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
     path: '/product',
     component: Layout,
     redirect: '/product/list',

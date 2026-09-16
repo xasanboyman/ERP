@@ -1,11 +1,11 @@
 # Knit ERP Changelog
 
-All notable changes to **Knit ERP** are documented in this file.
+All notable changes to **Appix ERP** are documented in this file.
 
 ## [1.0.0] - 2026-09-01
 
 ### Added
-- **AI Voice Assistant**: Rebranded to Knit ERP AI with dual visualizer modes (radial particle starburst and symmetric audio waveform) and 1.2s voice barge-in cancellation.
+- **AI Voice Assistant**: Rebranded to Appix ERP AI with dual visualizer modes (radial particle starburst and symmetric audio waveform) and 1.2s voice barge-in cancellation.
 - **Role-Based Access Control (RBAC)**: Fine-grained permission mapping across all routes, sidebar menus, and backend AI tool calling functions.
 - **Mobile QR/Barcode Dual POS Handover Engine**:
   - Standalone mobile scanner view (`/mobile/scanner`).

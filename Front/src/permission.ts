@@ -8,7 +8,7 @@ import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { preloadAllViewsAndData } from '@/utils/routerHelper'
-import { getAdminRoleApi, getTestRoleApi } from '@/api/login'
+import { getAdminRoleApi } from '@/api/login'
 
 const { start, done } = useNProgress()
 
@@ -64,36 +64,48 @@ router.beforeEach(async (to, from, next) => {
   if (userStore.getUserInfo) {
     if (to.path === '/login') {
       next({ path: '/' })
-    } else {
-      if (permissionStore.getIsAddRouters) {
-        const user = userStore.getUserInfo
-        if (user && !user.role) {
-          user.role = user.username === 'admin' ? 'Super Administrator' : 'Oddiy xodim'
-        }
-        const role = (user?.role || '').toLowerCase()
-        const isSuper = role.includes('admin') || role.includes('super')
+      return
+    }
 
-        // If not super admin, check if path is authorized
-        if (!isSuper) {
-          const allowedPaths = permissionStore.getAddRouters.map((r: any) => r.path)
-          const targetPath = to.path.toLowerCase()
-          const isAllowed = allowedPaths.some((p: string) => {
-            const lp = p.toLowerCase()
-            return lp === targetPath || targetPath.startsWith(lp + '/') || lp.endsWith(targetPath)
-          })
+    const user = userStore.getUserInfo
+    if (user && !user.role) {
+      user.role = user.username === 'admin' ? 'Super Administrator' : 'Oddiy xodim'
+    }
+    const role = (user?.role || '').toLowerCase()
+    const isSuper =
+      user?.is_super_admin === true ||
+      role === 'super administrator' ||
+      role === 'superadmin' ||
+      user?.username === 'admin'
 
-          if (
-            !isAllowed &&
-            targetPath !== '/404' &&
-            targetPath !== '/login' &&
-            targetPath !== '/redirect' &&
-            targetPath !== '/'
-          ) {
-            const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
-            next({ path: firstPath, replace: true })
-            return
-          }
+    // If not super admin, strictly block access to company management under all conditions
+    if (!isSuper && to.path.toLowerCase().startsWith('/company')) {
+      next({ path: '/404', replace: true })
+      return
+    }
+
+    if (permissionStore.getIsAddRouters) {
+      // If not super admin, check if path is authorized
+      if (!isSuper) {
+        const allowedPaths = permissionStore.getAddRouters.map((r: any) => r.path)
+        const targetPath = to.path.toLowerCase()
+        const isAllowed = allowedPaths.some((p: string) => {
+          const lp = p.toLowerCase()
+          return lp === targetPath || targetPath.startsWith(lp + '/') || lp.endsWith(targetPath)
+        })
+
+        if (
+          !isAllowed &&
+          targetPath !== '/404' &&
+          targetPath !== '/login' &&
+          targetPath !== '/redirect' &&
+          targetPath !== '/'
+        ) {
+          const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
+          next({ path: firstPath, replace: true })
+          return
         }
+      }
 
         // If navigating to root '/' or an unpermitted route that has no match:
         const matched = router.resolve(to.path).matched
@@ -116,14 +128,7 @@ router.beforeEach(async (to, from, next) => {
       let roleRouters: any = userStore.getRoleRouters
       if (!roleRouters || (Array.isArray(roleRouters) && roleRouters.length === 0)) {
         try {
-          const user = userStore.getUserInfo
-          if (user && !user.role) {
-            user.role = user.username === 'admin' ? 'Super Administrator' : 'Oddiy xodim'
-          }
-          const roleName = user?.role || user?.username || 'Oddiy xodim'
-          const res = appStore.serverDynamicRouter
-            ? await getAdminRoleApi({ roleName })
-            : await getTestRoleApi({ roleName })
+          const res = await getAdminRoleApi()
           if (res && res.data) {
             roleRouters = Array.isArray(res.data) ? res.data : (res.data as any).list || []
             userStore.setRoleRouters(roleRouters)
@@ -141,10 +146,6 @@ router.beforeEach(async (to, from, next) => {
         }
       }
 
-      const isSuper =
-        (userStore.getUserInfo?.role || '').toLowerCase().includes('admin') ||
-        (userStore.getUserInfo?.role || '').toLowerCase().includes('super')
-
       if (appStore.getDynamicRouter && roleRouters.length > 0) {
         appStore.serverDynamicRouter
           ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
@@ -154,11 +155,19 @@ router.beforeEach(async (to, from, next) => {
       } else {
         await permissionStore.generateRoutes('frontEnd', [
           '/dashboard',
+          '/dashboard/analysis',
           '/dashboard/workplace',
           '/product',
           '/product/list',
           '/sales',
-          '/sales/pos'
+          '/sales/pos',
+          '/sales/debtors',
+          '/hr',
+          '/hr/workers',
+          '/hr/timesheets',
+          '/hr/outputs',
+          '/hr/adjustments',
+          '/hr/salary'
         ])
       }
 
@@ -168,7 +177,10 @@ router.beforeEach(async (to, from, next) => {
       permissionStore.setIsAddRouters(true)
 
       const rawRedirect = from.query.redirect || to.path
-      const decodedRedirect = decodeURIComponent(rawRedirect as string)
+      let decodedRedirect = decodeURIComponent(rawRedirect as string)
+      if (!isSuper && decodedRedirect.toLowerCase().startsWith('/company')) {
+        decodedRedirect = '/404'
+      }
       const matched = router.resolve(decodedRedirect).matched
       const isValidRedirect =
         matched &&
@@ -180,7 +192,6 @@ router.beforeEach(async (to, from, next) => {
         ? decodedRedirect
         : getFirstRoutePath(permissionStore.getAddRouters)
       next({ path: targetPath, replace: true })
-    }
   } else {
     if (NO_REDIRECT_WHITE_LIST.indexOf(to.path) !== -1 || to.path.startsWith('/mobile')) {
       next()

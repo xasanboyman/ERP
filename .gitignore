@@ -35,3 +35,10 @@ __pycache__/
 *.sql.gz
 .vercel
 .env*
+scratch/
+.agents/survey_explorer*
+.agents/worker_*
+.agents/workflows/
+.agents/skills/
+.agents/orchestrator_prev*
+.agents/orchestrator_r2*

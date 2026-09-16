@@ -395,6 +395,35 @@ async function ensureSchema(sql) {
       ON CONFLICT (id) DO NOTHING;
     `;
 
+    // Ensure companies table and multi-tenancy columns
+    await sql`
+      CREATE TABLE IF NOT EXISTS companies (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(150) NOT NULL,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        plan VARCHAR(20) DEFAULT 'pro',
+        billing_cycle VARCHAR(20) DEFAULT 'monthly',
+        subscription_expires_at TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'active',
+        max_users INTEGER DEFAULT 10,
+        features JSONB DEFAULT '{"ai_assistant": true, "advanced_analytics": true, "multi_branch": true, "cutting_module": true, "upcoming_features": true}'::jsonb,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `;
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) DEFAULT 'comp-default';`;
+    await sql`ALTER TABLE sales ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) DEFAULT 'comp-default';`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) DEFAULT 'comp-default';`;
+    await sql`ALTER TABLE workers ADD COLUMN IF NOT EXISTS company_id VARCHAR(50) DEFAULT 'comp-default';`;
+    try {
+      await sql`ALTER TABLE products ALTER COLUMN classifier_id TYPE VARCHAR USING classifier_id::varchar;`;
+    } catch(e) {}
+    await sql`
+      INSERT INTO companies (id, name, code, plan, billing_cycle, status, max_users)
+      VALUES ('comp-default', 'Bosh Korxona', 'DEFAULT', 'pro', 'yearly', 'active', 50)
+      ON CONFLICT (id) DO NOTHING;
+    `;
+
     schemaInitialized = true;
   } catch (err) {
     console.warn('ensureSchema warning:', err);
@@ -435,6 +464,28 @@ const defaultAdminRoutes = [
     ]
   },
   {
+    path: '/company',
+    component: '#',
+    redirect: '/company/list',
+    name: 'CompanyRoot',
+    meta: {
+      title: 'Korxonalar Boshqaruvi',
+      icon: 'vi-ep:office-building',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'list',
+        component: 'views/Company/CompanyManagement',
+        name: 'CompanyManagement',
+        meta: {
+          title: 'Kompaniyalar va Tariflar',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
     path: '/product',
     component: '#',
     redirect: '/product/list',
@@ -455,126 +506,6 @@ const defaultAdminRoutes = [
         }
       }
     ]
-  },
-  {
-    path: '/sales',
-    component: '#',
-    redirect: '/sales/pos',
-    name: 'SalesRoot',
-    meta: {
-      title: 'Sotuvlar (POS)',
-      icon: 'vi-ep:shopping-cart-full',
-      alwaysShow: true
-    },
-    children: [
-      {
-        path: 'pos',
-        component: 'views/Sales/Pos',
-        name: 'SalesPos',
-        meta: {
-          title: 'Sotuvlar (POS)',
-          noCache: true
-        }
-      },
-      {
-        path: 'debtors',
-        component: 'views/Sales/Debtors',
-        name: 'SalesDebtors',
-        meta: {
-          title: 'Nasiyalar (Qarzlar)',
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/hr',
-    component: '#',
-    redirect: '/hr/workers',
-    name: 'HRRoot',
-    meta: {
-      title: 'Xodimlar (HR)',
-      icon: 'vi-ep:avatar',
-      alwaysShow: true
-    },
-    children: [
-      {
-        path: 'workers',
-        component: 'views/Worker/Worker',
-        name: 'WorkerManagement',
-        meta: {
-          title: 'Xodimlar Ro\'yxati',
-          noCache: true
-        }
-      },
-      {
-        path: 'timesheets',
-        component: 'views/StaffHR/Timesheet',
-        name: 'TimesheetManagement',
-        meta: {
-          title: 'Ish Vaqti (Davomat)',
-          noCache: true
-        }
-      },
-      {
-        path: 'outputs',
-        component: 'views/StaffHR/Output',
-        name: 'OutputManagement',
-        meta: {
-          title: 'Kunlik Ishbay Ishlab Chiqarish',
-          noCache: true
-        }
-      },
-      {
-        path: 'adjustments',
-        component: 'views/StaffHR/Adjustment',
-        name: 'AdjustmentManagement',
-        meta: {
-          title: 'Mukofot va Jarimalar',
-          noCache: true
-        }
-      },
-      {
-        path: 'salary',
-        component: 'views/Salary/Salary',
-        name: 'SalaryManagement',
-        meta: {
-          title: 'Oylik Maoshlar',
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/authorization',
-    component: '#',
-    redirect: '/authorization/role',
-    name: 'Authorization',
-    meta: {
-      title: 'Huquqlar & Sozlamalar',
-      icon: 'vi-eos-icons:role-binding',
-      alwaysShow: true
-    },
-    children: [
-      {
-        path: 'department',
-        component: 'views/Authorization/Department/Department',
-        name: 'Department',
-        meta: {
-          title: 'Bo\'limlar',
-          noCache: true
-        }
-      },
-      {
-        path: 'role',
-        component: 'views/Authorization/Role/Role',
-        name: 'Role',
-        meta: {
-          title: 'Rollar',
-          noCache: true
-        }
-      }
-    ]
   }
 ];
 
@@ -582,20 +513,10 @@ const defaultRoleKeys = [
   '/dashboard',
   '/dashboard/analysis',
   '/dashboard/workplace',
+  '/company',
+  '/company/list',
   '/product',
-  '/product/list',
-  '/sales',
-  '/sales/pos',
-  '/sales/debtors',
-  '/hr',
-  '/hr/workers',
-  '/hr/timesheets',
-  '/hr/outputs',
-  '/hr/adjustments',
-  '/hr/salary',
-  '/authorization',
-  '/authorization/department',
-  '/authorization/role'
+  '/product/list'
 ];
 
 const defaultWorkerPermissions = [
@@ -710,6 +631,21 @@ function filterRoleKeysByRole(permissions) {
   return keys.length > 0 ? keys : ['/dashboard', '/dashboard/workplace'];
 }
 
+function getReqCompanyId(req, payload = null) {
+  let qCompany = null;
+  try {
+    const urlObj = new URL(req.url, 'http://localhost');
+    qCompany = req?.query?.company_id || urlObj.searchParams.get('company_id');
+  } catch (e) {
+    qCompany = req?.query?.company_id;
+  }
+  if (qCompany) return qCompany;
+  if (payload) {
+    if (payload.is_super_admin && !qCompany) return null;
+    if (payload.company_id) return payload.company_id;
+  }
+  return 'comp-default';
+}
 
 function authenticate(req, res) {
   const authHeader = req?.headers?.authorization || req?.headers?.Authorization;
@@ -842,7 +778,20 @@ export default async function handler(req, res) {
         user.roleId = user.username === 'admin' ? '1' : '3';
       }
 
-      const token = 'Bearer ' + jwt.sign({ sub: user.username, id: user.id }, SECRET_KEY, { expiresIn: '8h' });
+      const isSuper = (user.role || '').toLowerCase().includes('super') || user.username === 'admin';
+      const companyId = user.company_id || 'comp-default';
+      let company = null;
+      try {
+        const compRows = await sql`SELECT * FROM companies WHERE id = ${companyId} LIMIT 1`;
+        company = compRows[0];
+      } catch (e) {}
+
+      const token = 'Bearer ' + jwt.sign({
+        sub: user.username,
+        id: user.id,
+        company_id: companyId,
+        is_super_admin: isSuper
+      }, SECRET_KEY, { expiresIn: '8h' });
       let permissions = user.permissions;
       if (typeof permissions === 'string') {
         try { permissions = JSON.parse(permissions); } catch (e) { permissions = []; }
@@ -873,6 +822,11 @@ export default async function handler(req, res) {
           roleId: user.roleId || (user.role === 'Super Administrator' ? '1' : '3'),
           email: user.email || '',
           department_id: user.department_id || 'DEPT-HQ',
+          company_id: companyId,
+          company_name: company ? company.name : 'Bosh Korxona',
+          company_plan: company ? (company.plan || 'pro') : 'pro',
+          company_features: company ? (company.features || {}) : {},
+          is_super_admin: isSuper,
           permissions: permissions,
           token: token,
           password: password
@@ -1023,8 +977,14 @@ export default async function handler(req, res) {
       const productName = (req.query?.productName || urlSearchParams.get('productName') || '').trim().toLowerCase();
       const category = (req.query?.category || urlSearchParams.get('category') || '').trim();
       const offset = (pageIndex - 1) * pageSize;
+      const targetCompany = req.query?.company_id || urlSearchParams.get('company_id') || getReqCompanyId(req, authUser);
 
-      let allRows = await sql`SELECT * FROM products ORDER BY id DESC`;
+      let allRows;
+      if (targetCompany) {
+        allRows = await sql`SELECT * FROM products WHERE company_id = ${targetCompany} ORDER BY id DESC`;
+      } else {
+        allRows = await sql`SELECT * FROM products ORDER BY id DESC`;
+      }
       if (productName) {
         const normalizeTokens = (str) => {
           let s = (str || '').toLowerCase();
@@ -1156,17 +1116,25 @@ export default async function handler(req, res) {
           packagings
         } = req.body || {};
 
+        const targetCompany = req.body?.company_id || getReqCompanyId(req, authUser);
+
         let existing = null;
         if (id) {
-          const rows = await sql`SELECT * FROM products WHERE id = ${id} LIMIT 1`;
+          const rows = targetCompany
+            ? await sql`SELECT * FROM products WHERE id = ${id} AND company_id = ${targetCompany} LIMIT 1`
+            : await sql`SELECT * FROM products WHERE id = ${id} LIMIT 1`;
           if (rows[0]) existing = rows[0];
         }
         if (!existing && shtrix_code) {
-          const rows = await sql`SELECT * FROM products WHERE shtrix_code = ${shtrix_code.trim()} LIMIT 1`;
+          const rows = targetCompany
+            ? await sql`SELECT * FROM products WHERE shtrix_code = ${shtrix_code.trim()} AND company_id = ${targetCompany} LIMIT 1`
+            : await sql`SELECT * FROM products WHERE shtrix_code = ${shtrix_code.trim()} LIMIT 1`;
           if (rows[0]) existing = rows[0];
         }
         if (!existing && SKU) {
-          const rows = await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${SKU.trim()}) LIMIT 1`;
+          const rows = targetCompany
+            ? await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${SKU.trim()}) AND company_id = ${targetCompany} LIMIT 1`
+            : await sql`SELECT * FROM products WHERE LOWER("SKU") = LOWER(${SKU.trim()}) LIMIT 1`;
           if (rows[0]) existing = rows[0];
         }
 
@@ -1253,14 +1221,52 @@ export default async function handler(req, res) {
           const cst = parseFloat(cost) || 0;
           const stat = status !== undefined ? parseInt(status, 10) : 1;
 
+          // Cluster Database Sync: If not in classifier_items, add it to shared cluster database
+          try {
+            let inCluster = false;
+            if (shtrix_code) {
+              const cCheck = await sql`SELECT id FROM classifier_items WHERE shtrix_code = ${shtrix_code.trim()} LIMIT 1`;
+              if (cCheck.length > 0) inCluster = true;
+            }
+            if (!inCluster && mxik_code) {
+              const mCheck = await sql`SELECT id FROM classifier_items WHERE mxik_code = ${mxik_code.trim()} LIMIT 1`;
+              if (mCheck.length > 0) inCluster = true;
+            }
+            if (!inCluster) {
+              const maxIdRes = await sql`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM classifier_items`;
+              const nextId = parseInt(maxIdRes[0].next_id, 10) || Math.floor(Date.now() / 1000);
+              await sql`
+                INSERT INTO classifier_items (
+                  id, group_name, class_name, position_name, brand_name,
+                  attribute_name, mxik_code, mxik_name, shtrix_code, unit
+                )
+                VALUES (
+                  ${nextId},
+                  ${category || 'Boshqa tovarlar'},
+                  ${category || 'Boshqa tovarlar'},
+                  ${productName || 'Yangi mahsulot'},
+                  ${brand_name || null},
+                  ${attribute_name || null},
+                  ${mxik_code || null},
+                  ${productName || 'Yangi tovar'},
+                  ${shtrix_code || null},
+                  ${unit || 'dona'}
+                )
+                ON CONFLICT (id) DO NOTHING
+              `;
+            }
+          } catch (clsErr) {
+            console.warn('Cluster database sync warning:', clsErr.message);
+          }
+
           const inserted = await sql`
             INSERT INTO products (
-              id, "productName", "SKU", category, price, cost, "quantityInStock", status,
+              id, company_id, "productName", "SKU", category, price, cost, "quantityInStock", status,
               shtrix_code, mxik_code, brand_name, attribute_name, image_url, unit, remark,
               expiration_date, classifier_id, min_stock, "createTime"
             )
             VALUES (
-              ${newId}, ${productName || 'Yangi Mahsulot'}, ${newSKU}, ${category || 'Ichimliklar va suvlar'},
+              ${newId}, ${targetCompany}, ${productName || 'Yangi Mahsulot'}, ${newSKU}, ${category || 'Ichimliklar va suvlar'},
               ${pr}, ${cst}, ${stock}, ${stat}, ${shtrix_code || null}, ${mxik_code || null},
               ${brand_name || null}, ${attribute_name || null}, ${image_url || null}, ${unit || 'dona'},
               ${remark || null}, ${expiration_date || null}, ${clsId}, ${minStk}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
@@ -1301,9 +1307,14 @@ export default async function handler(req, res) {
     if (path === 'product/delete' && req.method === 'POST') {
       let ids = req.body?.ids;
       if (!ids && req.body?.id) ids = [req.body.id];
+      const targetCompany = req.body?.company_id || getReqCompanyId(req, authUser);
       if (Array.isArray(ids) && ids.length > 0) {
         await sql`DELETE FROM product_packagings WHERE product_id = ANY(${ids})`;
-        await sql`DELETE FROM products WHERE id = ANY(${ids})`;
+        if (targetCompany) {
+          await sql`DELETE FROM products WHERE id = ANY(${ids}) AND company_id = ${targetCompany}`;
+        } else {
+          await sql`DELETE FROM products WHERE id = ANY(${ids})`;
+        }
         try {
           await sql`
             INSERT INTO activity_logs (user_id, username, action, details, "createTime")
@@ -1319,6 +1330,143 @@ export default async function handler(req, res) {
     if (path === 'product/upload-image' && req.method === 'POST') {
       const imgUrl = req.body?.url || req.body?.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400';
       return res.status(200).json({ code: 0, data: { url: imgUrl } });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // COMPANY MANAGEMENT ENDPOINTS (Multi-Tenancy & Subscriptions)
+    // ══════════════════════════════════════════════════════════════
+    if (path === 'company/list') {
+      const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
+      const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
+      const name = (req.query?.name || urlSearchParams.get('name') || '').trim().toLowerCase();
+      const plan = (req.query?.plan || urlSearchParams.get('plan') || '').trim().toLowerCase();
+      const offset = (pageIndex - 1) * pageSize;
+
+      let allCompanies = await sql`SELECT * FROM companies ORDER BY created_at DESC`;
+      if (name) {
+        allCompanies = allCompanies.filter(c => (c.name || '').toLowerCase().includes(name) || (c.code || '').toLowerCase().includes(name));
+      }
+      if (plan) {
+        allCompanies = allCompanies.filter(c => (c.plan || '').toLowerCase() === plan);
+      }
+
+      const total = allCompanies.length;
+      const paginated = allCompanies.slice(offset, offset + pageSize);
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          total,
+          list: paginated
+        }
+      });
+    }
+
+    if (path === 'company/current') {
+      const compId = getReqCompanyId(req, authUser) || 'comp-default';
+      const rows = await sql`SELECT * FROM companies WHERE id = ${compId} LIMIT 1`;
+      return res.status(200).json({
+        code: 0,
+        data: rows[0] || {
+          id: 'comp-default',
+          name: 'Bosh Korxona',
+          code: 'DEFAULT',
+          plan: 'pro',
+          billing_cycle: 'yearly',
+          status: 'active'
+        }
+      });
+    }
+
+    if (path === 'company/save' && req.method === 'POST') {
+      const { id, name, code, plan, billing_cycle, status, max_users, features } = req.body || {};
+      if (!name || !code) {
+        return res.status(200).json({ code: 400, message: "Kompaniya nomi va kodi kiritilishi shart" });
+      }
+      const p = (plan || 'basic').toLowerCase();
+      const defaultFeatures = p === 'pro'
+        ? { ai_assistant: true, advanced_analytics: true, multi_branch: true, cutting_module: true, upcoming_features: true }
+        : { ai_assistant: false, advanced_analytics: false, multi_branch: false, cutting_module: false, upcoming_features: false };
+      const feats = features ? JSON.stringify(features) : JSON.stringify(defaultFeatures);
+
+      let saved;
+      if (id) {
+        const rows = await sql`
+          UPDATE companies
+          SET name = ${name},
+              code = ${code},
+              plan = ${p},
+              billing_cycle = ${billing_cycle || 'monthly'},
+              status = ${status || 'active'},
+              max_users = ${parseInt(max_users, 10) || 10},
+              features = ${feats}::jsonb,
+              updated_at = NOW()
+          WHERE id = ${id}
+          RETURNING *
+        `;
+        saved = rows[0];
+      } else {
+        const newId = 'comp-' + Date.now().toString(36) + '-' + Math.floor(100 + Math.random() * 900);
+        const rows = await sql`
+          INSERT INTO companies (id, name, code, plan, billing_cycle, status, max_users, features, created_at, updated_at)
+          VALUES (${newId}, ${name}, ${code}, ${p}, ${billing_cycle || 'monthly'}, ${status || 'active'}, ${parseInt(max_users, 10) || 10}, ${feats}::jsonb, NOW(), NOW())
+          RETURNING *
+        `;
+        saved = rows[0];
+      }
+
+      return res.status(200).json({
+        code: 0,
+        message: id ? "Kompaniya ma'lumotlari muvaffaqiyatli yangilandi" : "Yangi korxona muvaffaqiyatli ro'yxatga olindi",
+        data: saved
+      });
+    }
+
+    if (path === 'company/tier' && req.method === 'POST') {
+      const { company_id, plan, billing_cycle, features } = req.body || {};
+      if (!company_id || !plan) {
+        return res.status(200).json({ code: 400, message: "company_id va plan kiritilishi shart" });
+      }
+      const p = plan.toLowerCase();
+      const pFeatures = features
+        ? JSON.stringify(features)
+        : (p === 'pro'
+          ? JSON.stringify({ ai_assistant: true, advanced_analytics: true, multi_branch: true, cutting_module: true, upcoming_features: true })
+          : JSON.stringify({ ai_assistant: false, advanced_analytics: false, multi_branch: false, cutting_module: false, upcoming_features: false })
+        );
+
+      const rows = await sql`
+        UPDATE companies
+        SET plan = ${p},
+            billing_cycle = ${billing_cycle || 'monthly'},
+            features = ${pFeatures}::jsonb,
+            updated_at = NOW()
+        WHERE id = ${company_id}
+        RETURNING *
+      `;
+      if (!rows[0]) {
+        return res.status(200).json({ code: 404, message: "Kompaniya topilmadi" });
+      }
+      return res.status(200).json({
+        code: 0,
+        message: `Tarif muvaffaqiyatli ${p.toUpperCase()} ga o'zgartirildi`,
+        data: rows[0]
+      });
+    }
+
+    if (path === 'company/delete' && req.method === 'POST') {
+      const { id } = req.body || {};
+      if (!id) {
+        return res.status(200).json({ code: 400, message: "O'chirish uchun id ko'rsatilmadi" });
+      }
+      if (id === 'comp-default') {
+        return res.status(200).json({ code: 400, message: "Asosiy bosh korxonani o'chirish taqiqlangan" });
+      }
+      await sql`DELETE FROM companies WHERE id = ${id}`;
+      return res.status(200).json({
+        code: 0,
+        message: "Kompaniya muvaffaqiyatli o'chirildi"
+      });
     }
 
     // 9. Worker Endpoints
@@ -1406,38 +1554,14 @@ export default async function handler(req, res) {
 
     // 10. Roles Endpoints
     if (path === 'role/list') {
-      const roleName = req.query?.roleName || urlSearchParams.get('roleName') || authUser?.role || authUser?.sub;
-      if (roleName) {
-        let permissions = ['*.*.*'];
-        if (roleName !== 'Super Administrator' && roleName !== 'admin') {
-          const rRows = await sql`SELECT * FROM roles WHERE "roleName" = ${roleName} OR id = ${roleName} LIMIT 1`;
-          if (rRows[0] && rRows[0].permissions) {
-            permissions = typeof rRows[0].permissions === 'string' ? JSON.parse(rRows[0].permissions) : rRows[0].permissions;
-          } else {
-            const uRows = await sql`SELECT u.*, r.permissions as role_perms FROM users u LEFT JOIN roles r ON u."roleId" = r.id WHERE u.username = ${roleName} LIMIT 1`;
-            if (uRows[0]) {
-              permissions = uRows[0].role_perms || uRows[0].permissions || [];
-              if (typeof permissions === 'string') {
-                try { permissions = JSON.parse(permissions); } catch (e) {}
-              }
-            } else {
-              const wRows = await sql`SELECT w.*, r.permissions as role_perms FROM workers w LEFT JOIN roles r ON w.role = r."roleName" WHERE w.account = ${roleName} LIMIT 1`;
-              if (wRows[0]) {
-                permissions = wRows[0].role_perms || [];
-                if (typeof permissions === 'string') {
-                  try { permissions = JSON.parse(permissions); } catch (e) {}
-                }
-              }
-            }
-          }
-        }
-        if (!Array.isArray(permissions) || permissions.length === 0) {
-          permissions = defaultWorkerPermissions;
-        }
-        return res.status(200).json({ code: 0, data: filterRoutesByRole(permissions) });
+      if (!authUser) {
+        return res.status(401).json({ code: 401, message: 'Tizimga kirilmagan yoki sessiya yaroqsiz' });
       }
-      const rows = await sql`SELECT * FROM roles ORDER BY id ASC`;
-      return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
+      const isSuper = authUser.sub === 'admin' || authUser.role === 'Super Administrator' || authUser.is_super_admin === true;
+      if (isSuper) {
+        return res.status(200).json({ code: 0, data: filterRoutesByRole(['*.*.*']) });
+      }
+      return res.status(200).json({ code: 0, data: filterRoutesByRole(['dashboard:*', 'product:*', 'sales:*', 'hr:*']) });
     }
 
     if (path === 'role/list2') {
@@ -1586,6 +1710,303 @@ export default async function handler(req, res) {
       return res.status(200).json({ code: 0, data: 'success', message: "Xodim bo'limga biriktirildi" });
     }
 
+    // ==========================================
+    // 12. SaaS Company Management Endpoints
+    // ==========================================
+    if (path === 'company/list') {
+      const companies = await sql`SELECT * FROM companies ORDER BY created_at DESC`;
+      const enriched = [];
+      const now = new Date();
+
+      for (const c of companies) {
+        const [wRes] = await sql`SELECT COUNT(*)::int as count FROM workers WHERE company_id = ${c.id}`;
+        const [uRes] = await sql`SELECT COUNT(*)::int as count FROM users WHERE company_id = ${c.id}`;
+        const [pRes] = await sql`SELECT COUNT(*)::int as count FROM products WHERE company_id = ${c.id}`;
+        const [sRes] = await sql`SELECT COUNT(*)::int as count, COALESCE(SUM(paid_amount), 0)::float as revenue FROM sales WHERE company_id = ${c.id}`;
+
+        const wCount = wRes?.count || 0;
+        const uCount = uRes?.count || 0;
+        const pCount = pRes?.count || 0;
+        const sCount = sRes?.count || 0;
+        const rev = sRes?.revenue || 0.0;
+
+        let isExpired = false;
+        if (c.subscription_expires_at) {
+          isExpired = new Date(c.subscription_expires_at) < now;
+        }
+
+        const baseFeatures = c.plan === 'pro'
+          ? { ai: true, upcoming: true, advanced_analytics: true }
+          : { ai: false, upcoming: false, advanced_analytics: false };
+        const mergedFeatures = { ...baseFeatures, ...(c.features || {}) };
+
+        enriched.push({
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          plan: c.plan || 'basic',
+          billing_cycle: c.billing_cycle || 'monthly',
+          subscription_expires_at: c.subscription_expires_at ? new Date(c.subscription_expires_at).toISOString().replace('T', ' ').slice(0, 19) : null,
+          status: c.status === 'suspended' || c.status === 0 ? 0 : 1,
+          max_users: c.max_users || 10,
+          phone: c.phone || '',
+          email: c.email || '',
+          address: c.address || '',
+          features: mergedFeatures,
+          created_at: c.created_at,
+          employees_count: wCount + uCount,
+          workers_count: wCount,
+          users_count: uCount,
+          products_count: pCount,
+          total_sales_count: sCount,
+          total_revenue: rev,
+          is_expired: isExpired
+        });
+      }
+
+      return res.status(200).json({
+        code: 0,
+        message: 'success',
+        data: {
+          total: enriched.length,
+          list: enriched
+        }
+      });
+    }
+
+    if (path === 'company/current') {
+      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
+      const compId = authUser?.company_id || 'comp-default';
+      const [comp] = await sql`SELECT * FROM companies WHERE id = ${compId} LIMIT 1`;
+      const targetComp = comp || { id: 'comp-default', name: 'Bosh Korxona', code: 'default', plan: 'pro', billing_cycle: 'monthly', status: 1 };
+      return res.status(200).json({
+        code: 0,
+        data: {
+          company_id: targetComp.id,
+          name: targetComp.name,
+          code: targetComp.code,
+          plan: isSuper ? 'pro' : (targetComp.plan || 'basic'),
+          billing_cycle: targetComp.billing_cycle || 'monthly',
+          subscription_expires_at: targetComp.subscription_expires_at,
+          status: targetComp.status === 'suspended' || targetComp.status === 0 ? 0 : 1,
+          features: isSuper ? { ai: true, upcoming: true, advanced_analytics: true } : (targetComp.features || {}),
+          is_super_admin: isSuper
+        }
+      });
+    }
+
+    if (path.startsWith('company/detail')) {
+      let compId = req.query?.id || urlSearchParams.get('id');
+      if (!compId) {
+        const parts = path.split('/');
+        if (parts.length > 2) compId = parts[2];
+      }
+      if (!compId) compId = 'comp-default';
+
+      const [c] = await sql`SELECT * FROM companies WHERE id = ${compId} LIMIT 1`;
+      if (!c) {
+        return res.status(404).json({ code: 404, message: 'Kompaniya topilmadi' });
+      }
+
+      const workers = await sql`SELECT * FROM workers WHERE company_id = ${c.id} ORDER BY id DESC`;
+      const users = await sql`SELECT id, username, full_name, role, email, phone, company_id FROM users WHERE company_id = ${c.id} ORDER BY id DESC`;
+      const sales = await sql`SELECT id, customer_name, customer_phone, total_amount, paid_amount, debt_amount, "createTime" FROM sales WHERE company_id = ${c.id} ORDER BY id DESC`;
+      const products = await sql`SELECT id, "productName", category, price, "quantityInStock" as stock FROM products WHERE company_id = ${c.id} ORDER BY id DESC`;
+
+      const totalEmployees = workers.length + users.length;
+      const maxUsers = c.max_users || 10;
+      const usagePercent = Math.min(100, Math.round((totalEmployees / maxUsers) * 100));
+
+      const totalRevenue = sales.reduce((acc, s) => acc + (parseFloat(s.paid_amount) || 0), 0);
+      const totalSalesAmount = sales.reduce((acc, s) => acc + (parseFloat(s.total_amount) || 0), 0);
+      const totalDebt = sales.reduce((acc, s) => acc + (parseFloat(s.debt_amount) || 0), 0);
+      const debtorsCount = sales.filter(s => (parseFloat(s.debt_amount) || 0) > 0).length;
+
+      const totalStock = products.reduce((acc, p) => acc + (parseFloat(p.stock) || 0), 0);
+      const inventoryVal = products.reduce((acc, p) => acc + ((parseFloat(p.stock) || 0) * (parseFloat(p.price) || 0)), 0);
+
+      const now = new Date();
+      const isExpired = c.subscription_expires_at ? new Date(c.subscription_expires_at) < now : false;
+
+      return res.status(200).json({
+        code: 0,
+        data: {
+          id: c.id,
+          name: c.name,
+          code: c.code,
+          plan: c.plan || 'basic',
+          billing_cycle: c.billing_cycle || 'monthly',
+          subscription_expires_at: c.subscription_expires_at ? new Date(c.subscription_expires_at).toISOString().replace('T', ' ').slice(0, 19) : null,
+          status: c.status === 'suspended' || c.status === 0 ? 0 : 1,
+          max_users: maxUsers,
+          usage_percent: usagePercent,
+          phone: c.phone || '',
+          email: c.email || '',
+          address: c.address || '',
+          features: c.features || {},
+          created_at: c.created_at,
+          is_expired: isExpired,
+          stats: {
+            employees_count: totalEmployees,
+            workers_count: workers.length,
+            users_count: users.length,
+            max_users: maxUsers,
+            usage_percent: usagePercent,
+            products_count: products.length,
+            total_stock: totalStock,
+            inventory_value: inventoryVal,
+            total_sales_count: sales.length,
+            total_revenue: totalRevenue,
+            total_sales_amount: totalSalesAmount,
+            total_debt: totalDebt,
+            debtors_count: debtorsCount
+          },
+          workers: workers.map(w => ({
+            id: w.id,
+            name: w.name || '',
+            role: w.role || 'Xodim',
+            phone: w.phone || '',
+            account: w.account || w.employee_code || '',
+            employee_code: w.employee_code || '',
+            department: w.departmentId || w.department_id || '',
+            hireDate: w.entry_date || '',
+            status: w.status !== 0 ? 1 : 0,
+            baseSalary: parseFloat(w.baseSalary || w.base_salary || 0),
+            company_id: w.company_id
+          })),
+          users: users,
+          recent_sales: sales.slice(0, 10),
+          top_products: products.slice(0, 10)
+        }
+      });
+    }
+
+    if (path === 'company/save' && req.method === 'POST') {
+      const { id, name, code, plan, billing_cycle, subscription_expires_at, status, max_users, phone, email, address, features, admin_username, admin_password } = req.body || {};
+      if (!name) return res.status(400).json({ code: 400, message: 'Kompaniya nomi majburiy' });
+
+      let compId = id;
+      const cleanCode = (code || `comp_${Date.now().toString(36)}`).trim();
+
+      if (compId) {
+        await sql`
+          UPDATE companies
+          SET name = ${name}, code = ${cleanCode}, plan = ${plan || 'basic'}, billing_cycle = ${billing_cycle || 'monthly'},
+              subscription_expires_at = ${subscription_expires_at || null}, status = ${status !== undefined ? String(status) : '1'},
+              max_users = ${max_users || 10}, phone = ${phone || null}, email = ${email || null}, address = ${address || null},
+              features = ${JSON.stringify(features || {})}, updated_at = NOW()
+          WHERE id = ${compId}
+        `;
+      } else {
+        compId = `comp_${Date.now().toString(36)}`;
+        await sql`
+          INSERT INTO companies (id, name, code, plan, billing_cycle, subscription_expires_at, status, max_users, phone, email, address, features, created_at, updated_at)
+          VALUES (${compId}, ${name}, ${cleanCode}, ${plan || 'basic'}, ${billing_cycle || 'monthly'}, ${subscription_expires_at || null},
+                  ${status !== undefined ? String(status) : '1'}, ${max_users || 10}, ${phone || null}, ${email || null}, ${address || null},
+                  ${JSON.stringify(features || {})}, NOW(), NOW())
+        `;
+      }
+
+      if (admin_username && admin_password) {
+        const [existing] = await sql`SELECT id FROM users WHERE username = ${admin_username} LIMIT 1`;
+        if (!existing) {
+          await sql`
+            INSERT INTO users (username, password, full_name, role, "roleId", company_id, permissions)
+            VALUES (${admin_username}, ${admin_password}, ${name + ' Admin'}, 'Administrator', '2', ${compId}, '["*.*.*"]'::jsonb)
+          `;
+        }
+      }
+
+      return res.status(200).json({ code: 0, message: 'Kompaniya saqlandi', data: { id: compId } });
+    }
+
+    if (path === 'company/tier' && req.method === 'POST') {
+      const { company_id, plan, billing_cycle, duration_months, subscription_expires_at, max_users, features } = req.body || {};
+      if (!company_id) return res.status(400).json({ code: 400, message: 'Kompaniya ID ko\'rsatilmadi' });
+
+      let expDate = subscription_expires_at;
+      if (!expDate && duration_months) {
+        const d = new Date();
+        d.setDate(d.getDate() + Math.round(duration_months * 30.5));
+        expDate = d.toISOString();
+      }
+
+      const planFeatures = plan === 'pro' ? { ai: true, upcoming: true } : { ai: false, upcoming: false };
+      const finalFeatures = { ...planFeatures, ...(features || {}) };
+
+      await sql`
+        UPDATE companies
+        SET plan = ${plan || 'basic'}, billing_cycle = ${billing_cycle || 'monthly'},
+            subscription_expires_at = ${expDate || null}, max_users = COALESCE(${max_users || null}, max_users),
+            features = ${JSON.stringify(finalFeatures)}, updated_at = NOW()
+        WHERE id = ${company_id}
+      `;
+
+      return res.status(200).json({ code: 0, message: 'Tarif muvaffaqiyatli yangilandi' });
+    }
+
+    if (path === 'company/status' && req.method === 'POST') {
+      const { company_id, id, status } = req.body || {};
+      const targetId = company_id || id;
+      if (!targetId) return res.status(400).json({ code: 400, message: 'Kompaniya ID ko\'rsatilmadi' });
+
+      const statusStr = String(status);
+      await sql`UPDATE companies SET status = ${statusStr}, updated_at = NOW() WHERE id = ${targetId}`;
+      return res.status(200).json({ code: 0, message: 'Kompaniya holati yangilandi', data: { id: targetId, status } });
+    }
+
+    if (path === 'company/delete' && req.method === 'POST') {
+      const { id, company_id } = req.body || {};
+      const targetId = id || company_id;
+      if (!targetId) return res.status(400).json({ code: 400, message: 'Kompaniya ID ko\'rsatilmadi' });
+      if (targetId === 'comp-default') return res.status(400).json({ code: 400, message: 'Bosh korxonani o\'chirib bo\'lmaydi' });
+
+      await sql`DELETE FROM sale_items WHERE sale_id IN (SELECT id FROM sales WHERE company_id = ${targetId})`;
+      await sql`DELETE FROM sales WHERE company_id = ${targetId}`;
+      await sql`DELETE FROM products WHERE company_id = ${targetId}`;
+      await sql`DELETE FROM workers WHERE company_id = ${targetId}`;
+      await sql`DELETE FROM users WHERE company_id = ${targetId}`;
+      await sql`DELETE FROM companies WHERE id = ${targetId}`;
+
+      return res.status(200).json({ code: 0, message: 'Kompaniya o\'chirildi' });
+    }
+
+    if (path === 'company/employee/save' && req.method === 'POST') {
+      const { id, company_id, name, role, phone, account, employee_code, department, status, baseSalary, hireDate } = req.body || {};
+      if (!company_id) return res.status(400).json({ code: 400, message: 'Kompaniya ID ko\'rsatilmadi' });
+      if (!name) return res.status(400).json({ code: 400, message: 'Xodim ismi majburiy' });
+
+      let empId = id;
+      if (empId) {
+        await sql`
+          UPDATE workers
+          SET name = ${name}, role = ${role || 'Xodim'}, phone = ${phone || null},
+              account = ${account || null}, employee_code = ${employee_code || null},
+              "departmentId" = ${department || null}, department_id = ${department || null},
+              status = ${status !== undefined ? status : 1}, "baseSalary" = ${baseSalary || 0},
+              entry_date = ${hireDate || null}
+          WHERE id = ${empId}
+        `;
+      } else {
+        empId = `w_${Date.now().toString(36)}`;
+        await sql`
+          INSERT INTO workers (id, name, role, phone, account, employee_code, "departmentId", department_id, status, "baseSalary", entry_date, company_id, "createTime")
+          VALUES (${empId}, ${name}, ${role || 'Xodim'}, ${phone || null}, ${account || null}, ${employee_code || null},
+                  ${department || null}, ${department || null}, ${status !== undefined ? status : 1}, ${baseSalary || 0},
+                  ${hireDate || null}, ${company_id}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
+        `;
+      }
+
+      return res.status(200).json({ code: 0, message: 'Xodim saqlandi', data: { id: empId, name } });
+    }
+
+    if (path === 'company/employee/delete' && req.method === 'POST') {
+      const { id } = req.body || {};
+      if (!id) return res.status(400).json({ code: 400, message: 'Xodim ID ko\'rsatilmadi' });
+      await sql`DELETE FROM workers WHERE id = ${id}`;
+      return res.status(200).json({ code: 0, message: 'Xodim o\'chirildi' });
+    }
+
     if (path === 'department/user/delete' && req.method === 'POST') {
       let ids = req.body?.ids;
       if (!ids && req.body?.id) ids = [req.body.id];
@@ -1675,18 +2096,34 @@ export default async function handler(req, res) {
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 500, 10);
       const offset = (pageIndex - 1) * pageSize;
+      const targetCompany = req.query?.company_id || urlSearchParams.get('company_id') || getReqCompanyId(req, authUser);
+
       const [statsRes, rows] = await Promise.all([
-        sql`
-          SELECT 
-            count(*) as all_time_count,
-            COALESCE(SUM(total_amount), 0) as all_time_revenue,
-            COALESCE(SUM(total_items), 0) as all_time_items,
-            COUNT(*) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')) as today_count,
-            COALESCE(SUM(total_amount) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_revenue,
-            COALESCE(SUM(total_items) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_items
-          FROM sales
-        `,
-        sql`SELECT * FROM sales ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
+        targetCompany
+          ? sql`
+              SELECT 
+                count(*) as all_time_count,
+                COALESCE(SUM(total_amount), 0) as all_time_revenue,
+                COALESCE(SUM(total_items), 0) as all_time_items,
+                COUNT(*) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')) as today_count,
+                COALESCE(SUM(total_amount) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_revenue,
+                COALESCE(SUM(total_items) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_items
+              FROM sales
+              WHERE company_id = ${targetCompany}
+            `
+          : sql`
+              SELECT 
+                count(*) as all_time_count,
+                COALESCE(SUM(total_amount), 0) as all_time_revenue,
+                COALESCE(SUM(total_items), 0) as all_time_items,
+                COUNT(*) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')) as today_count,
+                COALESCE(SUM(total_amount) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_revenue,
+                COALESCE(SUM(total_items) FILTER (WHERE substring(created_at from 1 for 10) = to_char(NOW() AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD')), 0) as today_items
+              FROM sales
+            `,
+        targetCompany
+          ? sql`SELECT * FROM sales WHERE company_id = ${targetCompany} ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
+          : sql`SELECT * FROM sales ORDER BY id DESC LIMIT ${pageSize} OFFSET ${offset}`
       ]);
 
       const statsRow = statsRes[0] || {};
@@ -2013,14 +2450,15 @@ export default async function handler(req, res) {
 
       const pAmount = parseFloat(paid_amount) || 0;
       const dAmount = parseFloat(debt_amount) || (payment_method === 'nasiya' ? Math.max(0, tAmount - pAmount) : 0);
+      const targetCompany = req.body?.company_id || getReqCompanyId(req, authUser);
 
       await sql`
         INSERT INTO sales (
-          id, receipt_number, cashier_name, customer_name, customer_phone,
+          id, company_id, receipt_number, cashier_name, customer_name, customer_phone,
           payment_method, total_amount, paid_amount, debt_amount, total_items,
           discount, remark, created_at
         ) VALUES (
-          ${saleId}, ${recNo}, ${cashier_name || 'admin'}, ${customer_name || null}, ${customer_phone || null},
+          ${saleId}, ${targetCompany}, ${recNo}, ${cashier_name || 'admin'}, ${customer_name || null}, ${customer_phone || null},
           ${payment_method || 'naqd'}, ${tAmount}, ${pAmount}, ${dAmount}, ${parseInt(total_items || (items ? items.length : 1), 10)},
           ${parseFloat(discount) || 0}, ${remark || null}, ${nowStr}
         )
@@ -2168,13 +2606,23 @@ export default async function handler(req, res) {
         months.push(past.toISOString().slice(0, 7));
       }
 
+      const targetCompany = req.query?.company_id || urlSearchParams.get('company_id') || getReqCompanyId(req, authUser);
+
       const [sales, saleItems, salaries, outputs, debtors, products] = await Promise.all([
-        sql`SELECT id, total_amount, paid_amount, debt_amount, created_at FROM sales`,
-        sql`SELECT sale_id, product_id, quantity, cost, total, price FROM sale_items`,
+        targetCompany
+          ? sql`SELECT id, total_amount, paid_amount, debt_amount, created_at FROM sales WHERE company_id = ${targetCompany}`
+          : sql`SELECT id, total_amount, paid_amount, debt_amount, created_at FROM sales`,
+        targetCompany
+          ? sql`SELECT si.sale_id, si.product_id, si.quantity, si.cost, si.total, si.price FROM sale_items si JOIN sales s ON s.id = si.sale_id WHERE s.company_id = ${targetCompany}`
+          : sql`SELECT sale_id, product_id, quantity, cost, total, price FROM sale_items`,
         sql`SELECT "netSalary", status, "payDate", remark FROM salaries`,
         sql`SELECT amount, "createTime", period_month FROM staff_outputs`,
-        sql`SELECT COUNT(DISTINCT customer_name) as debtor_count, SUM(debt_amount) as total_debt FROM sales WHERE debt_amount > 0`,
-        sql`SELECT id, category FROM products`
+        targetCompany
+          ? sql`SELECT COUNT(DISTINCT customer_name) as debtor_count, SUM(debt_amount) as total_debt FROM sales WHERE debt_amount > 0 AND company_id = ${targetCompany}`
+          : sql`SELECT COUNT(DISTINCT customer_name) as debtor_count, SUM(debt_amount) as total_debt FROM sales WHERE debt_amount > 0`,
+        targetCompany
+          ? sql`SELECT id, category FROM products WHERE company_id = ${targetCompany}`
+          : sql`SELECT id, category FROM products`
       ]);
 
       const costBySale = {};
@@ -3807,6 +4255,19 @@ export default async function handler(req, res) {
 
       const userRole = dbUser?.role_title || dbUser?.role || (username === 'admin' ? 'Super Administrator' : 'Cashier');
       const isSuper = userRole === 'Super Administrator' || userRole === 'Administrator' || username === 'admin';
+
+      // Company plan check: AI is strictly Pro-only
+      const userCompId = dbUser?.company_id || 'comp-default';
+      const compRows = await sql`SELECT * FROM companies WHERE id = ${userCompId} LIMIT 1`;
+      const comp = compRows[0];
+      if (comp && comp.plan !== 'pro' && !isSuper) {
+        return res.status(403).json({
+          code: 403,
+          message: "AI xususiyatlari faqat PRO obuna tarifida mavjud. Iltimos, tarifingizni yangilang.",
+          plan: comp.plan,
+          features: comp.features || {}
+        });
+      }
 
       let allowedTools = [];
       if (isSuper) {

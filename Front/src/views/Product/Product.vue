@@ -1736,10 +1736,12 @@ import {
   getProductImageGallery,
   fetchTasnifPictureNames,
   getProductFallbackAvatar,
-  getProductInitials,
   getTasnifFileUrl,
   handleImageError
 } from '@/utils/productImages'
+import { useUserStoreWithOut } from '@/store/modules/user'
+
+const userStore = useUserStoreWithOut()
 
 const dialogInitWidth = Math.min(window.innerWidth * 0.92, 1400)
 const dialogInitHeight = Math.min(window.innerHeight * 0.88, 800)
@@ -1945,6 +1947,7 @@ const fetchTableData = async (silent = false) => {
     const res = await getProductListApi({
       productName: searchQuery.productName || undefined,
       category: searchQuery.category || undefined,
+      company_id: userStore.getUserInfo?.company_id || undefined,
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize
     })
@@ -2412,7 +2415,7 @@ const clearProductFields = () => {
   existingProduct.value = null
   form.id = ''
   form.productName = ''
-  form.SKU = ''
+  form.SKU = `SKU-${Date.now().toString().slice(-6)}`
   form.category = 'Boshqalar'
   form.price = 0
   form.cost = 0
@@ -2781,6 +2784,9 @@ const handleImageChange = async (uploadFile: any) => {
 const openAddDialog = () => {
   dialogType.value = 'add'
   resetForm()
+  if (!form.SKU) {
+    form.SKU = `SKU-${Date.now().toString().slice(-6)}`
+  }
   userRemovedImage.value = false
   dialogVisible.value = true
   classifierOptions.value = tableData.value.slice(0, 25).map((p) => mapWarehouseProductToOption(p))
@@ -2813,15 +2819,20 @@ const openEditDialog = (row: ProductType) => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
+  if (!form.SKU || !form.SKU.trim()) {
+    form.SKU = `SKU-${Date.now().toString().slice(-6)}`
+  }
   await formRef.value.validate(async (valid) => {
     if (valid) {
       submitLoading.value = true
       try {
-        if (!form.SKU) {
-          form.SKU = `SKU-${Date.now().toString().slice(-6)}`
+        const payload: any = {
+          ...form,
+          cost: Number(form.cost) || 0,
+          price: Number(form.price) || 0,
+          quantityInStock: Number(form.quantityInStock) || 1,
+          company_id: userStore.getUserInfo?.company_id || undefined
         }
-
-        const payload: any = { ...form }
         if (dialogType.value === 'add' && existingProduct.value) {
           payload.id = existingProduct.value.id
           payload.is_replenish = true

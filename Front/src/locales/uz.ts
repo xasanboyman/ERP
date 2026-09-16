@@ -1004,6 +1004,7 @@ export default {
     sales: 'Sotuvlar',
     pos: 'Sotuv Terminali (POS)',
     debtors: 'Qarzdorlik (Nasiya)',
+    companyManagement: 'Kompaniyalar Boshqaruvi',
     mobileScanner: 'Mobil Skaner'
   },
 

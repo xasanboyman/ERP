@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Union, Dict
 from datetime import datetime
 
 class Token(BaseModel):
@@ -23,6 +23,7 @@ class UserCreate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     department_id: Optional[str] = None
+    company_id: Optional[str] = None
     permissions: Optional[List[str]] = []
     avatar: Optional[str] = None
 
@@ -121,13 +122,13 @@ class ProductPackagingResponse(BaseModel):
 class ProductCreate(BaseModel):
     id: Optional[str] = None
     productName: str
-    SKU: str
+    SKU: Optional[str] = None
     category: str
     price: float
     cost: float
     quantityInStock: float
     status: Optional[int] = 1
-    classifier_id: Optional[int] = None
+    classifier_id: Optional[Union[int, str]] = None
     shtrix_code: Optional[str] = None
     mxik_code: Optional[str] = None
     brand_name: Optional[str] = None
@@ -136,7 +137,58 @@ class ProductCreate(BaseModel):
     image_url: Optional[str] = None
     expiration_date: Optional[str] = None
     remark: Optional[str] = None
+    company_id: Optional[str] = None
     packagings: Optional[List[ProductPackagingCreate]] = None
+
+# Company Schemas
+class CompanyCreate(BaseModel):
+    id: Optional[str] = None
+    name: str
+    code: str
+    plan: Optional[str] = "basic"
+    billing_cycle: Optional[str] = "monthly"
+    subscription_expires_at: Optional[str] = None
+    status: Optional[int] = 1
+    max_users: Optional[int] = 10
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    features: Optional[Dict[str, Any]] = None
+    admin_username: Optional[str] = None
+    admin_password: Optional[str] = None
+    admin_full_name: Optional[str] = None
+
+class CompanyTierUpdate(BaseModel):
+    company_id: str
+    plan: str
+    billing_cycle: Optional[str] = "monthly"
+    duration_months: Optional[int] = 1
+    subscription_expires_at: Optional[str] = None
+    features: Optional[Dict[str, Any]] = None
+    max_users: Optional[int] = None
+
+class CompanyResponse(BaseModel):
+    id: str
+    name: str
+    code: str
+    plan: str
+    billing_cycle: str
+    subscription_expires_at: Optional[str] = None
+    status: int
+    max_users: int
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    features: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+    users_count: Optional[int] = 0
+    products_count: Optional[int] = 0
+    total_sales_count: Optional[int] = 0
+    total_revenue: Optional[float] = 0.0
+    is_expired: Optional[bool] = False
+
+    class Config:
+        from_attributes = True
 
 class ProductResponse(BaseModel):
     id: str
@@ -147,7 +199,7 @@ class ProductResponse(BaseModel):
     cost: float
     quantityInStock: float
     status: int
-    classifier_id: Optional[int] = None
+    classifier_id: Optional[Union[int, str]] = None
     shtrix_code: Optional[str] = None
     mxik_code: Optional[str] = None
     brand_name: Optional[str] = None

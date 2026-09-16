@@ -1,14 +1,37 @@
 import os
 import uuid
 import shutil
-from fastapi import APIRouter, Depends, Query, Body, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Query, Body, UploadFile, File, HTTPException, Header
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
 from app.cache import invalidate_analytics, invalidate_sales
+from app.routers.auth import decode_access_token
 
 router = APIRouter()
+
+def get_user_company_id(authorization: str, db: Session, requested_company_id: any = None) -> str | None:
+    if not isinstance(requested_company_id, str) or not requested_company_id.strip():
+        requested_company_id = None
+    if not authorization:
+        return "comp-default"
+    payload = decode_access_token(authorization)
+    if not payload or not isinstance(payload, dict) or "sub" not in payload or "error" in payload:
+        return "comp-default"
+    user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
+    if not user:
+        return "comp-default"
+    user_comp = getattr(user, "company_id", None) or "comp-default"
+    role_str = (user.role or "").lower()
+    is_super = (user_comp == "comp-default") and (
+        user.username in ["admin", "anvars"]
+        or "super" in role_str
+        or getattr(user, "is_super_admin", False) is True
+    )
+    if is_super:
+        return requested_company_id
+    return user_comp
 
 @router.get("/product/list")
 def get_product_list(
@@ -16,11 +39,14 @@ def get_product_list(
     category: str = Query(None),
     shtrix_code: str = Query(None),
     brand_name: str = Query(None),
+    company_id: str = Query(None),
     pageIndex: int = Query(1),
     pageSize: int = Query(10),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    products = crud.get_products(db)
+    target_company = get_user_company_id(authorization, db, company_id)
+    products = crud.get_products(db, company_id=target_company)
 
     if productName:
         term = productName.lower()
@@ -93,20 +119,36 @@ def get_product_list(
 
 @router.get("/product/by-barcode/{code}")
 @router.get("/api/product/by-barcode/{code}")
-def get_product_by_barcode(code: str, db: Session = Depends(get_db)):
+def get_product_by_barcode(
+    code: str,
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     clean_code = code.strip()
-    prod = db.query(models.Product).filter(
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    query = db.query(models.Product).filter(
         (models.Product.shtrix_code == clean_code) |
         (models.Product.SKU == clean_code) |
         (models.Product.id == clean_code) |
         (models.Product.mxik_code == clean_code)
-    ).first()
+    )
+    if target_company:
+        query = query.filter(models.Product.company_id == target_company)
+    prod = query.first()
 
     selected_pkg = None
     if not prod:
-        pkg = db.query(models.ProductPackaging).filter(models.ProductPackaging.shtrix_code == clean_code).first()
+        pkg_query = db.query(models.ProductPackaging).join(models.Product).filter(models.ProductPackaging.shtrix_code == clean_code)
+        if target_company:
+            pkg_query = pkg_query.filter(models.Product.company_id == target_company)
+        pkg = pkg_query.first()
         if pkg:
-            prod = db.query(models.Product).filter(models.Product.id == pkg.product_id).first()
+            p_query = db.query(models.Product).filter(models.Product.id == pkg.product_id)
+            if target_company:
+                p_query = p_query.filter(models.Product.company_id == target_company)
+            prod = p_query.first()
             if prod:
                 selected_pkg = {
                     "id": pkg.id,
@@ -161,8 +203,17 @@ def get_product_by_barcode(code: str, db: Session = Depends(get_db)):
 
 @router.get("/product/detail")
 @router.get("/api/product/detail")
-def get_product_detail(id: str = Query(...), db: Session = Depends(get_db)):
-    prod = db.query(models.Product).filter(models.Product.id == id).first()
+def get_product_detail(
+    id: str = Query(...),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, company_id)
+    q = db.query(models.Product).filter(models.Product.id == id)
+    if target_company:
+        q = q.filter(models.Product.company_id == target_company)
+    prod = q.first()
     if not prod:
         return {"code": 404, "message": "Product not found"}
 
@@ -206,9 +257,18 @@ def get_product_detail(id: str = Query(...), db: Session = Depends(get_db)):
 
 
 @router.post("/product/save")
-def product_save(prod_in: schemas.ProductCreate, db: Session = Depends(get_db)):
+def product_save(
+    prod_in: schemas.ProductCreate,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     prod_id = getattr(prod_in, "id", None)
-    product = crud.create_product(db, prod_in)
+    target_company = get_user_company_id(authorization, db, getattr(prod_in, "company_id", None))
+    if prod_id and target_company:
+        existing_check = db.query(models.Product).filter(models.Product.id == prod_id).first()
+        if existing_check and existing_check.company_id != target_company:
+            raise HTTPException(status_code=403, detail="Boshqa kompaniyaning mahsulotini tahrirlash taqiqlangan")
+    product = crud.create_product(db, prod_in, company_id=target_company)
     is_existing = getattr(product, "is_existing_record", False)
     action = "updated" if (is_existing or prod_id) else "created"
 
@@ -234,7 +294,11 @@ def product_save(prod_in: schemas.ProductCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/product/delete")
-def product_delete(body: dict = Body(...), db: Session = Depends(get_db)):
+def product_delete(
+    body: dict = Body(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     ids = body.get("ids")
     if not ids:
         return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}
@@ -242,13 +306,22 @@ def product_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     if isinstance(ids, str):
         ids = [ids]
 
-    products = db.query(models.Product).filter(models.Product.id.in_(ids)).all()
+    target_company = get_user_company_id(authorization, db, body.get("company_id"))
+    query = db.query(models.Product).filter(models.Product.id.in_(ids))
+    if target_company:
+        query = query.filter(models.Product.company_id == target_company)
+    products = query.all()
+    allowed_ids = [p.id for p in products]
+
+    if not allowed_ids:
+        return {"code": 404, "message": "O'chirish uchun mahsulotlar topilmadi"}
+
     prod_dict = {p.id: p.productName for p in products}
 
-    db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id.in_(ids)).delete(synchronize_session=False)
-    db.query(models.Product).filter(models.Product.id.in_(ids)).delete(synchronize_session=False)
+    db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id.in_(allowed_ids)).delete(synchronize_session=False)
+    db.query(models.Product).filter(models.Product.id.in_(allowed_ids)).delete(synchronize_session=False)
 
-    for i in ids:
+    for i in allowed_ids:
         name = prod_dict.get(i, i)
         log_activity(db, actor="admin", action="deleted", entity="product", entity_id=i, entity_name=name, commit=False)
 
@@ -257,7 +330,6 @@ def product_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     invalidate_sales()
 
     return {"code": 0, "data": "success"}
-
 
 @router.post("/product/upload-image")
 def upload_product_image(file: UploadFile = File(...)):

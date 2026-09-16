@@ -1,8 +1,9 @@
 import datetime
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Header
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
+from app.auth import get_user_company_id
 
 router = APIRouter()
 
@@ -15,9 +16,11 @@ def log_activity(
     entity_id: str = None,
     entity_name: str = None,
     commit: bool = True,
+    company_id: str = None,
 ):
     """Helper called by all routers to record an activity and broadcast real-time sync."""
     entry = models.ActivityLog(
+        company_id=company_id or "comp-default",
         actor=actor,
         action=action,
         entity=entity,
@@ -35,7 +38,7 @@ def log_activity(
             entity=entity,
             action=action,
             entity_id=entity_id,
-            data={"entity_name": entity_name, "actor": actor},
+            data={"entity_name": entity_name, "actor": actor, "company_id": company_id},
             actor=actor
         )
     except Exception as ws_err:
@@ -46,13 +49,16 @@ def log_activity(
 def get_activity_list(
     pageIndex: int = Query(1),
     pageSize: int = Query(20),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db),
 ):
-    logs = (
-        db.query(models.ActivityLog)
-        .order_by(models.ActivityLog.id.desc())
-        .all()
-    )
+    target_company = get_user_company_id(authorization, db, company_id)
+    query = db.query(models.ActivityLog)
+    if target_company and target_company != "comp-default":
+        query = query.filter(models.ActivityLog.company_id == target_company)
+
+    logs = query.order_by(models.ActivityLog.id.desc()).all()
 
     total = len(logs)
     start = (pageIndex - 1) * pageSize
@@ -66,6 +72,7 @@ def get_activity_list(
             "list": [
                 {
                     "id": log.id,
+                    "company_id": getattr(log, "company_id", "comp-default"),
                     "actor": log.actor,
                     "action": log.action,
                     "entity": log.entity,

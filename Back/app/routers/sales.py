@@ -20,14 +20,21 @@ def get_sales_list(
     payment_method: str = Query(None),
     cashier_name: str = Query(None),
     month: str = Query(None),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    cache_key = f"sales_list:{pageIndex}:{pageSize}:{search}:{payment_method}:{cashier_name}:{month}"
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    cache_key = f"sales_list:{target_company}:{pageIndex}:{pageSize}:{search}:{payment_method}:{cashier_name}:{month}"
     cached = get_sales_cache(cache_key)
     if cached is not None:
         return cached
 
     query = db.query(models.Sale)
+    if target_company:
+        query = query.filter(models.Sale.company_id == target_company)
 
     if month:
         m = month.strip()
@@ -105,9 +112,16 @@ def get_sales_list(
 
 
 @router.post("/sales/checkout")
-def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
+def create_sale(
+    sale_in: schemas.SaleCreate,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     if not sale_in.items or len(sale_in.items) == 0:
         raise HTTPException(status_code=400, detail="Xarid qilish uchun mahsulotlar tanlanmagan")
+
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, getattr(sale_in, "company_id", None))
 
     receipt_no = f"CHK-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
     sale_id = f"SALE-{uuid.uuid4().hex[:8]}"
@@ -124,7 +138,10 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
 
     products = []
     if filter_conds:
-        products = db.query(models.Product).filter(or_(*filter_conds)).all()
+        p_query = db.query(models.Product).filter(or_(*filter_conds))
+        if target_company:
+            p_query = p_query.filter(models.Product.company_id == target_company)
+        products = p_query.all()
 
     prod_by_id = {str(p.id): p for p in products}
     prod_by_code = {str(p.shtrix_code): p for p in products if p.shtrix_code}
@@ -209,6 +226,7 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
 
     db_sale = models.Sale(
         id=sale_id,
+        company_id=target_company,
         receipt_number=receipt_no,
         cashier_name=sale_in.cashier_name or "admin",
         customer_name=sale_in.customer_name,
@@ -260,8 +278,19 @@ def create_sale(sale_in: schemas.SaleCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/sales/receipt/{receipt_number}")
-def get_sale_receipt(receipt_number: str, db: Session = Depends(get_db)):
-    sale = db.query(models.Sale).filter(models.Sale.receipt_number == receipt_number).first()
+def get_sale_receipt(
+    receipt_number: str,
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    query = db.query(models.Sale).filter(models.Sale.receipt_number == receipt_number)
+    if target_company:
+        query = query.filter(models.Sale.company_id == target_company)
+    sale = query.first()
     if not sale:
         raise HTTPException(status_code=404, detail="Chek topilmadi")
     items_list = [
@@ -302,10 +331,21 @@ def get_sale_receipt(receipt_number: str, db: Session = Depends(get_db)):
 def get_debtors(
     search: str = Query(None),
     status: str = Query(None), # 'active' or 'all' or 'settled'
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    sales = db.query(models.Sale).filter(models.Sale.customer_name != None, models.Sale.customer_name != "").all()
-    debt_payments = db.query(models.DebtPayment).all()
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    sales_query = db.query(models.Sale).filter(models.Sale.customer_name != None, models.Sale.customer_name != "")
+    dp_query = db.query(models.DebtPayment)
+    if target_company:
+        sales_query = sales_query.filter(models.Sale.company_id == target_company)
+        dp_query = dp_query.filter(models.DebtPayment.company_id == target_company)
+
+    sales = sales_query.all()
+    debt_payments = dp_query.all()
 
     debtors_map = {}
 
@@ -341,8 +381,8 @@ def get_debtors(
 
     resultList = list(debtors_map.values())
 
-    # Pre-seed realistic sample debtors if DB has few
-    if len(resultList) == 0:
+    # Pre-seed realistic sample debtors only if DB is empty and viewing default company
+    if len(resultList) == 0 and (not target_company or target_company == "comp-default"):
         resultList = [
             {"name": "Kassir_Sardor", "phone": "+998901234567", "total_initial_debt": 12450.0, "total_debt": 8131.0, "total_repaid": 4319.0, "sales_count": 4, "last_sale_date": "2026-08-04 16:08:48"},
             {"name": "Jamshid Aka", "phone": "+998935551122", "total_initial_debt": 2500.0, "total_debt": 1250.0, "total_repaid": 1250.0, "sales_count": 2, "last_sale_date": "2026-08-03 14:20:10"},
@@ -376,9 +416,23 @@ def get_debtors(
 
 
 @router.get("/sales/debtor-detail")
-def get_debtor_detail(name: str = Query(...), db: Session = Depends(get_db)):
-    sales = db.query(models.Sale).filter(models.Sale.customer_name == name.strip()).order_by(models.Sale.created_at.desc()).all()
-    payments = db.query(models.DebtPayment).filter(models.DebtPayment.customer_name == name.strip()).order_by(models.DebtPayment.created_at.desc()).all()
+def get_debtor_detail(
+    name: str = Query(...),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    sq = db.query(models.Sale).filter(models.Sale.customer_name == name.strip())
+    pq = db.query(models.DebtPayment).filter(models.DebtPayment.customer_name == name.strip())
+    if target_company:
+        sq = sq.filter(models.Sale.company_id == target_company)
+        pq = pq.filter(models.DebtPayment.company_id == target_company)
+
+    sales = sq.order_by(models.Sale.created_at.desc()).all()
+    payments = pq.order_by(models.DebtPayment.created_at.desc()).all()
 
     sale_list = []
     for s in sales:
@@ -421,8 +475,19 @@ def get_debtor_detail(name: str = Query(...), db: Session = Depends(get_db)):
 
 
 @router.get("/sales/payment-receipt/{receipt_number}")
-def get_payment_receipt(receipt_number: str, db: Session = Depends(get_db)):
-    payment = db.query(models.DebtPayment).filter(models.DebtPayment.receipt_number == receipt_number).first()
+def get_payment_receipt(
+    receipt_number: str,
+    company_id: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, company_id)
+
+    q = db.query(models.DebtPayment).filter(models.DebtPayment.receipt_number == receipt_number)
+    if target_company:
+        q = q.filter(models.DebtPayment.company_id == target_company)
+    payment = q.first()
     if not payment:
         raise HTTPException(status_code=404, detail="To'lov cheki topilmadi")
     return {
@@ -442,15 +507,25 @@ def get_payment_receipt(receipt_number: str, db: Session = Depends(get_db)):
 
 
 @router.post("/sales/repay-debt")
-def repay_debt(payment_in: schemas.DebtPaymentCreate, db: Session = Depends(get_db)):
+def repay_debt(
+    payment_in: schemas.DebtPaymentCreate,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.routers.product import get_user_company_id
+    target_company = get_user_company_id(authorization, db, getattr(payment_in, "company_id", None))
+
     name = payment_in.customer_name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Qarzdor ismi kiritilmagan")
     if payment_in.amount <= 0:
         raise HTTPException(status_code=400, detail="Qaytariladigan summa 0 dan katta bo'lishi shart")
 
-    # Find open debt sales for this customer ordered by oldest first
-    sales = db.query(models.Sale).filter(models.Sale.customer_name == name, models.Sale.debt_amount > 0).order_by(models.Sale.created_at.asc()).all()
+    # Find open debt sales strictly for this company
+    sales_q = db.query(models.Sale).filter(models.Sale.customer_name == name, models.Sale.debt_amount > 0)
+    if target_company:
+        sales_q = sales_q.filter(models.Sale.company_id == target_company)
+    sales = sales_q.order_by(models.Sale.created_at.asc()).all()
 
     remaining_payment = payment_in.amount
 
@@ -472,6 +547,7 @@ def repay_debt(payment_in: schemas.DebtPaymentCreate, db: Session = Depends(get_
 
     db_payment = models.DebtPayment(
         id=p_id,
+        company_id=target_company or "comp-default",
         receipt_number=receipt_no,
         customer_name=name,
         customer_phone=payment_in.customer_phone,
@@ -531,6 +607,9 @@ def push_pc_sale(
     if not payload.items or len(payload.items) == 0:
         raise HTTPException(status_code=400, detail="Items list cannot be empty")
 
+    user = db.query(models.User).filter(models.User.id == device_token.user_id).first()
+    user_comp = getattr(user, "company_id", None) or "comp-default"
+
     for item in payload.items:
         if item.quantity <= 0:
             raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
@@ -538,19 +617,23 @@ def push_pc_sale(
             raise HTTPException(status_code=400, detail="Price cannot be negative")
 
         p_id = str(item.product_id)
-        prod = db.query(models.Product).filter(
+        prod_q = db.query(models.Product).filter(
             (models.Product.id == p_id) | (models.Product.SKU == p_id) | (models.Product.shtrix_code == p_id)
-        ).first()
+        )
+        if user_comp:
+            prod_q = prod_q.filter(models.Product.company_id == user_comp)
+        prod = prod_q.first()
         if not prod:
             raise HTTPException(status_code=404, detail=f"Product '{item.product_id}' not found")
 
     # Enforce strict account isolation: target pc_user_id must match the device_token's owner user_id
     target_pc_user_id = device_token.user_id
     if payload.pc_user_id and payload.pc_user_id != device_token.user_id:
-        # If user explicitly requested target_pc_user_id, verify target user exists
         target_user = db.query(models.User).filter(models.User.id == payload.pc_user_id).first()
         if not target_user:
             raise HTTPException(status_code=404, detail=f"Target PC User ID {payload.pc_user_id} not found")
+        if getattr(target_user, "company_id", None) != user_comp:
+            raise HTTPException(status_code=403, detail="Boshqa kompaniyadagi foydalanuvchiga yuborish taqiqlangan")
         target_pc_user_id = target_user.id
 
     push_id = f"PUSH-{uuid.uuid4().hex[:8]}"
@@ -705,6 +788,12 @@ def get_push_payload(
     if not sp:
         raise HTTPException(status_code=404, detail="Push alert not found")
 
+    user_comp = getattr(current_user, "company_id", None) or "comp-default"
+    if sp.pc_user_id != current_user.id:
+        target_u = db.query(models.User).filter(models.User.id == sp.pc_user_id).first()
+        if not target_u or getattr(target_u, "company_id", None) != user_comp:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
     if sp.status == "declined":
         raise HTTPException(status_code=400, detail="Push alert was declined")
 
@@ -714,9 +803,12 @@ def get_push_payload(
     hydrated_items = []
     for it in items:
         p_id = str(it.get("product_id"))
-        prod = db.query(models.Product).filter(
+        prod_q = db.query(models.Product).filter(
             (models.Product.id == p_id) | (models.Product.SKU == p_id) | (models.Product.shtrix_code == p_id)
-        ).first()
+        )
+        if user_comp:
+            prod_q = prod_q.filter(models.Product.company_id == user_comp)
+        prod = prod_q.first()
         hydrated_items.append({
             "product_id": prod.id if prod else it.get("product_id"),
             "product_name": prod.productName if prod else it.get("product_name", f"Product {p_id}"),
@@ -758,6 +850,9 @@ def phone_checkout(
     if not payload.items or len(payload.items) == 0:
         raise HTTPException(status_code=400, detail="Items list cannot be empty")
 
+    user = db.query(models.User).filter(models.User.id == device_token.user_id).first()
+    user_comp = getattr(user, "company_id", None) or "comp-default"
+
     pm_map = {
         "cash": "naqd",
         "card": "karta",
@@ -780,9 +875,12 @@ def phone_checkout(
             raise HTTPException(status_code=400, detail="Price cannot be negative")
 
         p_id = str(item.product_id)
-        prod = db.query(models.Product).filter(
+        prod_q = db.query(models.Product).filter(
             (models.Product.id == p_id) | (models.Product.SKU == p_id) | (models.Product.shtrix_code == p_id)
-        ).first()
+        )
+        if user_comp:
+            prod_q = prod_q.filter(models.Product.company_id == user_comp)
+        prod = prod_q.first()
         if not prod:
             raise HTTPException(status_code=404, detail=f"Product '{item.product_id}' not found")
 
@@ -799,7 +897,10 @@ def phone_checkout(
 
     # Validate stock
     for p_key, total_req in product_requirements.items():
-        p_obj = db.query(models.Product).filter(models.Product.id == p_key).first()
+        p_obj_q = db.query(models.Product).filter(models.Product.id == p_key)
+        if user_comp:
+            p_obj_q = p_obj_q.filter(models.Product.company_id == user_comp)
+        p_obj = p_obj_q.first()
         if p_obj and p_obj.quantityInStock < total_req:
             base_unit = p_obj.unit or 'kg'
             raise HTTPException(
@@ -827,11 +928,11 @@ def phone_checkout(
     receipt_no = f"CHK-PH-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
     sale_id = f"SALE-{uuid.uuid4().hex[:8]}"
 
-    user = db.query(models.User).filter(models.User.id == device_token.user_id).first()
     cashier_name = user.username if user else f"Device-{device_token.device_name}"
 
     db_sale = models.Sale(
         id=sale_id,
+        company_id=user_comp,
         receipt_number=receipt_no,
         cashier_name=cashier_name,
         customer_name=payload.customer_name,

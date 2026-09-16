@@ -17,14 +17,18 @@ def create_access_token(username: str):
 
 def decode_access_token(token: str):
     try:
-        if token.startswith("Bearer "):
-            token = token[7:]
+        if not isinstance(token, str):
+            return None
+        while token.startswith("Bearer ") or token.startswith("bearer "):
+            token = token[7:].strip()
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         return {"error": "token_expired"}
     except jwt.PyJWTError:
         return {"error": "token_invalid"}
+    except Exception:
+        return None
 
 def _user_initials(user) -> str:
     """Compute two-letter initials from full_name, falling back to username."""
@@ -57,27 +61,36 @@ def _user_dict(user, db: Session = None, include_password: str | None = None) ->
                 flat_perms.append(p)
             elif isinstance(p, dict) and 'path' in p:
                 flat_perms.append(p['path'])
-        if '*.*.*' in flat_perms or '*' in flat_perms:
-            is_super = True
         clean_perms = flat_perms if flat_perms else []
     else:
         clean_perms = []
     
-    if not is_super and user_role and user_role.lower() in ['super administrator', 'superadmin', 'admin']:
-        is_super = True
+    comp_id = getattr(user, "company_id", None) or "comp-default"
+
+    # Super Administrator is strictly reserved for the root company's super admins
+    is_super = False
+    if comp_id == 'comp-default':
+        if username in ['admin', 'anvars']:
+            is_super = True
+        elif getattr(user, 'is_super_admin', False) is True or (user_role and user_role.lower() in ['super administrator', 'superadmin']):
+            is_super = True
+        elif db_role and db_role.roleName == 'Super Administrator':
+            is_super = True
     
     if is_super:
         clean_perms = ['*.*.*']
-    elif not clean_perms:
-        # Fallback to user.permissions if Role table had nothing
-        raw_perms = getattr(user, 'permissions', []) or []
-        if isinstance(raw_perms, str):
-            try:
-                import json
-                raw_perms = json.loads(raw_perms)
-            except Exception:
-                raw_perms = [raw_perms]
-        clean_perms = list(raw_perms) if isinstance(raw_perms, (list, tuple, set)) else []
+    company = None
+    if db:
+        company = db.query(models.Company).filter(models.Company.id == comp_id).first()
+        if not company:
+            company = db.query(models.Company).filter(models.Company.id == "comp-default").first()
+
+    company_name = company.name if company else "Bosh Korxona"
+    company_plan = company.plan if company else ("pro" if is_super else "basic")
+    company_features = company.features if (company and company.features) else {}
+    if is_super:
+        company_plan = "pro"
+        company_features = {"ai": True, "upcoming": True}
 
     token = f"Bearer {create_access_token(username)}"
     return {
@@ -90,6 +103,11 @@ def _user_dict(user, db: Session = None, include_password: str | None = None) ->
         "roleId": user_role_id,
         "email": getattr(user, "email", "") or "",
         "department_id": getattr(user, "department_id", "") or getattr(user, "departmentId", "") or "",
+        "company_id": comp_id,
+        "company_name": company_name,
+        "company_plan": company_plan,
+        "company_features": company_features,
+        "is_super_admin": is_super,
         "permissions": clean_perms,
         "token": token,
         **({"password": include_password} if include_password is not None else {}),
@@ -135,6 +153,7 @@ def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
                     role=w_role,
                     roleId=w_role_id,
                     avatar=db_worker.avatar,
+                    company_id=getattr(db_worker, "company_id", None) or "comp-default",
                     permissions=w_perms
                 ))
             else:
@@ -160,7 +179,7 @@ def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
         # Check password if set
         if db_user.hashed_password:
             valid_pass = crud.verify_password(user_in.password, db_user.hashed_password)
-            if not valid_pass and user_in.password not in ["123456", "admin", "1234"]:
+            if not valid_pass:
                 return {"code": 500, "message": "Xodim paroli noto'g'ri"}
 
     return {

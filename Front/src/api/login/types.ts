@@ -12,4 +12,9 @@ export interface UserType {
   roleId?: string
   avatar?: string
   token?: string
+  company_id?: string
+  company_name?: string
+  company_plan?: string
+  company_features?: Record<string, boolean>
+  is_super_admin?: boolean
 }

@@ -1,15 +1,37 @@
+import uuid
 import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, Body
+from fastapi import APIRouter, Depends, Query, Body, Header
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
+from app.auth import get_user_company_id, get_current_user_optional
 
 router = APIRouter()
 
 @router.get("/department/list")
-def get_department_list(db: Session = Depends(get_db)):
-    depts = crud.get_departments(db)
+def get_department_list(
+    authorization: str = Header(None),
+    company_id: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, company_id)
+    depts = crud.get_departments(db, company_id=target_company)
+
+    # Auto-seed initial department for new company tenant if none exists
+    if not depts and target_company and target_company != "comp-default":
+        default_dept = models.Department(
+            id=f"DEPT-{uuid.uuid4().hex[:6].upper()}",
+            company_id=target_company,
+            departmentName="Asosiy bo'lim",
+            parentId=None,
+            status=1,
+            remark="Bosh boshqaruv bo'limi",
+            createTime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
+        db.add(default_dept)
+        db.commit()
+        depts = [default_dept]
     
     dept_map = {d.id: d for d in depts}
     top_level = [d for d in depts if not d.parentId or d.parentId not in dept_map]
@@ -46,9 +68,12 @@ def get_department_list(db: Session = Depends(get_db)):
     }
 
 @router.get("/department/table/list")
-def get_department_table_list(db: Session = Depends(get_db)):
-    # Simple list is expected or tree
-    res = get_department_list(db)
+def get_department_table_list(
+    authorization: str = Header(None),
+    company_id: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    res = get_department_list(authorization=authorization, company_id=company_id, db=db)
     return {
         "code": 0,
         "data": {
@@ -62,9 +87,14 @@ def get_department_users(
     id: Optional[str] = Query(None),
     pageSize: int = Query(10),
     pageIndex: int = Query(1),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    target_company = get_user_company_id(authorization, db, company_id)
     query = db.query(models.User)
+    if target_company:
+        query = query.filter(models.User.company_id == target_company)
     if id:
         query = query.filter(models.User.department_id == id)
         
@@ -96,15 +126,26 @@ def get_department_users(
     }
 
 @router.post("/department/user/save")
-def department_user_save(user_data: schemas.DepartmentUserSave, db: Session = Depends(get_db)):
-    crud.save_department_user(db, user_data)
+def department_user_save(
+    user_data: schemas.DepartmentUserSave,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db)
+    current_user = get_current_user_optional(authorization, db)
+    u = crud.save_department_user(db, user_data)
+    if target_company and u and not u.company_id:
+        u.company_id = target_company
+        db.commit()
+
     from app.routers.activity import log_activity
     log_activity(
         db=db,
-        actor="admin",
+        actor=current_user.username if current_user else "admin",
         action="saved",
         entity="department_user",
-        entity_name=user_data.username
+        entity_name=user_data.username,
+        company_id=target_company
     )
     return {
         "code": 0,
@@ -112,12 +153,17 @@ def department_user_save(user_data: schemas.DepartmentUserSave, db: Session = De
     }
 
 @router.post("/department/user/delete")
-def department_user_delete(body: dict = Body(...), db: Session = Depends(get_db)):
+def department_user_delete(
+    body: dict = Body(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db)
+    current_user = get_current_user_optional(authorization, db)
     ids = body.get("ids")
     if ids is None:
-        return {"code": 500, "message": "请选择需要删除的数据"}
+        return {"code": 500, "message": "Tanlangan foydalanuvchilar topilmadi"}
     
-    # Parse ids into a list of integers
     user_ids = []
     if isinstance(ids, list):
         for item in ids:
@@ -139,17 +185,24 @@ def department_user_delete(body: dict = Body(...), db: Session = Depends(get_db)
                 pass
                 
     if not user_ids:
-        return {"code": 500, "message": "请选择需要删除的数据"}
-        
-    crud.delete_department_users(db, user_ids)
+        return {"code": 500, "message": "Tanlangan foydalanuvchilar topilmadi"}
+
+    query = db.query(models.User).filter(models.User.id.in_(user_ids))
+    if target_company and target_company != "comp-default":
+        query = query.filter(models.User.company_id == target_company)
+    matched_users = query.all()
+    matched_ids = [u.id for u in matched_users]
+
+    crud.delete_department_users(db, matched_ids)
     from app.routers.activity import log_activity
-    for uid in user_ids:
+    for uid in matched_ids:
         log_activity(
             db=db,
-            actor="admin",
+            actor=current_user.username if current_user else "admin",
             action="deleted",
             entity="department_user",
-            entity_id=str(uid)
+            entity_id=str(uid),
+            company_id=target_company
         )
     return {
         "code": 0,
@@ -157,16 +210,23 @@ def department_user_delete(body: dict = Body(...), db: Session = Depends(get_db)
     }
 
 @router.post("/department/save")
-def department_save(dept_in: schemas.DepartmentCreate, db: Session = Depends(get_db)):
-    crud.create_department(db, dept_in)
+def department_save(
+    dept_in: schemas.DepartmentCreate,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db, getattr(dept_in, "company_id", None))
+    current_user = get_current_user_optional(authorization, db)
+    dept = crud.create_department(db, dept_in, company_id=target_company)
     from app.routers.activity import log_activity
     log_activity(
         db=db,
-        actor="admin",
-        action="created",
+        actor=current_user.username if current_user else "admin",
+        action="saved",
         entity="department",
-        entity_id=dept_in.id,
-        entity_name=dept_in.departmentName
+        entity_id=dept.id,
+        entity_name=dept.departmentName,
+        company_id=target_company
     )
     return {
         "code": 0,
@@ -174,24 +234,43 @@ def department_save(dept_in: schemas.DepartmentCreate, db: Session = Depends(get
     }
 
 @router.post("/department/delete")
-def department_delete(body: dict = Body(...), db: Session = Depends(get_db)):
+def department_delete(
+    body: dict = Body(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db)
+    current_user = get_current_user_optional(authorization, db)
     ids = body.get("ids")
     if not ids:
         return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}
     
-    # Support string ids or list of ids
     if isinstance(ids, str):
         ids = [ids]
         
+    query = db.query(models.Department).filter(models.Department.id.in_(ids))
+    if target_company and target_company != "comp-default":
+        query = query.filter(models.Department.company_id == target_company)
+    depts = query.all()
+    dept_names = {d.id: d.departmentName for d in depts}
+    
+    for d in depts:
+        # Also clean up child departments
+        children = db.query(models.Department).filter(models.Department.parentId == d.id).all()
+        for ch in children:
+            db.delete(ch)
+        db.delete(d)
+    
     from app.routers.activity import log_activity
-    db.query(models.Department).filter(models.Department.id.in_(ids)).delete(synchronize_session=False)
-    for i in ids:
+    for i in dept_names:
         log_activity(
             db=db,
-            actor="admin",
+            actor=current_user.username if current_user else "admin",
             action="deleted",
             entity="department",
             entity_id=str(i),
+            entity_name=dept_names.get(i, i),
+            company_id=target_company,
             commit=False
         )
     db.commit()

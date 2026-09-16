@@ -3,7 +3,7 @@
     <div class="adj-toolbar">
       <div class="toolbar-left">
         <el-button type="primary" class="btn-add" @click="openAddDialog">
-          <span class="btn-icon">＋</span> {{ t('erp.newAdjustmentBtn') }}
+          <Icon icon="ep:plus" class="mr-6px text-16px" /> {{ t('erp.newAdjustmentBtn') }}
         </el-button>
         <el-button
           type="danger"

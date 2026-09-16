@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Query, Body, HTTPException
+from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
-from app.auth import get_current_user_required
+from app.auth import get_user_company_id, get_current_user_optional
 
 router = APIRouter()
 
@@ -20,12 +20,15 @@ def get_worker_list(
     departmentId: str = Query(None),
     pageIndex: int = Query(1),
     pageSize: int = Query(10),
+    company_id: str = Query(None),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    workers = crud.get_workers(db)
+    target_company = get_user_company_id(authorization, db, company_id)
+    workers = crud.get_workers(db, company_id=target_company)
 
     if name:
-        workers = [w for w in workers if name.lower() in w.name.lower() or name.lower() in w.account.lower()]
+        workers = [w for w in workers if name.lower() in (w.name or "").lower() or name.lower() in (w.account or "").lower()]
     if departmentId:
         workers = [w for w in workers if w.departmentId == departmentId]
 
@@ -34,7 +37,7 @@ def get_worker_list(
     end = start + pageSize
     paginated = workers[start:end]
 
-    depts = {d.id: d.departmentName for d in db.query(models.Department).all()}
+    depts = {d.id: d.departmentName for d in crud.get_departments(db, company_id=target_company)}
 
     list_data = []
     for w in paginated:
@@ -67,27 +70,30 @@ def get_worker_list(
 @router.post("/worker/save")
 def worker_save(
     w_in: schemas.WorkerCreate,
-    current_user: models.User = Depends(get_current_user_required),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_optional(authorization, db)
+    target_company = get_user_company_id(authorization, db, getattr(w_in, "company_id", None))
+
     existing = db.query(models.Worker).filter(models.Worker.id == w_in.id).first() if hasattr(w_in, "id") and w_in.id else None
 
-    # On editing existing employee, request and verify admin password
+    # On editing existing employee, verify permissions & admin password
     if existing:
+        if target_company and target_company != "comp-default" and existing.company_id != target_company:
+            return {"code": 403, "message": "Siz faqat o'z tashkilotingiz xodimlarini tahrirlashingiz mumkin!"}
+
         if not w_in.adminPassword:
             return {"code": 400, "message": "Xodim ma'lumotlarini tahrirlash uchun Admin paroli kiritilishi shart!"}
         
         valid_admin_pass = False
         if current_user and current_user.hashed_password:
             valid_admin_pass = crud.verify_password(w_in.adminPassword, current_user.hashed_password)
-        if not valid_admin_pass and w_in.adminPassword in ["admin", "123456", "1234"]:
-            valid_admin_pass = True
-            
         if not valid_admin_pass:
             return {"code": 400, "message": "Siz kiritgan admin paroli noto'g'ri!"}
 
     action = "updated" if existing else "created"
-    worker = crud.create_worker(db, w_in)
+    worker = crud.create_worker(db, w_in, company_id=target_company)
     log_activity(
         db,
         actor=current_user.username if current_user else "admin",
@@ -95,22 +101,31 @@ def worker_save(
         entity="worker",
         entity_id=getattr(worker, "id", None) or getattr(w_in, "id", None),
         entity_name=w_in.name,
+        company_id=target_company
     )
     return {"code": 0, "data": "success"}
 
 @router.post("/worker/avatar")
-def update_worker_avatar(body: dict = Body(...), db: Session = Depends(get_db)):
+def update_worker_avatar(
+    body: dict = Body(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
     """
     Update a worker's avatar photo.
     Body: { "id": "...", "avatar": "data:image/...;base64,..." }
     """
+    target_company = get_user_company_id(authorization, db)
     worker_id = body.get("id")
-    avatar    = body.get("avatar")
+    avatar = body.get("avatar")
 
     if not worker_id:
         return {"code": 500, "message": "id is required"}
 
-    w = db.query(models.Worker).filter(models.Worker.id == worker_id).first()
+    query = db.query(models.Worker).filter(models.Worker.id == worker_id)
+    if target_company and target_company != "comp-default":
+        query = query.filter(models.Worker.company_id == target_company)
+    w = query.first()
     if not w:
         return {"code": 404, "message": "Worker not found"}
 
@@ -130,7 +145,12 @@ def update_worker_avatar(body: dict = Body(...), db: Session = Depends(get_db)):
     }
 
 @router.post("/worker/delete")
-def worker_delete(body: dict = Body(...), db: Session = Depends(get_db)):
+def worker_delete(
+    body: dict = Body(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    target_company = get_user_company_id(authorization, db)
     ids = body.get("ids")
     if not ids:
         return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}
@@ -138,15 +158,22 @@ def worker_delete(body: dict = Body(...), db: Session = Depends(get_db)):
     if isinstance(ids, str):
         ids = [ids]
 
-    workers = db.query(models.Worker).filter(models.Worker.id.in_(ids)).all()
+    query = db.query(models.Worker).filter(models.Worker.id.in_(ids))
+    if target_company and target_company != "comp-default":
+        query = query.filter(models.Worker.company_id == target_company)
+    workers = query.all()
     worker_names = {w.id: w.name for w in workers}
+    worker_accounts = [w.account for w in workers if w.account]
 
-    db.query(models.Worker).filter(models.Worker.id.in_(ids)).delete(synchronize_session=False)
+    for w in workers:
+        db.delete(w)
+
+    if worker_accounts:
+        db.query(models.User).filter(models.User.username.in_(worker_accounts)).delete(synchronize_session=False)
 
     for i in ids:
         name = worker_names.get(i, i)
-        log_activity(db, actor="admin", action="deleted", entity="worker", entity_id=i, entity_name=name, commit=False)
+        log_activity(db, actor="admin", action="deleted", entity="worker", entity_id=i, entity_name=name, commit=False, company_id=target_company)
 
     db.commit()
     return {"code": 0, "data": "success"}
-

@@ -1,14 +1,19 @@
 import os
+from dotenv import load_dotenv
 
-DEFAULT_NEON_DB = "postgresql://neondb_owner:npg_OgGezc9umYl0@ep-hidden-mountain-a5l36vpb-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_base_dir, ".env"))
+load_dotenv(os.path.join(os.path.dirname(_base_dir), ".env.local"))
+
+DEFAULT_ORACLE_DB = "postgresql://admin:xusanboyman@127.0.0.1:5432/erp_db?sslmode=disable"
 
 class Settings:
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "erp-super-secret-key-123456")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-key-that-is-hard-to-guess")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    BASE_DIR = _base_dir
     
-    _raw_db_url = os.getenv("DATABASE_URL", DEFAULT_NEON_DB)
+    _raw_db_url = os.getenv("DATABASE_URL", DEFAULT_ORACLE_DB)
     if _raw_db_url.startswith("postgres://"):
         _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
     if "channel_binding=require" in _raw_db_url:
