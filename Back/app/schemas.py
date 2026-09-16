@@ -138,6 +138,7 @@ class ProductCreate(BaseModel):
     expiration_date: Optional[str] = None
     remark: Optional[str] = None
     company_id: Optional[str] = None
+    branch_id: Optional[str] = None
     packagings: Optional[List[ProductPackagingCreate]] = None
 
 # Company Schemas
@@ -226,6 +227,7 @@ class WorkerCreate(BaseModel):
     phone: Optional[str] = None
     role: Optional[str] = None
     departmentId: Optional[str] = None
+    branch_id: Optional[str] = None
     hireDate: Optional[str] = None
     status: Optional[int] = 1
     baseSalary: Optional[float] = 0.0
@@ -243,6 +245,7 @@ class WorkerResponse(BaseModel):
     phone: Optional[str] = None
     role: Optional[str] = None
     departmentId: Optional[str] = None
+    branch_id: Optional[str] = None
     hireDate: str
     status: int
     baseSalary: float
@@ -604,6 +607,7 @@ class SaleItemCreate(BaseModel):
     conversion_factor: Optional[float] = 1.0
 
 class SaleCreate(BaseModel):
+    branch_id: Optional[str] = None
     cashier_name: Optional[str] = "admin"
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None

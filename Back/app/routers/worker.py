@@ -53,6 +53,7 @@ def get_worker_list(
             "role": w.role,
             "departmentId": w.departmentId,
             "departmentName": depts.get(w.departmentId, "—"),
+            "branch_id": getattr(w, "branch_id", None),
             "hireDate": w.hireDate,
             "status": w.status,
             "baseSalary": w.baseSalary,

@@ -28,6 +28,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 import { useAppStore } from '@/store/modules/app'
 import { getSalesListApi, SaleType } from '@/api/sales'
+import { getBranchListApi, type BranchType } from '@/api/branch'
 import {
   getFinancialOverviewApi,
   getMonthSummaryApi,
@@ -56,6 +57,24 @@ const loading = ref(true)
 const closingLoading = ref(false)
 const comparisonLoading = ref(false)
 const timeRange = ref<'6m' | '1y'>('6m')
+
+const branchList = ref<BranchType[]>([])
+const selectedBranchId = ref<string>('')
+
+const loadBranches = async () => {
+  try {
+    const res = await getBranchListApi()
+    if (res && res.data) {
+      branchList.value = res.data
+    }
+  } catch (err) {
+    console.error('Failed to load branches:', err)
+  }
+}
+
+const onBranchChange = () => {
+  loadAnalyticsData()
+}
 
 // Standard ECharts Options
 const financialTrendOptions = ref<EChartsOption>({})
@@ -1456,7 +1475,10 @@ watch(
 const loadStandardOverview = async (silent = false) => {
   if (!silent) loading.value = true
   try {
-    const res = await getFinancialOverviewApi({ time_range: timeRange.value })
+    const res = await getFinancialOverviewApi({
+      time_range: timeRange.value,
+      branch_id: selectedBranchId.value || undefined
+    })
     if (res && res.data) {
       overviewData.value = res.data
       monthlyFinancialTable.value = [...(res.data.monthlyFinancials || [])].reverse()
@@ -1474,7 +1496,12 @@ const loadRawSales = async (month?: string) => {
   salesLoading.value = true
   try {
     const targetMonth = month || closeMonthInput.value
-    const res = await getSalesListApi({ pageIndex: 1, pageSize: 200, month: targetMonth })
+    const res = await getSalesListApi({
+      pageIndex: 1,
+      pageSize: 200,
+      month: targetMonth,
+      branch_id: selectedBranchId.value || undefined
+    })
     if (res && res.data) {
       allRawSales.value = Array.isArray(res.data.list) ? res.data.list : []
     }
@@ -1493,7 +1520,8 @@ const loadAnalyticsData = async () => {
   try {
     const res = await getAnalysisBundleApi({
       time_range: timeRange.value,
-      month: closeMonthInput.value
+      month: closeMonthInput.value,
+      branch_id: selectedBranchId.value || undefined
     })
     if (res && res.data) {
       const { overview, snapshots, monthSummary, comparison } = res.data
@@ -1528,36 +1556,35 @@ useRealtimeSync(
   ['sale', 'salary', 'product'],
   () => {
     loadStandardOverview(true)
-    fetchMonthSummary()
-    loadRawSales()
-    updateComparisonCalculations()
-  },
-  { debounceMs: 800 }
+  }
 )
 
 const handleExportFinancialExcel = () => {
-  if (monthlyFinancialTable.value.length === 0 && savedSnapshots.value.length === 0) {
-    ElMessage.warning('Eksport qilish uchun moliyaviy hisobot maʼlumotlari mavjud emas')
+  if (!overviewData.value) {
+    ElMessage.warning('Hisobot yuklab olish uchun maʼlumot topilmadi')
     return
   }
-  const sourceList =
-    monthlyFinancialTable.value.length > 0 ? monthlyFinancialTable.value : savedSnapshots.value
-  const reportData = sourceList.map((item: any) => ({
-    month: item.month || item.period_month,
-    revenue: item.revenue || item.grossRevenue || 0,
-    cogs: item.cogs || 0,
-    payroll: item.totalPayroll || item.staffSalaries || 0,
-    expenses: item.totalExpenses || item.expenses || 0,
-    profit: item.netProfit || item.profit || 0,
-    margin: (item.profitMargin !== undefined ? item.profitMargin : item.margin || 0) + '%'
+  const reportData = (overviewData.value.monthlyFinancials || []).map((item) => ({
+    month: item.month,
+    revenue: item.revenue,
+    cogs: item.cogs,
+    salaries: item.staffSalaries,
+    outputs: item.shortTermOutputs,
+    payroll: item.totalPayroll,
+    expenses: item.totalExpenses,
+    profit: item.netProfit,
+    margin: `${item.profitMargin}%`
   }))
+
   exportToExcel(
-    'Oylik_Moliyaviy_Hisobotlar',
+    'Moliya_va_Tahlil_Hisoboti',
     [
       { key: 'month', title: 'Davr (Oy)' },
       { key: 'revenue', title: 'Jami Savdo Tushumi ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'cogs', title: 'Tannarx Sarfi ($)', formatter: (v) => formatMoney(v || 0) },
-      { key: 'payroll', title: 'Xodimlar Ish Haqi ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'cogs', title: 'Mahsulot Tannarxi (COGS) ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'salaries', title: 'Doimiy Xodimlar Maoshi ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'outputs', title: 'Qisqa Muddatli Ishchilar ($)', formatter: (v) => formatMoney(v || 0) },
+      { key: 'payroll', title: 'Jami Ish Haqi Jamgʻarmasi ($)', formatter: (v) => formatMoney(v || 0) },
       { key: 'expenses', title: 'Jami Xarajatlar ($)', formatter: (v) => formatMoney(v || 0) },
       { key: 'profit', title: 'Haqiqiy Sof Foyda ($)', formatter: (v) => formatMoney(v || 0) },
       { key: 'margin', title: 'Rentabellik (Marja)' }
@@ -1568,6 +1595,7 @@ const handleExportFinancialExcel = () => {
 }
 
 onMounted(() => {
+  loadBranches()
   loadAnalyticsData()
 })
 </script>
@@ -1626,7 +1654,22 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="flex items-center gap-10px">
+      <div class="flex items-center gap-10px flex-wrap">
+        <ElSelect
+          v-model="selectedBranchId"
+          placeholder="Barcha filiallar"
+          clearable
+          class="!w-200px shadow-sm"
+          @change="onBranchChange"
+        >
+          <ElOption label="Barcha filiallar" value="" />
+          <ElOption
+            v-for="b in branchList"
+            :key="b.id"
+            :label="b.name"
+            :value="b.id"
+          />
+        </ElSelect>
         <ElButton
           type="success"
           plain

@@ -108,6 +108,7 @@ def get_product_list(
                     "unit": p.unit,
                     "image_url": getattr(p, "image_url", None),
                     "expiration_date": getattr(p, "expiration_date", None),
+                    "branch_id": getattr(p, "branch_id", None),
                     "remark": p.remark,
                     "createTime": p.createTime,
                     "packagings": serialize_packagings(p)

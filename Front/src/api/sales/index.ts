@@ -26,6 +26,7 @@ export interface SaleType {
   total_items?: number
   discount?: number
   remark?: string
+  branch_id?: string
   created_at?: string
   items: SaleItemType[]
 }
@@ -37,6 +38,7 @@ export const getSalesListApi = (params: {
   payment_method?: string
   cashier_name?: string
   month?: string
+  branch_id?: string
 }) => {
   return request.get({ url: '/sales/list', params })
 }

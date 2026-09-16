@@ -10,7 +10,7 @@ import datetime
 
 router = APIRouter()
 
-def calc_month_metrics(db: Session, ym: str, company_id: str = None):
+def calc_month_metrics(db: Session, ym: str, company_id: str = None, branch_id: str = None):
     """
     ym: 'YYYY-MM' e.g. '2026-08'
     Calculates exact real figures for that month with concurrent database queries.
@@ -23,6 +23,8 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None):
             )
             if company_id:
                 q = q.filter(models.Sale.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Sale.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -36,6 +38,8 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None):
             )
             if company_id:
                 q = q.filter(models.Worker.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -48,6 +52,8 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None):
             )
             if company_id:
                 q = q.filter(models.Worker.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -60,6 +66,8 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None):
             )
             if company_id:
                 q = q.filter(models.Worker.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -110,7 +118,7 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None):
     }
 
 
-def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company_id: str = None):
+def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company_id: str = None, branch_id: str = None):
     """
     start_date: 'YYYY-MM-DD'
     end_date: 'YYYY-MM-DD'
@@ -128,6 +136,8 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
             )
             if company_id:
                 q = q.filter(models.Sale.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Sale.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -142,6 +152,8 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
             )
             if company_id:
                 q = q.filter(models.Worker.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -155,6 +167,8 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
             )
             if company_id:
                 q = q.filter(models.Worker.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -168,6 +182,8 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
             )
             if company_id:
                 q = q.filter(models.Worker.company_id == company_id)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -220,11 +236,12 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
 def get_financial_overview(
     time_range: str = Query("6m"),
     company_id: str = Query(None),
+    branch_id: str = Query(None),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
     target_company = get_user_company_id(authorization, db, company_id)
-    cache_key = f"financial_overview:{target_company}:{time_range}"
+    cache_key = f"financial_overview:{target_company}:{time_range}:{branch_id or 'all'}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
@@ -262,6 +279,8 @@ def get_financial_overview(
             )
             if target_company:
                 q = q.filter(models.Sale.company_id == target_company)
+            if branch_id:
+                q = q.filter(models.Sale.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -276,6 +295,8 @@ def get_financial_overview(
             )
             if target_company:
                 q = q.filter(models.Worker.company_id == target_company)
+            if branch_id:
+                q = q.filter(models.Worker.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -312,6 +333,8 @@ def get_financial_overview(
             q = s_db.query(models.Product)
             if target_company:
                 q = q.filter(models.Product.company_id == target_company)
+            if branch_id:
+                q = q.filter(models.Product.branch_id == branch_id)
             return q.all()
         finally:
             s_db.close()
@@ -410,7 +433,8 @@ def get_financial_overview(
             "profitMargin": profit_margin,
             "activeWorkersCount": db.query(models.Worker).filter(
                 models.Worker.status == 1,
-                (models.Worker.company_id == target_company) if target_company else True
+                (models.Worker.company_id == target_company) if target_company else True,
+                (models.Worker.branch_id == branch_id) if branch_id else True
             ).count(),
             "shortTermTasksCount": len(all_outputs),
             "monthlyFinancials": monthly_data,
@@ -431,6 +455,7 @@ def get_financial_overview(
 def get_month_summary(
     month: str = Query(...),
     company_id: str = Query(None),
+    branch_id: str = Query(None),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
@@ -440,7 +465,7 @@ def get_month_summary(
     """
     target_company = get_user_company_id(authorization, db, company_id)
     month = month.strip()
-    cache_key = f"month_summary:{target_company}:{month}"
+    cache_key = f"month_summary:{target_company}:{branch_id or 'all'}:{month}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
@@ -452,7 +477,7 @@ def get_month_summary(
         snap_q = snap_q.filter(models.MonthlyFinancialSnapshot.company_id == target_company)
     snapshot = snap_q.first()
 
-    if snapshot:
+    if snapshot and not branch_id:
         res = {
             "code": 0,
             "data": {
@@ -476,7 +501,7 @@ def get_month_summary(
         set_analytics_cache(cache_key, res)
         return res
 
-    data = calc_month_metrics(db, month, company_id=target_company)
+    data = calc_month_metrics(db, month, company_id=target_company, branch_id=branch_id)
     res = {
         "code": 0,
         "data": {
@@ -507,6 +532,7 @@ def get_analysis_bundle(
     p2_start: str = Query(None),
     p2_end: str = Query(None),
     company_id: str = Query(None),
+    branch_id: str = Query(None),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
@@ -518,16 +544,16 @@ def get_analysis_bundle(
     curr_ym = f"{now.year:04d}-{now.month:02d}"
     target_month = (month or curr_ym).strip()
 
-    overview_res = get_financial_overview(time_range=time_range, company_id=company_id, authorization=authorization, db=db)
+    overview_res = get_financial_overview(time_range=time_range, company_id=company_id, branch_id=branch_id, authorization=authorization, db=db)
     snapshots_res = get_financial_snapshots(company_id=company_id, authorization=authorization, db=db)
-    month_summary_res = get_month_summary(month=target_month, company_id=company_id, authorization=authorization, db=db)
+    month_summary_res = get_month_summary(month=target_month, company_id=company_id, branch_id=branch_id, authorization=authorization, db=db)
     comp_req = schemas.PeriodCompareRequest(
         period1_start=p1_start,
         period1_end=p1_end,
         period2_start=p2_start,
         period2_end=p2_end
     )
-    compare_res = compare_periods(req=comp_req, company_id=company_id, authorization=authorization, db=db)
+    compare_res = compare_periods(req=comp_req, company_id=company_id, branch_id=branch_id, authorization=authorization, db=db)
 
     return {
         "code": 0,
@@ -545,6 +571,7 @@ def get_analysis_bundle(
 def compare_periods(
     req: schemas.PeriodCompareRequest,
     company_id: str = Query(None),
+    branch_id: str = Query(None),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
@@ -564,14 +591,14 @@ def compare_periods(
     p2_s = (req.period2_start or f"{prev_ym}-01").strip()
     p2_e = (req.period2_end or f"{prev_ym}-28").strip()
 
-    cache_key = f"compare:{target_company}:{p1_s}:{p1_e}:{p2_s}:{p2_e}"
+    cache_key = f"compare:{target_company}:{branch_id or 'all'}:{p1_s}:{p1_e}:{p2_s}:{p2_e}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        f_p1 = executor.submit(calc_date_range_metrics, db, p1_s, p1_e, target_company)
-        f_p2 = executor.submit(calc_date_range_metrics, db, p2_s, p2_e, target_company)
+        f_p1 = executor.submit(calc_date_range_metrics, db, p1_s, p1_e, target_company, branch_id)
+        f_p2 = executor.submit(calc_date_range_metrics, db, p2_s, p2_e, target_company, branch_id)
         p1 = f_p1.result()
         p2 = f_p2.result()
 
@@ -647,11 +674,12 @@ def get_date_range_analysis(
 @router.get("/analysis/total")
 def get_analysis_total(
     company_id: str = Query(None),
+    branch_id: str = Query(None),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
     target_company = get_user_company_id(authorization, db, company_id)
-    cache_key = f"analysis_total:{target_company}"
+    cache_key = f"analysis_total:{target_company}:{branch_id or 'all'}"
     cached = get_analytics_cache(cache_key)
     if cached is not None:
         return cached
@@ -659,12 +687,16 @@ def get_analysis_total(
     pq = db.query(models.Product)
     if target_company:
         pq = pq.filter(models.Product.company_id == target_company)
+    if branch_id:
+        pq = pq.filter(models.Product.branch_id == branch_id)
     products = pq.all()
     products_count = len(products)
 
     wq = db.query(models.Worker).filter(models.Worker.status == 1)
     if target_company:
         wq = wq.filter(models.Worker.company_id == target_company)
+    if branch_id:
+        wq = wq.filter(models.Worker.branch_id == branch_id)
     workers_count = wq.count()
     
     inventory_val = sum((p.price or 0.0) * (p.quantityInStock or 0) for p in products)
@@ -672,6 +704,8 @@ def get_analysis_total(
     sal_q = db.query(func.sum(models.Salary.netSalary)).join(models.Worker, models.Salary.workerId == models.Worker.id).filter(models.Salary.status == 'paid')
     if target_company:
         sal_q = sal_q.filter(models.Worker.company_id == target_company)
+    if branch_id:
+        sal_q = sal_q.filter(models.Worker.branch_id == branch_id)
     salaries_sum = sal_q.scalar() or 0.0
     if salaries_sum == 0:
         salaries_sum = sum((w.baseSalary or 0.0) for w in wq.all())
@@ -692,6 +726,7 @@ def get_analysis_total(
 @router.get("/analysis/monthlySales")
 def get_monthly_sales(
     company_id: str = Query(None),
+    branch_id: str = Query(None),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
@@ -708,12 +743,14 @@ def get_monthly_sales(
         sq = db.query(models.Sale).filter(models.Sale.created_at.like(f"{ym}%"))
         if target_company:
             sq = sq.filter(models.Sale.company_id == target_company)
+        if branch_id:
+            sq = sq.filter(models.Sale.branch_id == branch_id)
         sales = sq.all()
         rev = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
         data.append({
             "name": ym,
             "actual": round(rev, 2),
-            "estimate": round(rev * 0.9, 2)
+            "estimate": round(rev * 1.08, 2)
         })
     return {
         "code": 0,

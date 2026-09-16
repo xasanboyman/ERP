@@ -305,14 +305,15 @@ def create_product(db: Session, prod: schemas.ProductCreate, company_id: Optiona
             db_prod.image_url = prod.image_url
         if getattr(prod, 'expiration_date', None):
             db_prod.expiration_date = prod.expiration_date
-        if prod.remark:
-            db_prod.remark = prod.remark
+        if getattr(prod, 'branch_id', None):
+            db_prod.branch_id = prod.branch_id
         db_prod.company_id = target_company_id
     else:
         new_sku = sku or f"SKU-{str(uuid.uuid4().int)[:6]}"
         db_prod = models.Product(
             id=prod_id or ("PROD-" + str(uuid.uuid4().int)[:6]),
             company_id=target_company_id,
+            branch_id=getattr(prod, 'branch_id', None),
             productName=prod.productName,
             SKU=new_sku,
             category=prod.category or "Boshqalar",
@@ -398,6 +399,8 @@ def create_worker(db: Session, worker: schemas.WorkerCreate, company_id: Optiona
         db_w.phone = worker.phone
         db_w.role = worker.role
         db_w.departmentId = worker.departmentId
+        if getattr(worker, 'branch_id', None):
+            db_w.branch_id = worker.branch_id
         if worker.hireDate:
             db_w.hireDate = worker.hireDate
         db_w.status = worker.status
@@ -409,6 +412,7 @@ def create_worker(db: Session, worker: schemas.WorkerCreate, company_id: Optiona
         db_w = models.Worker(
             id=w_id or "W" + str(uuid.uuid4().int)[:6],
             company_id=comp,
+            branch_id=getattr(worker, 'branch_id', None),
             name=worker.name,
             account=worker.account,
             employee_code=worker.employee_code or generate_unique_employee_code(db),

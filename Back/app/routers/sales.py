@@ -224,9 +224,16 @@ def create_sale(
         paid = min(paid, final_total)
     debt = max(0.0, final_total - paid)
 
+    target_branch = getattr(sale_in, 'branch_id', None)
+    if not target_branch and target_company:
+        prim_branch = db.query(models.Branch.id).filter(models.Branch.company_id == target_company).order_by(models.Branch.created_at.asc()).first()
+        if prim_branch:
+            target_branch = prim_branch[0]
+
     db_sale = models.Sale(
         id=sale_id,
         company_id=target_company,
+        branch_id=target_branch,
         receipt_number=receipt_no,
         cashier_name=sale_in.cashier_name or "admin",
         customer_name=sale_in.customer_name,

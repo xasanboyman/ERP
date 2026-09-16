@@ -133,28 +133,34 @@ export interface PeriodComparisonData {
 
 export const getFinancialOverviewApi = (params?: {
   time_range?: string
+  branch_id?: string
 }): Promise<IResponse<FinancialOverviewData>> => {
   return request.get({ url: '/analysis/financial-overview', params })
 }
 
 export const getMonthSummaryApi = (params: {
   month: string
+  branch_id?: string
 }): Promise<IResponse<MonthSummaryData>> => {
   return request.get({ url: '/analysis/month-summary', params })
 }
 
-export const comparePeriodsApi = (data: {
-  period1_start: string
-  period1_end: string
-  period2_start: string
-  period2_end: string
-}): Promise<IResponse<PeriodComparisonData>> => {
-  return request.post({ url: '/analysis/compare', data })
+export const comparePeriodsApi = (
+  data: {
+    period1_start: string
+    period1_end: string
+    period2_start: string
+    period2_end: string
+  },
+  params?: { branch_id?: string }
+): Promise<IResponse<PeriodComparisonData>> => {
+  return request.post({ url: '/analysis/compare', data, params })
 }
 
 export const getDateRangeAnalysisApi = (params: {
   start_date: string
   end_date: string
+  branch_id?: string
 }): Promise<IResponse<any>> => {
   return request.get({ url: '/analysis/date-range', params })
 }
@@ -195,6 +201,7 @@ export const getAnalysisBundleApi = (params?: {
   p1_end?: string
   p2_start?: string
   p2_end?: string
+  branch_id?: string
 }): Promise<IResponse<AnalysisBundleData>> => {
   return request.get({ url: '/analysis/bundle', params })
 }

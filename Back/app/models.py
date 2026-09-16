@@ -100,6 +100,7 @@ class Product(Base):
     __tablename__ = "products"
     id = Column(String, primary_key=True, index=True)
     company_id = Column(String, ForeignKey("companies.id", ondelete="CASCADE"), default="comp-default", index=True)
+    branch_id = Column(String, nullable=True, index=True)
     productName = Column(String, index=True)
     SKU = Column(String, index=True)
     category = Column(String, index=True)
@@ -127,6 +128,7 @@ class Worker(Base):
     __tablename__ = "workers"
     id = Column(String, primary_key=True, index=True)
     company_id = Column(String, ForeignKey("companies.id", ondelete="CASCADE"), default="comp-default", index=True)
+    branch_id = Column(String, nullable=True, index=True)
     name = Column(String, index=True)
     account = Column(String, unique=True, index=True)
     employee_code = Column(String, unique=True, index=True, nullable=True)
@@ -378,6 +380,7 @@ class Sale(Base):
     __tablename__ = "sales"
     id = Column(String, primary_key=True, index=True)
     company_id = Column(String, ForeignKey("companies.id", ondelete="CASCADE"), default="comp-default", index=True)
+    branch_id = Column(String, nullable=True, index=True)
     receipt_number = Column(String, unique=True, index=True)
     cashier_name = Column(String, index=True, default="admin")
     customer_name = Column(String, nullable=True)
