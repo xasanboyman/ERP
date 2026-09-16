@@ -57,7 +57,7 @@ axiosInstance.interceptors.response.use(
   (error: AxiosError) => {
     console.log('err： ' + error) // for debug
     if (!isDeviceOrMobileRequest(error.config)) {
-      if (error.response?.status === 401 || error.response?.status === 403) {
+      if (error.response?.status === 401) {
         const userStore = useUserStoreWithOut()
         userStore.logout()
       }

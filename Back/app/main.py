@@ -9,7 +9,8 @@ from .routers import auth, role, department, branch, product, worker, salary, an
 import datetime
 import os
 
-from .database import is_sqlite
+from .database import is_sqlite, SessionLocal
+from . import models
 
 if is_sqlite:
     try:
@@ -122,6 +123,22 @@ async def token_expiration_middleware(request: Request, call_next):
                 status_code=401,
                 content={"code": 401, "message": "Sessiya muddati tugadi (12 soat). Iltimos, qayta tizimga kiring."}
             )
+        if isinstance(payload, dict) and "sub" in payload and payload["sub"] not in ["admin", "anvars"]:
+            db = SessionLocal()
+            try:
+                user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
+                if user and user.company_id and user.company_id != "comp-default":
+                    comp = db.query(models.Company).filter(models.Company.id == user.company_id).first()
+                    if comp and comp.status == 0:
+                        return JSONResponse(
+                            status_code=403,
+                            content={
+                                "code": 403,
+                                "message": f"'{comp.name}' kompaniyasi hisobi oylik to'lov amalga oshirilmaganligi sababli to'xtatilgan. Iltimos, administratorga murojaat qiling."
+                            }
+                        )
+            finally:
+                db.close()
     return await call_next(request)
 
 # Register routes (both directly and with /api prefix for serverless compatibility)

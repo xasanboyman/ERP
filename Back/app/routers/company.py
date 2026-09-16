@@ -327,6 +327,16 @@ def delete_company_endpoint(
     if comp_id == "comp-default":
         raise HTTPException(status_code=400, detail="Asosiy bosh korxonani o'chirib bo'lmaydi")
 
+    admin_password = body.get("admin_password")
+    if not admin_password or not str(admin_password).strip():
+        raise HTTPException(status_code=400, detail="Kompaniyani o'chirish uchun Super Admin parolini kiritish shart!")
+
+    if not crud.verify_password(str(admin_password).strip(), admin_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Super Admin paroli noto'g'ri!")
+
+    comp = crud.get_company_by_id(db, comp_id)
+    comp_name = comp.name if comp else comp_id
+
     success = crud.delete_company(db, comp_id)
     if not success:
         raise HTTPException(status_code=404, detail="Kompaniya topilmadi")
@@ -337,10 +347,10 @@ def delete_company_endpoint(
         action="deleted",
         entity="company",
         entity_id=comp_id,
-        entity_name=comp_id
+        entity_name=comp_name
     )
 
-    return {"code": 0, "message": "Kompaniya va uning ma'lumotlari muvaffaqiyatli o'chirildi"}
+    return {"code": 0, "message": f"'{comp_name}' kompaniyasi va uning barcha ma'lumotlari muvaffaqiyatli o'chirildi"}
 
 
 @router.post("/status")
@@ -616,15 +626,24 @@ def reset_company_account_password(
     hashed = crud.get_password_hash(str(new_password).strip())
 
     if u:
+        old_u = u.username
         if new_username and str(new_username).strip():
             clean_u = str(new_username).strip().lower()
             existing = db.query(models.User).filter(models.User.username == clean_u, models.User.id != u.id).first()
             if existing:
                 raise HTTPException(status_code=400, detail=f"'{clean_u}' loginli foydalanuvchi allaqachon mavjud")
             u.username = clean_u
+            wk = db.query(models.Worker).filter(models.Worker.company_id == comp_id, models.Worker.account == old_u).first()
+            if wk:
+                wk.account = clean_u
+
         u.hashed_password = hashed
         if full_name:
             u.full_name = str(full_name).strip()
+            wk = db.query(models.Worker).filter(models.Worker.company_id == comp_id, models.Worker.account == u.username).first()
+            if wk:
+                wk.name = str(full_name).strip()
+
         db.commit()
         assigned_username = u.username
     else:

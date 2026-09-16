@@ -182,6 +182,17 @@ def login(user_in: schemas.UserLogin, db: Session = Depends(get_db)):
             if not valid_pass:
                 return {"code": 500, "message": "Xodim paroli noto'g'ri"}
 
+    # Check if company is suspended/disabled
+    u_comp_id = getattr(db_user, "company_id", None) or "comp-default"
+    is_super = (u_comp_id == "comp-default" and (db_user.username in ["admin", "anvars"] or getattr(db_user, "is_super_admin", False)))
+    if not is_super and u_comp_id != "comp-default":
+        comp = db.query(models.Company).filter(models.Company.id == u_comp_id).first()
+        if comp and comp.status == 0:
+            return {
+                "code": 403,
+                "message": f"'{comp.name}' kompaniyasi hisobi oylik to'lov to'lanmaganligi yoki ma'muriyat tomonidan to'xtatilgan. Iltimos, bosh administratorga murojaat qiling."
+            }
+
     return {
         "code": 0,
         "data": _user_dict(db_user, db=db, include_password=user_in.password)

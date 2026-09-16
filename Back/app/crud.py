@@ -1462,28 +1462,60 @@ def delete_company(db: Session, company_id: str):
         return False
 
     # Detach or delete associated records
-    db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id.in_(
-        db.query(models.Product.id).filter(models.Product.company_id == company_id)
-    )).delete(synchronize_session=False)
+    try:
+        db.query(models.ProductPackaging).filter(models.ProductPackaging.product_id.in_(
+            db.query(models.Product.id).filter(models.Product.company_id == company_id)
+        )).delete(synchronize_session=False)
+    except Exception:
+        pass
 
-    db.query(models.SaleItem).filter(models.SaleItem.sale_id.in_(
-        db.query(models.Sale.id).filter(models.Sale.company_id == company_id)
-    )).delete(synchronize_session=False)
+    try:
+        db.query(models.SaleItem).filter(models.SaleItem.sale_id.in_(
+            db.query(models.Sale.id).filter(models.Sale.company_id == company_id)
+        )).delete(synchronize_session=False)
+    except Exception:
+        pass
 
-    db.query(models.Product).filter(models.Product.company_id == company_id).delete(synchronize_session=False)
-    db.query(models.Sale).filter(models.Sale.company_id == company_id).delete(synchronize_session=False)
-    db.query(models.Worker).filter(models.Worker.company_id == company_id).delete(synchronize_session=False)
-    db.query(models.Department).filter(models.Department.company_id == company_id).delete(synchronize_session=False)
-    db.query(models.Branch).filter(models.Branch.company_id == company_id).delete(synchronize_session=False)
-    db.query(models.User).filter(models.User.company_id == company_id).delete(synchronize_session=False)
+    try:
+        db.query(models.Product).filter(models.Product.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.Sale).filter(models.Sale.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.Worker).filter(models.Worker.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.Department).filter(models.Department.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.Branch).filter(models.Branch.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.Role).filter(models.Role.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.ActivityLog).filter(models.ActivityLog.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
+
+    try:
+        db.query(models.User).filter(models.User.company_id == company_id).delete(synchronize_session=False)
+    except Exception:
+        pass
 
     db.delete(comp)
     db.commit()
     return True
-
-    db.refresh(device_token)
-    return device_token
-
-
-
-

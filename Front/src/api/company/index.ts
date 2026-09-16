@@ -136,7 +136,7 @@ export const toggleCompanyStatusApi = (data: { company_id: string; status: numbe
   return request.post({ url: '/company/status', data })
 }
 
-export const deleteCompanyApi = (data: { id: string }) => {
+export const deleteCompanyApi = (data: { id: string; admin_password?: string }) => {
   return request.post({ url: '/company/delete', data })
 }
 

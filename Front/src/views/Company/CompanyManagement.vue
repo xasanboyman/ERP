@@ -78,6 +78,12 @@ const passwordResetForm = reactive({
   full_name: ''
 })
 
+// Secure Delete Dialog State (Requires Super Admin Password)
+const deleteDialogVisible = ref(false)
+const deleteLoading = ref(false)
+const selectedCompanyForDelete = ref<CompanyType | null>(null)
+const deleteAdminPassword = ref('')
+
 // Main Account Dialog State
 const mainAccountDialogVisible = ref(false)
 const mainAccountLoading = ref(false)
@@ -407,32 +413,45 @@ const handleTierSubmit = async () => {
   }
 }
 
-// Delete company
-const handleDeleteCompany = (row: CompanyType) => {
+// Secure Delete company requiring Super Admin password
+const openDeleteDialog = (row: CompanyType) => {
   if (row.id === 'comp-default') {
     ElMessage.warning("Asosiy bosh korxonani o'chirib bo'lmaydi")
     return
   }
-  ElMessageBox.confirm(
-    `Haqiqatan ham "${row.name}" kompaniyasini va unga tegishli barcha ma'lumotlarni (mahsulotlar, savdolar, xodimlar) o'chirmoqchimisiz?`,
-    'Xavfli Amal: Kompaniyani o\'chirish',
-    {
-      confirmButtonText: 'Ha, butunlay o\'chirish',
-      cancelButtonText: 'Bekor qilish',
-      type: 'error'
+  selectedCompanyForDelete.value = row
+  deleteAdminPassword.value = ''
+  deleteDialogVisible.value = true
+}
+
+const handleConfirmDelete = async () => {
+  if (!selectedCompanyForDelete.value?.id) return
+  if (!deleteAdminPassword.value || !deleteAdminPassword.value.trim()) {
+    ElMessage.warning("Super Admin parolini kiritish shart!")
+    return
+  }
+  deleteLoading.value = true
+  try {
+    const res: any = await deleteCompanyApi({
+      id: selectedCompanyForDelete.value.id,
+      admin_password: deleteAdminPassword.value.trim()
+    })
+    ElMessage.success(res?.message || "Kompaniya va uning barcha ma'lumotlari muvaffaqiyatli o'chirildi")
+    deleteDialogVisible.value = false
+    if (drawerVisible.value && currentCompanyDetail.value?.id === selectedCompanyForDelete.value.id) {
+      drawerVisible.value = false
     }
-  ).then(async () => {
-    try {
-      await deleteCompanyApi({ id: row.id! })
-      ElMessage.success("Kompaniya muvaffaqiyatli o'chirildi")
-      if (drawerVisible.value && currentCompanyDetail.value?.id === row.id) {
-        drawerVisible.value = false
-      }
-      fetchCompanies()
-    } catch (err: any) {
-      ElMessage.error(err?.message || "O'chirishda xatolik")
-    }
-  })
+    fetchCompanies()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || err?.message || "O'chirishda xatolik yuz berdi")
+  } finally {
+    deleteLoading.value = false
+  }
+}
+
+// Retain alias for template compatibility
+const handleDeleteCompany = (row: CompanyType) => {
+  openDeleteDialog(row)
 }
 
 // Open Password Reset Dialog
@@ -908,16 +927,16 @@ onMounted(() => {
         </ElTableColumn>
 
         <!-- Subscription Expiry -->
-        <ElTableColumn label="Obuna Holati" min-width="160">
+        <ElTableColumn label="Obuna Holati" min-width="170">
           <template #default="{ row }">
             <div>
               <div class="flex items-center gap-6px">
                 <span
                   class="w-8px h-8px rounded-full"
-                  :class="row.is_expired ? 'bg-red-500 animate-pulse' : row.status === 1 ? 'bg-emerald-500' : 'bg-gray-400'"
+                  :class="row.is_expired ? 'bg-red-500 animate-pulse' : row.status === 1 ? 'bg-emerald-500' : 'bg-rose-500'"
                 ></span>
-                <span :class="row.is_expired ? 'text-red-600 font-bold' : row.status === 1 ? 'text-emerald-600 font-semibold' : 'text-gray-500'" class="text-12px">
-                  {{ row.is_expired ? 'Muddati tugagan' : row.status === 1 ? 'Faol obuna' : 'To\'xtatilgan' }}
+                <span :class="row.is_expired ? 'text-red-600 font-bold' : row.status === 1 ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-bold'" class="text-12px">
+                  {{ row.is_expired ? 'Muddati tugagan' : row.status === 1 ? 'Faol obuna' : 'To\'xtatilgan (To\'lanmagan)' }}
                 </span>
               </div>
               <div class="text-11px text-gray-400 font-mono mt-2px">
@@ -933,7 +952,7 @@ onMounted(() => {
             <ElSwitch
               :model-value="row.status === 1"
               active-color="#10b981"
-              inactive-color="#9ca3af"
+              inactive-color="#ef4444"
               @change="(val: any) => handleToggleStatus(row, val ? 1 : 0)"
             />
           </template>
@@ -1090,15 +1109,17 @@ onMounted(() => {
           <div class="flex items-center gap-6px">
             <span
               class="w-7px h-7px rounded-full"
-              :class="comp.is_expired ? 'bg-red-500 animate-pulse' : comp.status === 1 ? 'bg-emerald-500' : 'bg-gray-400'"
+              :class="comp.is_expired ? 'bg-red-500 animate-pulse' : comp.status === 1 ? 'bg-emerald-500' : 'bg-rose-500'"
             ></span>
-            <span>{{ comp.is_expired ? 'Obuna tugagan' : comp.subscription_expires_at ? `Muddat: ${comp.subscription_expires_at.slice(0, 10)}` : 'Cheklovlarsiz' }}</span>
+            <span :class="comp.status === 0 ? 'text-rose-600 font-bold' : ''">
+              {{ comp.is_expired ? 'Obuna tugagan' : comp.status === 0 ? 'To\'xtatilgan (To\'lanmagan)' : comp.subscription_expires_at ? `Muddat: ${comp.subscription_expires_at.slice(0, 10)}` : 'Cheklovlarsiz' }}
+            </span>
           </div>
           <ElSwitch
             :model-value="comp.status === 1"
             size="small"
             active-color="#10b981"
-            inactive-color="#9ca3af"
+            inactive-color="#ef4444"
             @change="(val: any) => handleToggleStatus(comp, val ? 1 : 0)"
           />
         </div>
@@ -1176,15 +1197,46 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="flex items-center gap-10px">
+          <div class="flex items-center gap-8px flex-wrap">
+            <ElTag
+              :type="currentCompanyDetail.status === 1 ? 'success' : 'danger'"
+              effect="dark"
+              class="font-bold cursor-pointer"
+              @click="handleToggleStatus(currentCompanyDetail, currentCompanyDetail.status === 1 ? 0 : 1)"
+            >
+              <Icon :icon="currentCompanyDetail.status === 1 ? 'ep:circle-check' : 'ep:circle-close'" class="mr-3px" />
+              {{ currentCompanyDetail.status === 1 ? 'Faol Obuna' : 'To\'xtatilgan (To\'lanmagan)' }}
+            </ElTag>
+
+            <ElButton
+              size="small"
+              :type="currentCompanyDetail.status === 1 ? 'danger' : 'success'"
+              plain
+              @click="handleToggleStatus(currentCompanyDetail, currentCompanyDetail.status === 1 ? 0 : 1)"
+            >
+              <Icon :icon="currentCompanyDetail.status === 1 ? 'ep:video-pause' : 'ep:video-play'" class="mr-2px" />
+              {{ currentCompanyDetail.status === 1 ? 'To\'xtatish' : 'Faollashtirish' }}
+            </ElButton>
+
             <ElButton
               size="small"
               type="warning"
               plain
               @click="openTierDialog(currentCompanyDetail)"
             >
-              <Icon icon="ep:top" class="mr-2px" /> Tarifni Oshirish
+              <Icon icon="ep:top" class="mr-2px" /> Tarif
             </ElButton>
+
+            <ElButton
+              size="small"
+              type="danger"
+              plain
+              :disabled="currentCompanyDetail.id === 'comp-default'"
+              @click="openDeleteDialog(currentCompanyDetail)"
+            >
+              <Icon icon="ep:delete" class="mr-2px" /> O'chirish
+            </ElButton>
+
             <ElButton
               size="small"
               type="default"
@@ -1209,6 +1261,30 @@ onMounted(() => {
                 <span>Kompaniya & Hisob</span>
               </span>
             </template>
+
+            <!-- Suspended Notice Banner -->
+            <div
+              v-if="currentCompanyDetail.status === 0"
+              class="mb-16px p-14px rounded-12px bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 flex items-center justify-between gap-12px shadow-sm"
+            >
+              <div class="flex items-center gap-10px text-red-700 dark:text-red-300">
+                <Icon icon="ep:warning-filled" class="text-24px shrink-0 text-red-500" />
+                <div>
+                  <div class="font-bold text-14px">Ushbu kompaniya hisobi vaqtincha to'xtatilgan!</div>
+                  <div class="text-12px mt-2px opacity-90">
+                    Oylik to'lov amalga oshirilmaganligi sababli tizimga kirish to'xtatilgan. Kompaniya xodimlari va administratorlari tizimga kira olmaydi.
+                  </div>
+                </div>
+              </div>
+              <ElButton
+                type="success"
+                size="small"
+                class="font-bold shrink-0"
+                @click="handleToggleStatus(currentCompanyDetail, 1)"
+              >
+                <Icon icon="ep:check" class="mr-2px" /> Qayta Faollashtirish
+              </ElButton>
+            </div>
 
             <!-- Admin Account Management Card -->
             <div class="mb-16px p-16px rounded-14px bg-gradient-to-r from-purple-50/70 via-indigo-50/50 to-blue-50/70 dark:from-purple-950/40 dark:via-indigo-950/30 dark:to-blue-950/40 border border-purple-200 dark:border-purple-800 shadow-sm">
@@ -2125,6 +2201,64 @@ onMounted(() => {
           <ElButton @click="mainAccountDialogVisible = false">Bekor qilish</ElButton>
           <ElButton type="primary" :loading="mainAccountLoading" @click="handleSaveMainAccount" class="gradient-btn font-semibold">
             Saqlash
+          </ElButton>
+        </div>
+      </template>
+    </ElDialog>
+
+    <!-- ============================================================== -->
+    <!-- SECURE DELETE COMPANY DIALOG (REQUIRES SUPER ADMIN PASSWORD)   -->
+    <!-- ============================================================== -->
+    <ElDialog
+      v-model="deleteDialogVisible"
+      title="Kompaniyani Butunlay O'chirish"
+      width="480px"
+      destroy-on-close
+    >
+      <div v-if="selectedCompanyForDelete" class="space-y-14px">
+        <div class="p-14px rounded-12px bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 flex items-start gap-12px">
+          <Icon icon="ep:warning-filled" class="text-24px text-red-600 shrink-0 mt-2px" />
+          <div class="text-13px text-red-800 dark:text-red-300 leading-relaxed">
+            <span class="font-extrabold block text-14px mb-2px">DIQQAT: Qaytarib bo'lmas xavfli amal!</span>
+            "<strong class="font-bold text-red-900 dark:text-red-200">{{ selectedCompanyForDelete.name }}</strong>" kompaniyasi va unga tegishli barcha filiallar, xodimlar, mahsulotlar hamda savdo hisobotlari butunlay o'chiriladi.
+          </div>
+        </div>
+
+        <div class="p-12px rounded-10px bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 text-13px space-y-4px font-mono">
+          <div>Kompaniya: <span class="font-bold text-gray-900 dark:text-white">{{ selectedCompanyForDelete.name }}</span></div>
+          <div>Unikal kodi: <span class="font-bold text-blue-600">{{ selectedCompanyForDelete.code }}</span></div>
+        </div>
+
+        <ElForm label-position="top" class="mt-12px">
+          <ElFormItem label="Super Administrator Paroli (Tasdiqlash uchun)" required>
+            <ElInput
+              v-model="deleteAdminPassword"
+              type="password"
+              show-password
+              placeholder="Super admin maxfiy parolini kiriting..."
+              @keyup.enter="handleConfirmDelete"
+            >
+              <template #prefix>
+                <Icon icon="ep:lock" class="text-gray-400" />
+              </template>
+            </ElInput>
+            <div class="text-11px text-gray-400 mt-4px">
+              Xavfsizlik yuzasidan o'chirish faqat bosh admin paroli tasdiqlanganda amalga oshiriladi.
+            </div>
+          </ElFormItem>
+        </ElForm>
+      </div>
+
+      <template #footer>
+        <div class="flex justify-end gap-10px">
+          <ElButton @click="deleteDialogVisible = false">Bekor qilish</ElButton>
+          <ElButton
+            type="danger"
+            :loading="deleteLoading"
+            @click="handleConfirmDelete"
+            class="font-semibold"
+          >
+            <Icon icon="ep:delete" class="mr-4px" /> O'chirishni Tasdiqlash
           </ElButton>
         </div>
       </template>
