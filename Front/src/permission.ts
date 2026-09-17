@@ -48,6 +48,21 @@ function getFirstRoutePath(routes: any[]): string {
   return '/login'
 }
 
+function extractAllRoutePaths(routes: any[], parent = ''): string[] {
+  let result: string[] = []
+  for (const r of routes) {
+    if (!r.path || r.meta?.hidden) continue
+    const full = r.path.startsWith('/')
+      ? r.path
+      : `${parent}/${r.path}`.replace(/\/+/g, '/')
+    result.push(full.toLowerCase().replace(/\/$/, ''))
+    if (r.children && r.children.length > 0) {
+      result = result.concat(extractAllRoutePaths(r.children, full))
+    }
+  }
+  return result
+}
+
 router.beforeEach(async (to, from, next) => {
   start()
   loadStart()
@@ -87,89 +102,79 @@ router.beforeEach(async (to, from, next) => {
     if (permissionStore.getIsAddRouters) {
       // If not super admin, check if path is authorized
       if (!isSuper) {
-        const allowedPaths = permissionStore.getAddRouters.map((r: any) => r.path)
-        const targetPath = to.path.toLowerCase()
-        const isAllowed = allowedPaths.some((p: string) => {
-          const lp = p.toLowerCase()
-          return lp === targetPath || targetPath.startsWith(lp + '/') || lp.endsWith(targetPath)
-        })
+        const allowedPaths = extractAllRoutePaths(permissionStore.getRouters)
+        const targetPath = to.path.toLowerCase().replace(/\/$/, '')
+        const isAllowed =
+          targetPath === '' ||
+          targetPath === '/' ||
+          targetPath === '/404' ||
+          targetPath === '/login' ||
+          targetPath === '/redirect' ||
+          allowedPaths.includes(targetPath) ||
+          allowedPaths.some((p) => p !== '' && p !== '/' && targetPath.startsWith(p + '/'))
 
-        if (
-          !isAllowed &&
-          targetPath !== '/404' &&
-          targetPath !== '/login' &&
-          targetPath !== '/redirect' &&
-          targetPath !== '/'
-        ) {
-          const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
-          next({ path: firstPath, replace: true })
-          return
-        }
-      }
-
-        // If navigating to root '/' or an unpermitted route that has no match:
-        const matched = router.resolve(to.path).matched
-        if (
-          to.path === '/' ||
-          !matched ||
-          matched.length === 0 ||
-          matched.some((m) => m.name === 'NoFind')
-        ) {
+        if (!isAllowed) {
           const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
           if (firstPath && firstPath !== to.path && firstPath !== '/login') {
             next({ path: firstPath, replace: true })
             return
           }
         }
-        next()
-        return
       }
 
-      let roleRouters: any = userStore.getRoleRouters
-      if (!roleRouters || (Array.isArray(roleRouters) && roleRouters.length === 0)) {
-        try {
-          const res = await getAdminRoleApi()
-          if (res && res.data) {
-            roleRouters = Array.isArray(res.data) ? res.data : (res.data as any).list || []
-            userStore.setRoleRouters(roleRouters)
-          }
-        } catch (e) {
-          console.warn('Failed to fetch role routers on reload:', e)
+      // If navigating to root '/' or an unpermitted route that has no match:
+      const matched = router.resolve(to.path).matched
+      if (
+        to.path === '/' ||
+        !matched ||
+        matched.length === 0 ||
+        matched.some((m) => m.name === 'NoFind')
+      ) {
+        const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
+        if (firstPath && firstPath !== to.path && firstPath !== '/login') {
+          next({ path: firstPath, replace: true })
+          return
         }
       }
+      next()
+      return
+    }
 
-      if (!Array.isArray(roleRouters)) {
-        if (roleRouters && typeof roleRouters === 'object' && Array.isArray(roleRouters.list)) {
-          roleRouters = roleRouters.list
-        } else {
-          roleRouters = []
+    let roleRouters: any = userStore.getRoleRouters
+    if (!roleRouters || (Array.isArray(roleRouters) && roleRouters.length === 0)) {
+      try {
+        const res = await getAdminRoleApi()
+        if (res && res.data) {
+          roleRouters = Array.isArray(res.data) ? res.data : (res.data as any).list || []
+          userStore.setRoleRouters(roleRouters)
         }
+      } catch (e) {
+        console.warn('Failed to fetch role routers on reload:', e)
       }
+    }
 
-      if (appStore.getDynamicRouter && roleRouters.length > 0) {
-        appStore.serverDynamicRouter
-          ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
-          : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
-      } else if (isSuper) {
-        await permissionStore.generateRoutes('static')
+    if (!Array.isArray(roleRouters)) {
+      if (roleRouters && typeof roleRouters === 'object' && Array.isArray(roleRouters.list)) {
+        roleRouters = roleRouters.list
       } else {
-        await permissionStore.generateRoutes('frontEnd', [
-          '/dashboard',
-          '/dashboard/analysis',
-          '/dashboard/workplace',
-          '/product',
-          '/product/list',
-          '/sales',
-          '/sales/pos',
-          '/sales/debtors',
-          '/hr',
-          '/hr/workers',
-          '/hr/timesheets',
-          '/hr/outputs',
-          '/hr/adjustments',
-          '/hr/salary'
-        ])
+        roleRouters = []
       }
+    }
+
+    if (appStore.getDynamicRouter && roleRouters.length > 0) {
+      appStore.serverDynamicRouter
+        ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
+        : await permissionStore.generateRoutes('frontEnd', roleRouters as string[])
+    } else if (isSuper) {
+      await permissionStore.generateRoutes('static')
+    } else {
+      await permissionStore.generateRoutes('frontEnd', [
+        '/sales',
+        '/sales/pos',
+        '/product',
+        '/product/list'
+      ])
+    }
 
       permissionStore.getAddRouters.forEach((route) => {
         router.addRoute(route as unknown as RouteRecordRaw)

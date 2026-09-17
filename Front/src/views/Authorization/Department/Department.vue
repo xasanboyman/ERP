@@ -21,8 +21,8 @@ import { CrudSchema, useCrudSchemas } from '@/hooks/web/useCrudSchemas'
 import { BaseButton } from '@/components/Button'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 
-const dialogInitWidth = Math.min(window.innerWidth * 0.92, 1400)
-const dialogInitHeight = Math.min(window.innerHeight * 0.88, 800)
+const dialogInitWidth = Math.min(window.innerWidth * 0.92, 560)
+const dialogInitHeight = Math.min(window.innerHeight * 0.88, 360)
 
 const ids = ref<string[]>([])
 

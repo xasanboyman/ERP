@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException
+from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
-from app.auth import get_user_company_id, get_current_user_optional
+from app.auth import get_user_company_id, get_current_user_from_header, check_user_access
 
 router = APIRouter()
 
@@ -24,6 +24,14 @@ def get_worker_list(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["worker:view", "worker", "workers", "hr:workers", "/hr/workers", "/hr"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     workers = crud.get_workers(db, company_id=target_company)
 
@@ -74,7 +82,13 @@ def worker_save(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    current_user = get_current_user_optional(authorization, db)
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["worker:create", "worker:edit", "worker"], db)
     target_company = get_user_company_id(authorization, db, getattr(w_in, "company_id", None))
 
     existing = db.query(models.Worker).filter(models.Worker.id == w_in.id).first() if hasattr(w_in, "id") and w_in.id else None
@@ -151,6 +165,13 @@ def worker_delete(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["worker:delete", "worker"], db)
     target_company = get_user_company_id(authorization, db)
     ids = body.get("ids")
     if not ids:

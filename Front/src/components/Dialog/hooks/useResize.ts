@@ -49,6 +49,22 @@ export const useResize = (props?: {
         const parsed = JSON.parse(saved)
         if (parsed.width && parsed.width >= minWidthPx) savedWidth = parsed.width
         if (parsed.height && parsed.height >= minHeightPx) savedHeight = parsed.height
+        if (normKey === 'worker' && savedWidth && savedWidth > 760) {
+          savedWidth = 700
+          localStorage.removeItem(`dialog_size_${normKey}`)
+        }
+        if (normKey === 'department' && savedWidth && savedWidth > 620) {
+          savedWidth = 560
+          localStorage.removeItem(`dialog_size_${normKey}`)
+        }
+        if ((normKey.includes('auth') || normKey.includes('repay') || normKey.includes('receipt')) && savedWidth && savedWidth > 700) {
+          savedWidth = 600
+          localStorage.removeItem(`dialog_size_${normKey}`)
+        }
+        if (initWidth && typeof initWidth === 'number' && savedWidth && savedWidth > initWidth * 1.35) {
+          savedWidth = initWidth
+          localStorage.removeItem(`dialog_size_${normKey}`)
+        }
         if (savedWidth || savedHeight) {
           isManualResized.value = true
         }

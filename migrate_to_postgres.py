@@ -55,8 +55,8 @@ def migrate(sqlite_path, pg_url):
     pg_conn.autocommit = True
     pg_cur = pg_conn.cursor()
 
-    print("[*] Recreating fresh public schema in PostgreSQL...")
-    pg_cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+    # print("[*] Recreating fresh public schema in PostgreSQL...")
+    # pg_cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
 
     # Get all SQLite tables
     sq_cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
@@ -91,8 +91,8 @@ def migrate(sqlite_path, pg_url):
     # 2. Migrate all data table by table
     priority_tables = [
         "roles", "departments", "branches", "users", "workers", 
-        "classifier_items", "products", "product_packagings", "sales", "sale_items", 
-        "salaries", "activity_logs", "staff_timesheets", "staff_adjustments", "crm_groups", "crm_lessons", "device_tokens", "sales_pushes", "todos", "workplace_projects", "workplace_dynamics", "workplace_teams", "workplace_radars", "monthly_financial_snapshots"
+        "products", "product_packagings", "sales", "sale_items", 
+        "salaries", "activity_logs", "staff_timesheets", "staff_adjustments", "crm_groups", "crm_lessons", "device_tokens", "sales_pushes", "todos", "workplace_projects", "workplace_dynamics", "workplace_teams", "workplace_radars", "monthly_financial_snapshots", "classifier_items"
     ]
     ordered_tables = [t for t in priority_tables if t in tables] + [t for t in tables if t not in priority_tables]
 

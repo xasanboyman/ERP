@@ -233,11 +233,11 @@
     <ResizeDialog
       v-model="repayModalVisible"
       :title="t('erp.repayModalTitle')"
-      storage-key="repay_v5"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="500"
-      :min-resize-height="500"
+      storage-key="repay_v6"
+      :init-width="repayDialogWidth"
+      :init-height="repayDialogHeight"
+      :min-resize-width="450"
+      :min-resize-height="400"
     >
       <div class="repay-wrap">
         <!-- Header -->
@@ -383,9 +383,9 @@
     <ResizeDialog
       v-model="historyModalVisible"
       :title="t('erp.debtHistory')"
-      storage-key="history_v5"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
+      storage-key="history_v6"
+      :init-width="historyDialogWidth"
+      :init-height="historyDialogHeight"
       :min-resize-width="700"
       :min-resize-height="560"
     >
@@ -551,11 +551,11 @@
     <ResizeDialog
       v-model="saleReceiptDetailVisible"
       :title="`Sotuv Cheki — ${saleReceiptData?.receipt_number || ''}`"
-      storage-key="sale_receipt_v3"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="620"
-      :min-resize-height="520"
+      storage-key="sale_receipt_v4"
+      :init-width="receiptDialogWidth"
+      :init-height="receiptDialogHeight"
+      :min-resize-width="480"
+      :min-resize-height="450"
     >
       <div v-if="saleReceiptData" class="receipt-detail">
         <!-- Meta grid -->
@@ -650,11 +650,11 @@
     <ResizeDialog
       v-model="paymentDetailVisible"
       :title="`To'lov Cheki — ${paymentDetailData?.receipt_number || ''}`"
-      storage-key="pay_receipt_detail_v2"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="500"
-      :min-resize-height="420"
+      storage-key="pay_receipt_detail_v3"
+      :init-width="receiptDialogWidth"
+      :init-height="receiptDialogHeight"
+      :min-resize-width="450"
+      :min-resize-height="380"
     >
       <div v-if="paymentDetailData" class="pay-receipt-card">
         <div class="pr-brand">
@@ -713,11 +713,11 @@
     <ResizeDialog
       v-model="quickReceiptVisible"
       :title="t('erp.debtPaymentConfirmReceipt')"
-      storage-key="quick_receipt_v2"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="480"
-      :min-resize-height="380"
+      storage-key="quick_receipt_v3"
+      :init-width="receiptDialogWidth"
+      :init-height="receiptDialogHeight"
+      :min-resize-width="450"
+      :min-resize-height="350"
     >
       <div v-if="latestPaymentReceipt" class="pay-receipt-card">
         <div class="pr-brand">
@@ -803,8 +803,14 @@ import {
 
 const window = globalThis
 
-const dialogInitWidth = Math.min(window.innerWidth * 0.92, 1400)
-const dialogInitHeight = Math.min(window.innerHeight * 0.88, 800)
+const repayDialogWidth = Math.min(window.innerWidth * 0.92, 540)
+const repayDialogHeight = Math.min(window.innerHeight * 0.88, 540)
+const historyDialogWidth = Math.min(window.innerWidth * 0.94, 980)
+const historyDialogHeight = Math.min(window.innerHeight * 0.88, 680)
+const receiptDialogWidth = Math.min(window.innerWidth * 0.92, 580)
+const receiptDialogHeight = Math.min(window.innerHeight * 0.88, 700)
+const dialogInitWidth = Math.min(window.innerWidth * 0.92, 700)
+const dialogInitHeight = Math.min(window.innerHeight * 0.88, 600)
 
 // ── State ─────────────────────────────────────────────────────────────────
 const loading = ref(false)

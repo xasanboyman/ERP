@@ -15,8 +15,8 @@ import { BaseButton } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 
-const dialogInitWidth = Math.min(window.innerWidth * 0.95, 1600)
-const dialogInitHeight = Math.min(window.innerHeight * 0.92, 950)
+const dialogInitWidth = Math.min(window.innerWidth * 0.95, 1100)
+const dialogInitHeight = Math.min(window.innerHeight * 0.92, 900)
 
 const { t } = useI18n()
 

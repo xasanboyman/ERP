@@ -1,11 +1,11 @@
 import datetime
-from fastapi import APIRouter, Depends, Query, Body, Header
+from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
 from app.cache import invalidate_analytics
-from app.auth import get_user_company_id, get_current_user_optional
+from app.auth import get_user_company_id, get_current_user_from_header, check_user_access
 
 router = APIRouter()
 
@@ -19,6 +19,14 @@ def get_salary_list(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["salary:view", "salary", "/hr/salary"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     salaries = crud.get_salaries(db, company_id=target_company)
 
@@ -67,8 +75,12 @@ def salary_save(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["salary:edit", "salary:view", "salary", "/hr/salary"], db)
+
     target_company = get_user_company_id(authorization, db, getattr(sal_in, "company_id", None))
-    current_user = get_current_user_optional(authorization, db)
     
     worker = db.query(models.Worker).filter(models.Worker.id == sal_in.workerId).first()
     if target_company and target_company != "comp-default" and worker and worker.company_id != target_company:
@@ -93,8 +105,12 @@ def salary_delete(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["salary:delete", "salary", "/hr/salary"], db)
+
     target_company = get_user_company_id(authorization, db)
-    current_user = get_current_user_optional(authorization, db)
     ids = body.get("ids")
     if not ids:
         return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}
@@ -126,8 +142,12 @@ def salary_payout(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["salary:payout", "salary:edit", "salary", "/hr/salary"], db)
+
     target_company = get_user_company_id(authorization, db)
-    current_user = get_current_user_optional(authorization, db)
     today = datetime.date.today().strftime("%Y-%m-%d")
     target_month = payout.period_month or datetime.date.today().strftime("%Y-%m")
     pay_count = 0

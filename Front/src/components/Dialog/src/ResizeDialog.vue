@@ -10,18 +10,24 @@ const props = defineProps({
   fullscreen: propTypes.bool.def(true),
   initWidth: propTypes.oneOfType([Number, String]).def(''),
   initHeight: propTypes.oneOfType([Number, String]).def(''),
+  width: propTypes.oneOfType([Number, String]).def(''),
+  height: propTypes.oneOfType([Number, String]).def(''),
   minResizeWidth: propTypes.number.def(360),
   minResizeHeight: propTypes.number.def(220),
   autoHeight: propTypes.bool.def(true),
-  resizable: propTypes.bool.def(true)
+  resizable: propTypes.bool.def(true),
+  storageKey: propTypes.string.def('')
 })
+
+const effectiveWidth = computed(() => props.initWidth || props.width || undefined)
+const effectiveHeight = computed(() => props.initHeight || props.height || undefined)
 
 const { dialogHeight, maxHeight, minWidth, setupDrag } = useResize({
   minHeightPx: props.minResizeHeight,
   minWidthPx: props.minResizeWidth,
-  initHeight: props.initHeight || undefined,
-  initWidth: props.initWidth || undefined,
-  storageKey: props.title,
+  initHeight: effectiveHeight.value,
+  initWidth: effectiveWidth.value,
+  storageKey: props.storageKey || props.title,
   autoHeight: props.autoHeight
 })
 

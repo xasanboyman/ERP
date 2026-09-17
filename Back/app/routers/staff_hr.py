@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, Query, Body, Header
+from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
 from app.cache import invalidate_analytics
-from app.auth import get_user_company_id, get_current_user_optional
+from app.auth import get_user_company_id, get_current_user_from_header, check_user_access
 
 router = APIRouter()
 
@@ -15,6 +15,11 @@ def get_position_list(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["worker:view", "position:view", "/hr", "worker"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     positions = crud.get_positions(db, company_id=target_company)
     depts = {d.id: d.departmentName for d in crud.get_departments(db, company_id=target_company)}
@@ -93,6 +98,11 @@ def get_adjustment_list(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["adjustment:view", "/hr/adjustments", "/hr", "worker"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     adjustments = crud.get_staff_adjustments(db, company_id=target_company)
     workers = {w.id: w for w in crud.get_workers(db, company_id=target_company)}
@@ -172,6 +182,11 @@ def get_timesheet_list(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["timesheet:view", "/hr/timesheets", "/hr", "worker"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     timesheets = crud.get_staff_timesheets(db, company_id=target_company)
     return {
@@ -246,6 +261,11 @@ def get_output_list(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["output:view", "/hr/outputs", "/hr", "worker"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     outputs = crud.get_staff_outputs(db, company_id=target_company)
     workers = {w.id: w.name for w in crud.get_workers(db, company_id=target_company)}

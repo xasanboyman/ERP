@@ -1,11 +1,11 @@
 import uuid
 import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, Body, Header
+from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
-from app.auth import get_user_company_id, get_current_user_optional
+from app.auth import get_user_company_id, get_current_user_from_header, check_user_access
 
 router = APIRouter()
 
@@ -73,6 +73,14 @@ def get_department_table_list(
     company_id: str = Query(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["department:manage", "department", "/authorization/department"], db)
+
     res = get_department_list(authorization=authorization, company_id=company_id, db=db)
     return {
         "code": 0,
@@ -215,8 +223,15 @@ def department_save(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["department:manage", "department", "/authorization/department"], db)
+
     target_company = get_user_company_id(authorization, db, getattr(dept_in, "company_id", None))
-    current_user = get_current_user_optional(authorization, db)
     dept = crud.create_department(db, dept_in, company_id=target_company)
     from app.routers.activity import log_activity
     log_activity(
@@ -239,8 +254,15 @@ def department_delete(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["department:manage", "department", "/authorization/department"], db)
+
     target_company = get_user_company_id(authorization, db)
-    current_user = get_current_user_optional(authorization, db)
     ids = body.get("ids")
     if not ids:
         return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}

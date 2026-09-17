@@ -60,6 +60,12 @@ axiosInstance.interceptors.response.use(
       if (error.response?.status === 401) {
         const userStore = useUserStoreWithOut()
         userStore.logout()
+      } else if (error.response?.status === 403) {
+        const detail =
+          (error.response?.data as any)?.detail ||
+          (error.response?.data as any)?.message ||
+          "Sizda ushbu amalni bajarish uchun ruxsat yo'q!"
+        ElMessage.error(detail)
       }
     }
     return Promise.reject(error)

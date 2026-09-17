@@ -63,6 +63,66 @@ def get_user_company_id(authorization: str | None, db: Session, requested_compan
         return requested_company_id if requested_company_id else "comp-default"
     return user_comp
 
+def get_current_user_from_header(authorization: str = Header(None), db: Session = Depends(get_db)):
+    if not authorization:
+        return None
+    payload = decode_access_token(authorization)
+    if not payload or not isinstance(payload, dict) or "sub" not in payload:
+        return None
+    return db.query(models.User).filter(models.User.username == payload["sub"]).first()
+
+def check_user_access(
+    user: models.User | None,
+    required_permissions: list[str],
+    db: Session,
+    allow_admin: bool = True
+) -> bool:
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Tizimga kirilmagan yoki sessiya muddati tugagan"
+        )
+
+    comp_id = getattr(user, "company_id", None) or "comp-default"
+    role_str = (user.role or "").lower()
+
+    # Super Admin check
+    if user.username in ["admin", "anvars"] or (comp_id == "comp-default" and ("super" in role_str or getattr(user, "is_super_admin", False) is True)):
+        return True
+
+    # Company Administrator check
+    if allow_admin and ("admin" in role_str or "administrator" in role_str):
+        return True
+
+    # Gather user's direct or role-based permissions
+    user_perms = list(user.permissions or [])
+    if not user_perms:
+        role_obj = None
+        if user.roleId:
+            role_obj = db.query(models.Role).filter(models.Role.id == str(user.roleId)).first()
+        if not role_obj and user.role:
+            role_obj = db.query(models.Role).filter(
+                models.Role.roleName.ilike(user.role),
+                (models.Role.company_id == comp_id) | (models.Role.company_id == "comp-default") | (models.Role.company_id == None)
+            ).first()
+        if role_obj and role_obj.permissions:
+            user_perms = list(role_obj.permissions)
+
+    user_perms_lower = set(str(p).lower().strip() for p in user_perms)
+
+    if "*.*.*" in user_perms_lower or "*" in user_perms_lower:
+        return True
+
+    for req in required_permissions:
+        req_clean = req.lower().strip()
+        if req_clean in user_perms_lower:
+            return True
+
+    raise HTTPException(
+        status_code=403,
+        detail="Sizda ushbu amalni bajarish yoki ma'lumotlarni ko'rish uchun ruxsat yo'q!"
+    )
+
 def check_permission(user: models.User, required_menu_id: int, required_action: str = "view", db: Session = None):
     user_perms = list(user.permissions or [])
     if not user_perms and db and user.roleId:

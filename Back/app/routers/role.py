@@ -1,18 +1,10 @@
-import jwt
+import copy
+from typing import Optional
 from fastapi import APIRouter, Depends, Query, Body, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import crud, schemas, models
-
-from app.auth import decode_access_token
-
-def get_current_user_from_header(authorization: str = Header(None), db: Session = Depends(get_db)):
-    if not authorization:
-        return None
-    payload = decode_access_token(authorization)
-    if not payload or "sub" not in payload:
-        return None
-    return db.query(models.User).filter(models.User.username == payload["sub"]).first()
+from app.auth import decode_access_token, get_current_user_from_header, check_user_access
 
 router = APIRouter()
 
@@ -516,11 +508,11 @@ def get_role_menu_list(
         )
 
     comp_id = getattr(user, "company_id", None) or "comp-default"
+    role_str = (user.role or "").lower()
     is_super_admin = False
     if user.username in ["admin", "anvars"]:
         is_super_admin = True
     elif comp_id == "comp-default":
-        role_str = (user.role or "").lower()
         if "super" in role_str or getattr(user, "is_super_admin", False) is True:
             is_super_admin = True
 
@@ -529,19 +521,92 @@ def get_role_menu_list(
         routes.insert(1, COMPANY_MANAGEMENT_ROUTE)
         return {"code": 0, "data": routes}
 
-    # For Company Admins and Company Users (e.g. idk, delta_admin, test):
-    # Returns the standard operational ERP modules (Dashboard, Product, Sales, HR)
-    # Strictly omitting /company route.
-    return {"code": 0, "data": COMPANY_USER_ROUTES}
+    # For Company Admins (and users with wildcard *.*.* permissions):
+    is_admin = "admin" in role_str or "administrator" in role_str
+    user_perms = list(user.permissions or [])
+    if not user_perms:
+        role_obj = None
+        if user.roleId:
+            role_obj = db.query(models.Role).filter(models.Role.id == str(user.roleId)).first()
+        if not role_obj and user.role:
+            role_obj = db.query(models.Role).filter(
+                models.Role.roleName.ilike(user.role),
+                (models.Role.company_id == comp_id) | (models.Role.company_id == "comp-default") | (models.Role.company_id == None)
+            ).first()
+        if role_obj and role_obj.permissions:
+            user_perms = list(role_obj.permissions)
+
+    user_perms_lower = set(str(p).lower().strip() for p in user_perms)
+    if "*.*.*" in user_perms_lower or "*" in user_perms_lower or is_admin:
+        return {"code": 0, "data": COMPANY_USER_ROUTES}
+
+    # Filter COMPANY_USER_ROUTES strictly based on user's specific permissions:
+    ROUTE_PERMISSION_MAP = {
+        "/dashboard/analysis": ["dashboard:view", "analysis:view", "analysis", "/dashboard", "/dashboard/analysis"],
+        "/dashboard/workplace": ["workplace:view", "workplace", "/dashboard", "/dashboard/workplace"],
+        "/product/list": ["product:view", "product:create", "product:edit", "product:delete", "product", "list", "/product", "/product/list"],
+        "/sales/pos": ["sales:pos:view", "sales:pos:checkout", "pos:sell", "pos:discount", "pos:nasiya", "pos:history", "pos", "sales", "/sales", "/sales/pos"],
+        "/sales/debtors": ["debtors", "debtors:view", "pos:nasiya", "/sales/debtors"],
+        "/hr/workers": ["worker:view", "worker:create", "worker:edit", "worker:delete", "worker", "workers", "hr:workers", "/hr/workers", "/hr"],
+        "/hr/timesheets": ["timesheet:view", "timesheets", "/hr/timesheets"],
+        "/hr/outputs": ["output:view", "outputs", "/hr/outputs"],
+        "/hr/adjustments": ["adjustment:view", "adjustments", "/hr/adjustments"],
+        "/hr/salary": ["salary:view", "salary", "/hr/salary"],
+        "/authorization/department": ["department:manage", "department", "/authorization/department", "/authorization"],
+        "/authorization/role": ["role:manage", "role", "/authorization/role", "/authorization"]
+    }
+
+    allowed_routes = []
+    for parent in COMPANY_USER_ROUTES:
+        parent_path = parent.get("path", "")
+        children = parent.get("children", [])
+
+        if parent_path.lower() in user_perms_lower:
+            allowed_routes.append(copy.deepcopy(parent))
+            continue
+
+        allowed_children = []
+        for child in children:
+            child_path = child.get("path", "")
+            full_child_path = f"{parent_path}/{child_path}" if not child_path.startswith("/") else child_path
+            req_keys = ROUTE_PERMISSION_MAP.get(full_child_path, [full_child_path, child_path])
+            if any(k.lower() in user_perms_lower for k in req_keys):
+                allowed_children.append(copy.deepcopy(child))
+
+        if allowed_children:
+            parent_copy = copy.deepcopy(parent)
+            parent_copy["children"] = allowed_children
+            first_child_path = allowed_children[0].get("path", "")
+            parent_copy["redirect"] = f"{parent_path}/{first_child_path}" if not first_child_path.startswith("/") else first_child_path
+            allowed_routes.append(parent_copy)
+
+    return {"code": 0, "data": allowed_routes}
 
 @router.get("/role/list2")
-def get_role_list2(roleName: str = Query("admin")):
+def get_role_list2(
+    authorization: str = Header(None),
+    roleName: str = Query("admin"),
+    db: Session = Depends(get_db)
+):
+    if authorization:
+        user = get_current_user_from_header(authorization, db)
+        if user:
+            role_str = (user.role or "").lower()
+            if "admin" in role_str or user.username in ["admin", "anvars"]:
+                return {"code": 0, "data": ["*.*.*"]}
+            perms = list(user.permissions or [])
+            if user.roleId:
+                role_obj = db.query(models.Role).filter(models.Role.id == str(user.roleId)).first()
+                if role_obj and role_obj.permissions:
+                    perms.extend(role_obj.permissions)
+            return {"code": 0, "data": list(set(perms))}
+
     if "admin" in roleName.lower():
         permissions = ["*.*.*"]
     elif "student" in roleName.lower():
         permissions = ["crm:student:view"]
     else:
-        permissions = ["example:dialog:create", "example:dialog:delete"]
+        permissions = ["sales:pos:view", "sales:pos:checkout", "product:view"]
     return {
         "code": 0,
         "data": permissions
@@ -554,6 +619,14 @@ def get_roles_table(
     company_id: str = Query(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tizimga kirilmagan yoki sessiya yaroqsiz"
+        )
+    check_user_access(current_user, ["role:manage", "role", "/authorization/role"], db)
+
     from app.auth import get_user_company_id
     target_company = get_user_company_id(authorization, db, company_id)
     roles = crud.get_roles(db, company_id=target_company)
@@ -935,9 +1008,13 @@ def role_save(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    from app.auth import get_user_company_id, get_current_user_optional
+    from app.auth import get_user_company_id
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["role:manage", "role", "/authorization/role"], db)
+
     target_company = get_user_company_id(authorization, db, getattr(role_in, "company_id", None))
-    current_user = get_current_user_optional(authorization, db)
     r = crud.create_role(db, role_in, company_id=target_company)
 
     # Sync users in target_company with this role
@@ -980,9 +1057,13 @@ def role_delete(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    from app.auth import get_user_company_id, get_current_user_optional
+    from app.auth import get_user_company_id
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["role:manage", "role", "/authorization/role"], db)
+
     target_company = get_user_company_id(authorization, db)
-    current_user = get_current_user_optional(authorization, db)
     role_id = body.get("id")
     if not role_id:
         return {"code": 500, "message": "ID is required"}

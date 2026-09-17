@@ -1378,11 +1378,11 @@
     <ResizeDialog
       v-model="detailDialogVisible"
       title="Mahsulotning To'liq Tafsilotlari"
-      storage-key="product_detail_full_v3"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="700"
-      :min-resize-height="480"
+      storage-key="product_detail_full_v4"
+      :init-width="detailDialogWidth"
+      :init-height="detailDialogHeight"
+      :min-resize-width="600"
+      :min-resize-height="450"
     >
       <div
         v-if="detailProduct"
@@ -1743,8 +1743,10 @@ import { useUserStoreWithOut } from '@/store/modules/user'
 
 const userStore = useUserStoreWithOut()
 
-const dialogInitWidth = Math.min(window.innerWidth * 0.92, 1400)
-const dialogInitHeight = Math.min(window.innerHeight * 0.88, 800)
+const dialogInitWidth = Math.min(window.innerWidth * 0.94, 1050)
+const dialogInitHeight = Math.min(window.innerHeight * 0.88, 760)
+const detailDialogWidth = Math.min(window.innerWidth * 0.92, 850)
+const detailDialogHeight = Math.min(window.innerHeight * 0.88, 720)
 
 const loading = ref(false)
 const submitLoading = ref(false)

@@ -181,95 +181,137 @@
       :title="dialogType === 'add' ? t('erp.hireNewWorker') : t('erp.editWorkerInfo')"
       :init-width="dialogInitWidth"
       :init-height="dialogInitHeight"
-      :min-resize-width="550"
-      :min-resize-height="350"
+      :min-resize-width="480"
+      :min-resize-height="340"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="demo-ruleForm">
-        <el-form-item :label="t('erp.workerFullName')" prop="name">
-          <el-input v-model="form.name" :placeholder="t('erp.enterWorkerName')" />
-        </el-form-item>
-        <el-form-item :label="t('erp.loginName')" prop="account">
-          <el-input
-            v-model="form.account"
-            :placeholder="t('erp.loginPlaceholder')"
-            :disabled="dialogType === 'edit'"
-          />
-        </el-form-item>
-        <el-form-item :label="t('userDemo.role')" prop="role">
-          <el-select v-model="form.role" :placeholder="t('erp.selectRole')" style="width: 100%">
-            <el-option v-for="r in roleOptions" :key="r" :label="r" :value="r" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('erp.department')" prop="departmentId">
-          <el-select
-            v-model="form.departmentId"
-            :placeholder="t('erp.selectDepartment')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="dept in departments"
-              :key="dept.id"
-              :label="dept.departmentName"
-              :value="dept.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('erp.phoneNumber')" prop="phone">
-          <el-input v-model="form.phone" :placeholder="t('erp.phoneNumber')" />
-        </el-form-item>
-        <el-form-item :label="t('erp.baseSalaryLabel')" prop="baseSalary">
-          <el-input
-            :model-value="form.baseSalary ? moneyFormatter(form.baseSalary) : ''"
-            placeholder="0"
-            @input="
-              (val: string) => {
-                form.baseSalary = Number(moneyParser(val)) || 0
-              }
-            "
-          >
-            <template #prefix>$</template>
-          </el-input>
-        </el-form-item>
-        <el-form-item :label="t('erp.ishgaKirganSana')" prop="hireDate">
-          <el-date-picker
-            v-model="form.hireDate"
-            type="date"
-            :placeholder="t('erp.selectDatePlaceholder')"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item :label="t('erp.holati')" prop="status">
-          <el-radio-group v-model="form.status">
-            <el-radio :value="1">{{ t('erp.working') }}</el-radio>
-            <el-radio :value="0">{{ t('erp.dismissed') }}</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item :label="t('erp.systemPassword')" prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            :placeholder="
-              dialogType === 'add' ? t('erp.passwordOptionalDefault') : t('erp.newPasswordOptional')
-            "
-          />
-        </el-form-item>
-        <el-form-item
-          v-if="dialogType === 'edit'"
-          :label="t('erp.adminPassword')"
-          prop="adminPassword"
-          class="admin-verify-item"
-        >
-          <el-input
-            v-model="form.adminPassword"
-            type="password"
-            show-password
-            :placeholder="t('erp.adminPasswordVerifyPlaceholder')"
-          />
-        </el-form-item>
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-position="top"
+        class="worker-dialog-form"
+      >
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.workerFullName')" prop="name">
+              <el-input v-model="form.name" :placeholder="t('erp.enterWorkerName')" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.loginName')" prop="account">
+              <el-input
+                v-model="form.account"
+                :placeholder="t('erp.loginPlaceholder')"
+                :disabled="dialogType === 'edit'"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('userDemo.role')" prop="role">
+              <el-select v-model="form.role" :placeholder="t('erp.selectRole')" style="width: 100%">
+                <el-option v-for="r in roleOptions" :key="r" :label="r" :value="r" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.department')" prop="departmentId">
+              <el-select
+                v-model="form.departmentId"
+                :placeholder="t('erp.selectDepartment')"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="dept in departments"
+                  :key="dept.id"
+                  :label="dept.departmentName"
+                  :value="dept.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.phoneNumber')" prop="phone">
+              <el-input v-model="form.phone" :placeholder="t('erp.phoneNumber')" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.baseSalaryLabel')" prop="baseSalary">
+              <el-input
+                :model-value="form.baseSalary ? moneyFormatter(form.baseSalary) : ''"
+                placeholder="0"
+                @input="
+                  (val: string) => {
+                    form.baseSalary = Number(moneyParser(val)) || 0
+                  }
+                "
+              >
+                <template #prefix>$</template>
+              </el-input>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.ishgaKirganSana')" prop="hireDate">
+              <el-date-picker
+                v-model="form.hireDate"
+                type="date"
+                :placeholder="t('erp.selectDatePlaceholder')"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item :label="t('erp.holati')" prop="status">
+              <div class="flex items-center h-32px pt-1">
+                <el-radio-group v-model="form.status">
+                  <el-radio :value="1">{{ t('erp.working') }}</el-radio>
+                  <el-radio :value="0">{{ t('erp.dismissed') }}</el-radio>
+                </el-radio-group>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="dialogType === 'edit' ? 12 : 24">
+            <el-form-item :label="t('erp.systemPassword')" prop="password">
+              <el-input
+                v-model="form.password"
+                type="password"
+                show-password
+                :placeholder="
+                  dialogType === 'add' ? t('erp.passwordOptionalDefault') : t('erp.newPasswordOptional')
+                "
+              />
+            </el-form-item>
+          </el-col>
+          <el-col v-if="dialogType === 'edit'" :xs="24" :sm="12">
+            <el-form-item
+              :label="t('erp.adminPassword')"
+              prop="adminPassword"
+              class="admin-verify-item"
+            >
+              <el-input
+                v-model="form.adminPassword"
+                type="password"
+                show-password
+                :placeholder="t('erp.adminPasswordVerifyPlaceholder')"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
         <el-form-item :label="t('erp.izoh')" prop="remark">
-          <el-input v-model="form.remark" type="textarea" :placeholder="t('erp.workerExtraInfo')" />
+          <el-input v-model="form.remark" type="textarea" :rows="2" :placeholder="t('erp.workerExtraInfo')" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -290,8 +332,8 @@ const { t } = useI18n()
 defineOptions({ name: 'Worker' })
 import { ref, reactive, onMounted } from 'vue'
 
-const dialogInitWidth = Math.min(window.innerWidth * 0.92, 1400)
-const dialogInitHeight = Math.min(window.innerHeight * 0.88, 800)
+const dialogInitWidth = Math.min(window.innerWidth * 0.92, 700)
+const dialogInitHeight = Math.min(window.innerHeight * 0.88, 620)
 
 import {
   ElMessage,
@@ -309,7 +351,9 @@ import {
   ElInputNumber,
   ElDatePicker,
   ElRadio,
-  ElRadioGroup
+  ElRadioGroup,
+  ElRow,
+  ElCol
 } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ContentWrap } from '@/components/ContentWrap'

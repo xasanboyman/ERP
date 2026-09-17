@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app import models, schemas
-from app.auth import get_current_device_token, get_current_user_required
+from app.auth import get_current_device_token, get_current_user_required, get_current_user_from_header, check_user_access
 from app.routers.activity import log_activity
 from app.cache import get_sales_cache, set_sales_cache, invalidate_sales, invalidate_analytics
 
@@ -342,6 +342,11 @@ def get_debtors(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["pos:nasiya", "debtors", "debtors:view", "/sales/debtors"], db)
+
     from app.routers.product import get_user_company_id
     target_company = get_user_company_id(authorization, db, company_id)
 
@@ -511,6 +516,11 @@ def repay_debt(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["pos:nasiya", "debtors", "debtors:view", "/sales/debtors"], db)
+
     from app.routers.product import get_user_company_id
     target_company = get_user_company_id(authorization, db, getattr(payment_in, "company_id", None))
 

@@ -263,10 +263,11 @@
     <ResizeDialog
       v-model="authModalVisible"
       title="Xodimlarni Autentifikatsiya Qilish va Almashtirish"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="500"
-      :min-resize-height="350"
+      storage-key="auth_dialog_v3"
+      :init-width="authDialogWidth"
+      :init-height="authDialogHeight"
+      :min-resize-width="450"
+      :min-resize-height="320"
       class="auth-dialog-wrap"
     >
       <div class="auth-modal-content p-4px">
@@ -823,10 +824,10 @@
     <ResizeDialog
       v-model="receiptModalVisible"
       :title="t('erp.salesReceipt')"
-      storage-key="sales_receipt_auto_fit_v4"
-      :init-width="dialogInitWidth"
-      :init-height="dialogInitHeight"
-      :min-resize-width="550"
+      storage-key="sales_receipt_auto_fit_v5"
+      :init-width="receiptDialogWidth"
+      :init-height="receiptDialogHeight"
+      :min-resize-width="480"
       :min-resize-height="400"
       class="receipt-dialog-wrap"
     >
@@ -1105,8 +1106,12 @@ import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 import { soundEffects } from '@/utils/soundEffects'
 import { offlineQueue } from '@/utils/offlineQueue'
 
-const dialogInitWidth = Math.min(window.innerWidth * 0.92, 1400)
-const dialogInitHeight = Math.min(window.innerHeight * 0.88, 800)
+const authDialogWidth = Math.min(window.innerWidth * 0.92, 500)
+const authDialogHeight = Math.min(window.innerHeight * 0.88, 420)
+const receiptDialogWidth = Math.min(window.innerWidth * 0.92, 580)
+const receiptDialogHeight = Math.min(window.innerHeight * 0.88, 700)
+const dialogInitWidth = Math.min(window.innerWidth * 0.92, 700)
+const dialogInitHeight = Math.min(window.innerHeight * 0.88, 600)
 const posDialogInitWidth = Math.min(window.innerWidth * 0.95, 1500)
 const posDialogInitHeight = Math.min(window.innerHeight * 0.92, 850)
 

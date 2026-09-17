@@ -5,6 +5,7 @@ from app.database import get_db, SessionLocal
 from app import models, schemas
 from app.cache import get_analytics_cache, set_analytics_cache, invalidate_analytics
 from app.routers.product import get_user_company_id
+from app.auth import get_current_user_from_header, check_user_access
 from concurrent.futures import ThreadPoolExecutor
 import datetime
 
@@ -273,6 +274,11 @@ def get_financial_overview(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["dashboard:view", "analysis:view", "analysis", "/dashboard"], db)
+
     target_company = get_user_company_id(authorization, db, company_id)
     cache_key = f"financial_overview:{target_company}:{time_range}:{branch_id or 'all'}"
     cached = get_analytics_cache(cache_key)
@@ -651,6 +657,10 @@ def get_analysis_bundle(
     Unified master endpoint: Returns ALL dashboard data at once in a SINGLE network request.
     Eliminates waterfall delays, reduces TLS round-trips, and loads the entire dashboard simultaneously.
     """
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["dashboard:view", "analysis:view", "analysis", "/dashboard"], db)
     now = datetime.datetime.now()
     curr_ym = f"{now.year:04d}-{now.month:02d}"
     target_month = (month or curr_ym).strip()

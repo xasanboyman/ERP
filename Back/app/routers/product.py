@@ -7,7 +7,7 @@ from app.database import get_db
 from app import crud, schemas, models
 from app.routers.activity import log_activity
 from app.cache import invalidate_analytics, invalidate_sales
-from app.routers.auth import decode_access_token
+from app.auth import decode_access_token, get_current_user_from_header, check_user_access
 
 router = APIRouter()
 
@@ -263,6 +263,11 @@ def product_save(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["product:create", "product:edit", "product"], db)
+
     prod_id = getattr(prod_in, "id", None)
     target_company = get_user_company_id(authorization, db, getattr(prod_in, "company_id", None))
     if prod_id and target_company:
@@ -300,6 +305,11 @@ def product_delete(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
+    current_user = get_current_user_from_header(authorization, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
+    check_user_access(current_user, ["product:delete", "product"], db)
+
     ids = body.get("ids")
     if not ids:
         return {"code": 500, "message": "Iltimos, o'chirish uchun ma'lumotni tanlang"}

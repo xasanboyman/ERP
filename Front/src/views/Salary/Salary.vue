@@ -246,8 +246,8 @@
             ? `${selectedWorker.name} — ${t('erp.salaryPaymentHistory')}`
             : t('erp.workerSalaryHistory')
         "
-        :width="detailsDialogWidth"
-        :height="detailsDialogHeight"
+        :init-width="detailsDialogWidth"
+        :init-height="detailsDialogHeight"
         :min-resize-width="750"
         :min-resize-height="450"
       >
@@ -510,8 +510,8 @@
       <ResizeDialog
         v-model="payoutDialogVisible"
         title="Oylik Ish Haqlarini Tarqatish (Payroll)"
-        :width="dialogInitWidth"
-        :height="dialogInitHeight"
+        :init-width="dialogInitWidth"
+        :init-height="dialogInitHeight"
         :min-resize-width="750"
         :min-resize-height="450"
       >
