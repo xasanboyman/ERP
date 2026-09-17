@@ -24,7 +24,7 @@ import {
 import { Echart } from '@/components/Echart'
 import { CountTo } from '@/components/CountTo'
 import { Icon } from '@/components/Icon'
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onActivated } from 'vue'
 import { useRealtimeSync } from '@/hooks/web/useRealtimeSync'
 import { useAppStore } from '@/store/modules/app'
 import { getSalesListApi, SaleType } from '@/api/sales'
@@ -1550,11 +1550,11 @@ const loadAnalyticsData = async () => {
   }
 }
 
-// Silently update live analytics when sales, payouts, or product stock updates occur
+// Silently update live analytics when sales, payouts, debts, or product stock updates occur
 useRealtimeSync(
-  ['sale', 'salary', 'product'],
+  ['sale', 'salary', 'product', 'debt', 'debt_payment'],
   () => {
-    loadStandardOverview(true)
+    loadAnalyticsData()
   }
 )
 
@@ -1594,6 +1594,10 @@ const handleExportFinancialExcel = () => {
 }
 
 onMounted(() => {
+  loadAnalyticsData()
+})
+
+onActivated(() => {
   loadAnalyticsData()
 })
 </script>

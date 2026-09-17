@@ -18,7 +18,7 @@ import {
   ElRadioButton
 } from 'element-plus'
 import { useI18n } from '@/hooks/web/useI18n'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { CountTo } from '@/components/CountTo'
 import { getWorkplaceSummaryApi, type WorkplaceSummaryData } from '@/api/dashboard/workplace'
@@ -35,6 +35,7 @@ const { t } = useI18n()
 const router = useRouter()
 
 const loading = ref(true)
+const panelGroupRef = ref<InstanceType<typeof PanelGroup>>()
 
 // Stats counters - 100% Real Live Database Figures
 const workplaceStats = reactive<WorkplaceSummaryData>({
@@ -149,14 +150,19 @@ const getAllApi = async () => {
     getPairedDevices(),
     getLowStockProducts()
   ])
+  panelGroupRef.value?.loadData()
   loading.value = false
 }
 
-useRealtimeSync(['sale', 'product', 'worker', 'device'], () => {
+useRealtimeSync(['sale', 'product', 'worker', 'device', 'debt', 'debt_payment'], () => {
   getAllApi()
 })
 
 onMounted(() => {
+  getAllApi()
+})
+
+onActivated(() => {
   getAllApi()
 })
 
@@ -413,7 +419,7 @@ const createFallbackReceiptData = (log: ActivityLogType, checkNum: string) => {
     </ElCard>
 
     <!-- ── 1. REAL-TIME FINANCIAL KPI METRICS PANEL ────────────────────── -->
-    <PanelGroup />
+    <PanelGroup ref="panelGroupRef" />
 
     <!-- ── 2. ERP FAST-TRACK QUICK ACTIONS TOOLBAR ───────────────────── -->
     <ElCard shadow="never" class="glass-section-card mb-20px">

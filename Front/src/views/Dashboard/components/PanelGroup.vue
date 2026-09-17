@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ElRow, ElCol, ElSkeleton } from 'element-plus'
 import { CountTo } from '@/components/CountTo'
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onActivated } from 'vue'
 import { Icon } from '@/components/Icon'
 import { useI18n } from '@/hooks/web/useI18n'
 import { getFinancialOverviewApi } from '@/api/dashboard/analysis'
-import { watch } from 'vue'
 
 const props = defineProps<{
   data?: any
@@ -97,6 +96,12 @@ defineExpose({
 if (!props.data) {
   loadData()
 }
+
+onActivated(() => {
+  if (!props.data) {
+    loadData()
+  }
+})
 </script>
 
 <template>
@@ -126,9 +131,15 @@ if (!props.data) {
                     </span>
                     <span
                       v-if="financialData.totalDebt > 0"
-                      class="text-amber-700 dark:text-amber-300 font-bold bg-amber-50 dark:bg-amber-950/70 border border-amber-300/40 px-6px py-1px rounded"
+                      class="text-amber-700 dark:text-amber-300 font-bold bg-amber-50 dark:bg-amber-950/70 border border-amber-300/40 px-6px py-1px rounded text-11px"
                     >
                       Nasiya: ${{ Math.round(financialData.totalDebt).toLocaleString() }}
+                    </span>
+                    <span
+                      v-else
+                      class="text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300/40 px-6px py-1px rounded text-11px"
+                    >
+                      ✓ Qarz yo'q
                     </span>
                   </div>
                 </div>
@@ -266,22 +277,39 @@ if (!props.data) {
                   />
                 </div>
                 <div class="panel-subtext">
-                  <span
+                  <div
                     v-if="financialData.totalDebt > 0"
-                    class="text-11px text-amber-700 dark:text-amber-300 font-semibold"
+                    class="flex items-center gap-4px flex-wrap text-11px"
                   >
-                    Kassada: ${{ Math.max(0, Math.round(financialData.totalPaid - financialData.totalExpenses)).toLocaleString() }} (Qarz yopilgach: +${{ Math.round(financialData.realNetProfit).toLocaleString() }})
-                  </span>
-                  <span
+                    <span class="text-slate-600 dark:text-slate-300 font-medium">
+                      Hozir kassada: <b>${{ Math.round(financialData.totalPaid - financialData.totalExpenses).toLocaleString() }}</b>
+                    </span>
+                    <span
+                      class="text-amber-700 dark:text-amber-300 font-semibold bg-amber-50 dark:bg-amber-950/70 border border-amber-300/40 px-5px py-1px rounded"
+                    >
+                      Kutilayotgan nasiya: +${{ Math.round(financialData.totalDebt).toLocaleString() }}
+                    </span>
+                  </div>
+                  <div
                     v-else
-                    :class="
-                      financialData.realNetProfit >= 0
-                        ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                        : 'text-rose-600 dark:text-rose-400 font-semibold'
-                    "
+                    class="flex items-center gap-4px flex-wrap text-11px"
                   >
-                    {{ t('analysis.afterSalaries') }}
-                  </span>
+                    <span
+                      class="text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300/40 px-6px py-1px rounded"
+                    >
+                      ✓ Barcha qarzlar yopilgan
+                    </span>
+                    <span
+                      class="text-11px font-medium"
+                      :class="
+                        financialData.realNetProfit >= 0
+                          ? 'text-slate-500 dark:text-slate-400'
+                          : 'text-rose-600 dark:text-rose-400 font-bold'
+                      "
+                    >
+                      {{ financialData.realNetProfit >= 0 ? '(Barcha xarajatlar chegirilgan)' : 'Zarar holatida' }}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div

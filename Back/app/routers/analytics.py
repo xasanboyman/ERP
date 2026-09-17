@@ -97,9 +97,9 @@ def calc_month_metrics(db: Session, ym: str, company_id: str = None, branch_id: 
         outputs = f_outputs.result()
         adjustments = f_adjustments.result()
 
-    revenue = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
-    total_paid = sum(float(s.paid_amount or 0.0) for s in sales) + sum(float(dp.amount or 0.0) for dp in debt_payments)
-    total_debt = sum(float(s.debt_amount or 0.0) for s in sales)
+    revenue = round(sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales), 2)
+    total_paid = round(sum(float(s.paid_amount or 0.0) for s in sales), 2)
+    total_debt = round(sum(float(s.debt_amount or 0.0) for s in sales), 2)
     
     cogs = 0.0
     for s in sales:
@@ -230,9 +230,9 @@ def calc_date_range_metrics(db: Session, start_date: str, end_date: str, company
         outputs = f_outputs.result()
         adjustments = f_adjustments.result()
 
-    revenue = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales)
-    total_paid = sum(float(s.paid_amount or 0.0) for s in sales) + sum(float(dp.amount or 0.0) for dp in debt_payments)
-    total_debt = sum(float(s.debt_amount or 0.0) for s in sales)
+    revenue = round(sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in sales), 2)
+    total_paid = round(sum(float(s.paid_amount or 0.0) for s in sales), 2)
+    total_debt = round(sum(float(s.debt_amount or 0.0) for s in sales), 2)
 
     cogs = 0.0
     for s in sales:
@@ -404,9 +404,8 @@ def get_financial_overview(
     monthly_data = []
     for ym, m_label in target_months:
         m_sales = [s for s in all_sales if s.created_at and s.created_at.startswith(ym)]
-        m_repayments = [dp for dp in all_debt_payments if dp.created_at and dp.created_at.startswith(ym)]
-        m_rev = sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in m_sales)
-        m_paid = round(sum(float(s.paid_amount or 0.0) for s in m_sales) + sum(float(dp.amount or 0.0) for dp in m_repayments), 2)
+        m_rev = round(sum(float(s.total_amount or getattr(s, 'total', 0.0) or 0.0) for s in m_sales), 2)
+        m_paid = round(sum(float(s.paid_amount or 0.0) for s in m_sales), 2)
         m_debt = round(sum(float(s.debt_amount or 0.0) for s in m_sales), 2)
         m_cogs = sum(sum(float(it.cost or 0.0) * float(it.quantity or 1.0) for it in s.items) for s in m_sales)
 
@@ -437,9 +436,7 @@ def get_financial_overview(
 
     # Overall Totals across the period
     gross_revenue = round(sum(m["revenue"] for m in monthly_data), 2)
-    total_sales_paid = sum(float(s.paid_amount or 0.0) for s in all_sales)
-    total_repayments = sum(float(dp.amount or 0.0) for dp in all_debt_payments)
-    total_paid = round(total_sales_paid + total_repayments, 2)
+    total_paid = round(sum(float(s.paid_amount or 0.0) for s in all_sales), 2)
     total_debt = round(sum(float(s.debt_amount or 0.0) for s in all_sales), 2)
     total_cogs = round(sum(m["cogs"] for m in monthly_data), 2)
     total_staff = round(sum(m["staffSalaries"] for m in monthly_data), 2)
