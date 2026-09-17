@@ -14,6 +14,7 @@ import { useValidator } from '@/hooks/web/useValidator'
 import { Icon } from '@/components/Icon'
 import { useUserStore } from '@/store/modules/user'
 import { BaseButton } from '@/components/Button'
+import { SUCCESS_CODE } from '@/constants'
 
 const { required } = useValidator()
 
@@ -207,7 +208,7 @@ const signIn = async () => {
       try {
         const res = await loginApi(formData)
 
-        if (res) {
+        if (res && res.code === SUCCESS_CODE && (res.data as any)?.token) {
           // 是否记住我 - 只保存用户名
           if (unref(remember)) {
             userStore.setLoginInfo(formData.username)
@@ -215,9 +216,7 @@ const signIn = async () => {
             userStore.setLoginInfo(undefined)
           }
           userStore.setRememberMe(unref(remember))
-          if (res.data && (res.data as any).token) {
-            userStore.setToken((res.data as any).token)
-          }
+          userStore.setToken((res.data as any).token)
           userStore.setUserInfo(res.data)
           // 是否使用动态路由
           if (appStore.getDynamicRouter) {
@@ -233,6 +232,10 @@ const signIn = async () => {
                 : permissionStore.addRouters[0]?.path || '/dashboard/workplace'
             push({ path: targetPath })
           }
+        } else {
+          errorMessage.value =
+            (res as any)?.message ||
+            'Kirish muvaffaqiyatsiz tugadi, iltimos foydalanuvchi nomi va parolni tekshiring'
         }
       } catch (error: any) {
         errorMessage.value =

@@ -420,7 +420,7 @@ async function ensureSchema(sql) {
     } catch(e) {}
     await sql`
       INSERT INTO companies (id, name, code, plan, billing_cycle, status, max_users)
-      VALUES ('comp-default', 'Bosh Korxona', 'DEFAULT', 'pro', 'yearly', 'active', 50)
+      VALUES ('comp-default', 'Bosh Korxona', 'DEFAULT', 'pro', 'yearly', 1, 50)
       ON CONFLICT (id) DO NOTHING;
     `;
 
@@ -430,11 +430,11 @@ async function ensureSchema(sql) {
   }
 }
 
-const defaultAdminRoutes = [
+const DEFAULT_ADMIN_ROUTES = [
   {
     path: '/dashboard',
     component: '#',
-    redirect: '/dashboard/workplace',
+    redirect: '/dashboard/analysis',
     name: 'Dashboard',
     meta: {
       title: 'router.dashboard',
@@ -457,29 +457,6 @@ const defaultAdminRoutes = [
         name: 'Workplace',
         meta: {
           title: 'router.workplace',
-          noCache: true,
-          affix: true
-        }
-      }
-    ]
-  },
-  {
-    path: '/company',
-    component: '#',
-    redirect: '/company/list',
-    name: 'CompanyRoot',
-    meta: {
-      title: 'Korxonalar Boshqaruvi',
-      icon: 'vi-ep:office-building',
-      alwaysShow: true
-    },
-    children: [
-      {
-        path: 'list',
-        component: 'views/Company/CompanyManagement',
-        name: 'CompanyManagement',
-        meta: {
-          title: 'Kompaniyalar va Tariflar',
           noCache: true
         }
       }
@@ -491,7 +468,7 @@ const defaultAdminRoutes = [
     redirect: '/product/list',
     name: 'ProductRoot',
     meta: {
-      title: 'Omborxona',
+      title: 'router.product',
       icon: 'vi-ep:goods',
       alwaysShow: true
     },
@@ -501,7 +478,129 @@ const defaultAdminRoutes = [
         component: 'views/Product/Product',
         name: 'ProductManagement',
         meta: {
-          title: 'Ombor Mahsulotlari',
+          title: 'router.product',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/sales',
+    component: '#',
+    redirect: '/sales/pos',
+    name: 'SalesRoot',
+    meta: {
+      title: 'router.sales',
+      icon: 'vi-ep:shopping-cart-full',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'pos',
+        component: 'views/Sales/Pos',
+        name: 'SalesPos',
+        meta: {
+          title: 'router.pos',
+          icon: 'vi-ep:sell',
+          noCache: true
+        }
+      },
+      {
+        path: 'debtors',
+        component: 'views/Sales/Debtors',
+        name: 'SalesDebtors',
+        meta: {
+          title: 'router.debtors',
+          icon: 'vi-ep:credit-card',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/hr',
+    component: '#',
+    redirect: '/hr/workers',
+    name: 'HRRoot',
+    meta: {
+      title: 'router.worker',
+      icon: 'vi-ep:avatar',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'workers',
+        component: 'views/Worker/Worker',
+        name: 'WorkerManagement',
+        meta: {
+          title: 'router.worker',
+          noCache: true
+        }
+      },
+      {
+        path: 'timesheets',
+        component: 'views/StaffHR/Timesheet',
+        name: 'TimesheetManagement',
+        meta: {
+          title: 'router.timesheet',
+          noCache: true
+        }
+      },
+      {
+        path: 'outputs',
+        component: 'views/StaffHR/Output',
+        name: 'OutputManagement',
+        meta: {
+          title: 'router.output',
+          noCache: true
+        }
+      },
+      {
+        path: 'adjustments',
+        component: 'views/StaffHR/Adjustment',
+        name: 'AdjustmentManagement',
+        meta: {
+          title: 'Korrektirovka (Bonus/Shtraf)',
+          noCache: true
+        }
+      },
+      {
+        path: 'salary',
+        component: 'views/Salary/Salary',
+        name: 'SalaryManagement',
+        meta: {
+          title: 'Ish haqi',
+          noCache: true
+        }
+      }
+    ]
+  },
+  {
+    path: '/authorization',
+    component: '#',
+    redirect: '/authorization/department',
+    name: 'Authorization',
+    meta: {
+      title: 'router.authorization',
+      icon: 'vi-eos-icons:role-binding',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'department',
+        component: 'views/Authorization/Department/Department',
+        name: 'Department',
+        meta: {
+          title: 'router.department',
+          noCache: true
+        }
+      },
+      {
+        path: 'role',
+        component: 'views/Authorization/Role/Role',
+        name: 'Role',
+        meta: {
+          title: 'Rollar',
           noCache: true
         }
       }
@@ -509,126 +608,162 @@ const defaultAdminRoutes = [
   }
 ];
 
+const COMPANY_MANAGEMENT_ROUTE = {
+  path: '/company',
+  component: '#',
+  redirect: '/company/list',
+  name: 'CompanyRoot',
+  meta: {
+    title: 'router.companyManagement',
+    icon: 'vi-ep:office-building',
+    alwaysShow: true
+  },
+  children: [
+    {
+      path: 'list',
+      component: 'views/Company/CompanyManagement',
+      name: 'CompanyManagement',
+      meta: {
+        title: 'router.companyManagement',
+        icon: 'vi-ep:office-building',
+        noCache: true
+      }
+    }
+  ]
+};
+
+const COMPANY_USER_ROUTES = JSON.parse(JSON.stringify(DEFAULT_ADMIN_ROUTES));
+
+const ROUTE_PERMISSION_MAP = {
+  '/dashboard/analysis': ['dashboard:view', 'analysis:view', 'analysis', '/dashboard', '/dashboard/analysis'],
+  '/dashboard/workplace': ['workplace:view', 'workplace', '/dashboard', '/dashboard/workplace'],
+  '/product/list': ['product:view', 'product:create', 'product:edit', 'product:delete', 'product', 'list', '/product', '/product/list'],
+  '/sales/pos': ['sales:pos:view', 'sales:pos:checkout', 'pos:sell', 'pos:discount', 'pos:nasiya', 'pos:history', 'pos', 'sales', '/sales', '/sales/pos'],
+  '/sales/debtors': ['debtors', 'debtors:view', 'pos:nasiya', '/sales/debtors'],
+  '/hr/workers': ['worker:view', 'worker:create', 'worker:edit', 'worker:delete', 'worker', 'workers', 'hr:workers', '/hr/workers', '/hr'],
+  '/hr/timesheets': ['timesheet:view', 'timesheets', '/hr/timesheets'],
+  '/hr/outputs': ['output:view', 'outputs', '/hr/outputs'],
+  '/hr/adjustments': ['adjustment:view', 'adjustments', '/hr/adjustments'],
+  '/hr/salary': ['salary:view', 'salary', '/hr/salary'],
+  '/authorization/department': ['department:manage', 'department', '/authorization/department', '/authorization'],
+  '/authorization/role': ['role:manage', 'role', '/authorization/role', '/authorization']
+};
+
+function filterRoutesForUser(user, permissions) {
+  const roleStr = (user?.role || '').toLowerCase();
+  const compId = user?.company_id || 'comp-default';
+  const isSuper = user?.username === 'admin' || user?.username === 'anvars' || (compId === 'comp-default' && (roleStr.includes('super') || user?.is_super_admin === true));
+
+  if (isSuper) {
+    const superRoutes = JSON.parse(JSON.stringify(DEFAULT_ADMIN_ROUTES));
+    superRoutes.splice(1, 0, JSON.parse(JSON.stringify(COMPANY_MANAGEMENT_ROUTE)));
+    return superRoutes;
+  }
+
+  const isAdmin = roleStr.includes('admin') || roleStr.includes('administrator');
+  const userPerms = Array.isArray(permissions) ? permissions : [];
+  const userPermsLower = new Set(userPerms.map(p => String(p).toLowerCase().trim()));
+
+  if (userPermsLower.has('*.*.*') || userPermsLower.has('*') || isAdmin) {
+    return JSON.parse(JSON.stringify(COMPANY_USER_ROUTES));
+  }
+
+  const allowedRoutes = [];
+  for (const parent of COMPANY_USER_ROUTES) {
+    const parentPath = parent.path.toLowerCase();
+    const children = parent.children || [];
+
+    if (userPermsLower.has(parentPath)) {
+      allowedRoutes.push(JSON.parse(JSON.stringify(parent)));
+      continue;
+    }
+
+    const allowedChildren = [];
+    for (const child of children) {
+      const childPath = child.path.toLowerCase();
+      const fullChildPath = childPath.startsWith('/') ? childPath : `${parentPath}/${childPath}`;
+      const reqKeys = ROUTE_PERMISSION_MAP[fullChildPath] || [fullChildPath, childPath];
+      if (reqKeys.some(k => userPermsLower.has(k.toLowerCase()))) {
+        allowedChildren.push(JSON.parse(JSON.stringify(child)));
+      }
+    }
+
+    if (allowedChildren.length > 0) {
+      const parentCopy = JSON.parse(JSON.stringify(parent));
+      parentCopy.children = allowedChildren;
+      const firstChildPath = allowedChildren[0].path;
+      parentCopy.redirect = firstChildPath.startsWith('/') ? firstChildPath : `${parent.path}/${firstChildPath}`;
+      allowedRoutes.push(parentCopy);
+    }
+  }
+
+  return allowedRoutes;
+}
+
+async function checkUserAccess(authUser, requiredPermissions, sql) {
+  if (!authUser) {
+    return { ok: false, status: 401, message: 'Tizimga kirilmagan yoki sessiya muddati tugagan' };
+  }
+
+  const roleStr = (authUser.role || '').toLowerCase();
+  const compId = authUser.company_id || 'comp-default';
+  const isSuper = authUser.username === 'admin' || authUser.username === 'anvars' || (compId === 'comp-default' && (roleStr.includes('super') || authUser.is_super_admin === true));
+
+  if (isSuper) return { ok: true };
+  if (roleStr.includes('admin') || roleStr.includes('administrator')) return { ok: true };
+
+  let userPerms = authUser.permissions || [];
+  if (typeof userPerms === 'string') {
+    try { userPerms = JSON.parse(userPerms); } catch (e) { userPerms = []; }
+  }
+
+  if (!Array.isArray(userPerms) || userPerms.length === 0) {
+    if (authUser.roleId || authUser.role) {
+      try {
+        const rRows = await sql`SELECT * FROM roles WHERE id = ${authUser.roleId || ''} OR "roleName" = ${authUser.role || ''} LIMIT 1`;
+        if (rRows[0] && rRows[0].permissions) {
+          userPerms = typeof rRows[0].permissions === 'string' ? JSON.parse(rRows[0].permissions) : rRows[0].permissions;
+        }
+      } catch (e) {}
+    }
+  }
+
+  const userPermsLower = new Set((userPerms || []).map(p => String(p).toLowerCase().trim()));
+  if (userPermsLower.has('*.*.*') || userPermsLower.has('*')) {
+    return { ok: true };
+  }
+
+  for (const req of requiredPermissions) {
+    if (userPermsLower.has(req.toLowerCase().trim())) {
+      return { ok: true };
+    }
+  }
+
+  return {
+    ok: false,
+    status: 403,
+    message: "Sizda ushbu amalni bajarish yoki ma'lumotlarni ko'rish uchun ruxsat yo'q!"
+  };
+}
+
 const defaultRoleKeys = [
   '/dashboard',
   '/dashboard/analysis',
   '/dashboard/workplace',
-  '/company',
-  '/company/list',
-  '/product',
-  '/product/list'
-];
-
-const defaultWorkerPermissions = [
-  '/dashboard',
-  '/dashboard/workplace',
-  'dashboard:workplace',
   '/product',
   '/product/list',
-  'product:view',
   '/sales',
   '/sales/pos',
-  'sales:pos',
-  'sales:view',
-  'sales:create'
+  '/sales/debtors',
+  '/hr',
+  '/hr/workers',
+  '/authorization',
+  '/authorization/department',
+  '/authorization/role'
 ];
 
-function filterRoutesByRole(permissions) {
-  if (!Array.isArray(permissions) || permissions.includes('*.*.*') || permissions.includes('*') || permissions.includes('all')) {
-    return defaultAdminRoutes;
-  }
-
-  const pSet = new Set(permissions.map((p) => String(p).toLowerCase().trim()));
-
-  const filtered = [];
-  for (const parent of defaultAdminRoutes) {
-    const parentPath = parent.path.toLowerCase();
-    const parentName = (parent.name || '').toLowerCase();
-
-    // Check children
-    const validChildren = [];
-    if (parent.children && parent.children.length > 0) {
-      for (const child of parent.children) {
-        const childPath = child.path.toLowerCase();
-        const fullPath = `${parentPath}/${childPath}`.replace(/\/+/g, '/').toLowerCase();
-        const childName = (child.name || '').toLowerCase();
-
-        const hasMatch =
-          pSet.has(fullPath) ||
-          pSet.has(childPath) ||
-          pSet.has(childName) ||
-          pSet.has(parentPath) ||
-          Array.from(pSet).some(
-            (p) => p.includes(childPath) || (childPath.length > 2 && p.endsWith(childPath))
-          );
-
-        if (hasMatch) {
-          validChildren.push(child);
-        }
-      }
-    }
-
-    if (validChildren.length > 0) {
-      filtered.push({
-        ...parent,
-        children: validChildren
-      });
-    } else if (pSet.has(parentPath) || pSet.has(parentName)) {
-      filtered.push({
-        ...parent,
-        children: []
-      });
-    }
-  }
-
-  if (filtered.length > 0) return filtered;
-  if (permissions.includes('*.*.*') || permissions.includes('*')) return defaultAdminRoutes;
-
-  // Safe fallback for unprivileged/unassigned users:
-  return [
-    {
-      path: '/dashboard',
-      component: '#',
-      redirect: '/dashboard/workplace',
-      name: 'Dashboard',
-      meta: {
-        title: 'router.dashboard',
-        icon: 'vi-ant-design:dashboard-filled',
-        alwaysShow: true
-      },
-      children: [
-        {
-          path: 'workplace',
-          component: 'views/Dashboard/Workplace',
-          name: 'Workplace',
-          meta: {
-            title: 'router.workplace',
-            noCache: true
-          }
-        }
-      ]
-    }
-  ];
-}
-
 function filterRoleKeysByRole(permissions) {
-  if (!Array.isArray(permissions) || permissions.includes('*.*.*') || permissions.includes('*') || permissions.includes('all')) {
-    return defaultRoleKeys;
-  }
-
-  const pSet = new Set(permissions.map((p) => String(p).toLowerCase().trim()));
-  const keys = defaultRoleKeys.filter((k) => {
-    const lk = k.toLowerCase();
-    const parts = lk.split('/').filter(Boolean);
-    const lastPart = parts[parts.length - 1];
-    return (
-      pSet.has(lk) ||
-      pSet.has(lastPart) ||
-      Array.from(pSet).some((p) => p.includes(lastPart) || lk.includes(p))
-    );
-  });
-
-  return keys.length > 0 ? keys : ['/dashboard', '/dashboard/workplace'];
+  return defaultRoleKeys;
 }
 
 function getReqCompanyId(req, payload = null) {
@@ -672,7 +807,7 @@ function authenticate(req, res) {
 
   try {
     const payload = jwt.verify(token, SECRET_KEY);
-    if (!payload || (!payload.id && !payload.username)) {
+    if (!payload || (!payload.id && !payload.username && !payload.sub)) {
       res.status(401).json({
         code: 401,
         message: 'Yaroqsiz token strukturasi.'
@@ -788,7 +923,10 @@ export default async function handler(req, res) {
 
       const token = 'Bearer ' + jwt.sign({
         sub: user.username,
+        username: user.username,
         id: user.id,
+        role: user.role,
+        roleId: user.roleId,
         company_id: companyId,
         is_super_admin: isSuper
       }, SECRET_KEY, { expiresIn: '8h' });
@@ -852,13 +990,37 @@ export default async function handler(req, res) {
       path.startsWith('sales/push-pc-sale') ||
       path.startsWith('sales/pending-pushes') ||
       path.startsWith('sales/push-payload') ||
-      path.startsWith('sales/respond-push') ||
-      path.startsWith('analysis/');
+      path.startsWith('sales/respond-push');
 
     let authUser = null;
     if (!isPublicOrDeviceRoute) {
-      authUser = authenticate(req, res);
-      if (!authUser) return;
+      const jwtPayload = authenticate(req, res);
+      if (!jwtPayload) return;
+      authUser = jwtPayload;
+
+      try {
+        const uRows = await sql`
+          SELECT id, username, full_name, role, "roleId", email, department_id, company_id, permissions, is_super_admin
+          FROM users 
+          WHERE username = ${jwtPayload.sub || jwtPayload.username} OR id = ${jwtPayload.id} 
+          LIMIT 1
+        `;
+        if (uRows[0]) {
+          authUser = { ...jwtPayload, ...uRows[0] };
+        } else {
+          const wRows = await sql`
+            SELECT id, name as full_name, username, worker_id, role, company_id 
+            FROM workers 
+            WHERE username = ${jwtPayload.sub || jwtPayload.username} OR worker_id = ${jwtPayload.sub || jwtPayload.username} OR id = ${jwtPayload.id} 
+            LIMIT 1
+          `;
+          if (wRows[0]) {
+            authUser = { ...jwtPayload, ...wRows[0], roleId: '5' };
+          }
+        }
+      } catch (e) {
+        console.warn('Could not enrich authUser from DB:', e?.message);
+      }
     }
 
     // User Profile Save & Update
@@ -1091,6 +1253,8 @@ export default async function handler(req, res) {
 
     // POST /api/product/save (Add, update, or replenish existing stock)
     if (path === 'product/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['product:create', 'product:edit', 'product'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       try {
         const {
           id,
@@ -1305,6 +1469,8 @@ export default async function handler(req, res) {
 
     // POST /api/product/delete
     if (path === 'product/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['product:delete', 'product'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       let ids = req.body?.ids;
       if (!ids && req.body?.id) ids = [req.body.id];
       const targetCompany = req.body?.company_id || getReqCompanyId(req, authUser);
@@ -1471,6 +1637,8 @@ export default async function handler(req, res) {
 
     // 9. Worker Endpoints
     if (path === 'worker/list') {
+      const access = await checkUserAccess(authUser, ['worker:view', 'worker', 'workers', 'hr:workers', '/hr/workers', '/hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 20, 10);
       const name = (req.query?.name || urlSearchParams.get('name') || '').trim();
@@ -1506,6 +1674,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'worker/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['worker:create', 'worker:edit', 'worker', 'workers'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, name, account, email, phone, role, departmentId, hireDate, status, baseSalary, remark } = req.body || {};
       const effectiveRole = role || 'Oddiy xodim';
       const effectiveStatus = status !== undefined ? parseInt(status, 10) : 1;
@@ -1537,6 +1707,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'worker/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['worker:delete', 'worker', 'workers'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { ids } = req.body || {};
       if (Array.isArray(ids) && ids.length > 0) {
         await sql`DELETE FROM workers WHERE id = ANY(${ids})`;
@@ -1545,6 +1717,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'worker/avatar' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['worker:edit', 'worker', 'workers'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, avatar } = req.body || {};
       if (id && avatar) {
         await sql`UPDATE workers SET avatar = ${avatar} WHERE id = ${id}`;
@@ -1557,11 +1731,22 @@ export default async function handler(req, res) {
       if (!authUser) {
         return res.status(401).json({ code: 401, message: 'Tizimga kirilmagan yoki sessiya yaroqsiz' });
       }
-      const isSuper = authUser.sub === 'admin' || authUser.role === 'Super Administrator' || authUser.is_super_admin === true;
-      if (isSuper) {
-        return res.status(200).json({ code: 0, data: filterRoutesByRole(['*.*.*']) });
+      let userPerms = authUser.permissions || [];
+      if (typeof userPerms === 'string') {
+        try { userPerms = JSON.parse(userPerms); } catch (e) { userPerms = []; }
       }
-      return res.status(200).json({ code: 0, data: filterRoutesByRole(['dashboard:*', 'product:*', 'sales:*', 'hr:*']) });
+      if (!Array.isArray(userPerms) || userPerms.length === 0) {
+        if (authUser.roleId || authUser.role) {
+          try {
+            const rRows = await sql`SELECT * FROM roles WHERE id = ${authUser.roleId || ''} OR "roleName" = ${authUser.role || ''} LIMIT 1`;
+            if (rRows[0] && rRows[0].permissions) {
+              userPerms = typeof rRows[0].permissions === 'string' ? JSON.parse(rRows[0].permissions) : rRows[0].permissions;
+            }
+          } catch (e) {}
+        }
+      }
+      const filtered = filterRoutesForUser(authUser, userPerms);
+      return res.status(200).json({ code: 0, data: filtered });
     }
 
     if (path === 'role/list2') {
@@ -1596,15 +1781,15 @@ export default async function handler(req, res) {
     }
 
     if (path === 'role/table') {
+      const access = await checkUserAccess(authUser, ['role:manage', 'role', '/authorization/role'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const rows = await sql`SELECT * FROM roles ORDER BY id ASC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
     if (path === 'role/save' && req.method === 'POST') {
-      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
-      if (!isSuper) {
-        return res.status(403).json({ code: 403, message: 'Kechirasiz, rollarni tahrirlash uchun Administrator huquqi talab qilinadi.' });
-      }
+      const access = await checkUserAccess(authUser, ['role:manage', 'role', '/authorization/role'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, roleName, status, remark, permissions } = req.body || {};
       if (id) {
         await sql`
@@ -1623,10 +1808,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'role/delete' && req.method === 'POST') {
-      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
-      if (!isSuper) {
-        return res.status(403).json({ code: 403, message: "Kechirasiz, rollarni o'chirish uchun Administrator huquqi talab qilinadi." });
-      }
+      const access = await checkUserAccess(authUser, ['role:manage', 'role', '/authorization/role'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id } = req.body || {};
       if (id === '1') {
         return res.status(400).json({ code: 400, message: "Super Administrator rolini o'chirib bo'lmaydi!" });
@@ -1639,6 +1822,8 @@ export default async function handler(req, res) {
 
     // 11. Departments Endpoints
     if (path === 'department/table/list' || path === 'department/list') {
+      const access = await checkUserAccess(authUser, ['department:manage', 'department', '/authorization/department'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const rows = await sql`SELECT * FROM departments ORDER BY id ASC`;
       return res.status(200).json({
         code: 0,
@@ -1650,10 +1835,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'department/save' && req.method === 'POST') {
-      const isSuper = authUser?.role === 'Super Administrator' || authUser?.sub === 'admin';
-      if (!isSuper) {
-        return res.status(403).json({ code: 403, message: "Kechirasiz, bo'limlarni boshqarish uchun Administrator huquqi talab qilinadi." });
-      }
+      const access = await checkUserAccess(authUser, ['department:manage', 'department', '/authorization/department'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, departmentName, name, parentId, status, remark } = req.body || {};
       const deptTitle = departmentName || name || 'Bo\'lim';
       if (id) {
@@ -1673,6 +1856,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'department/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['department:manage', 'department', '/authorization/department'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { ids } = req.body || {};
       if (Array.isArray(ids) && ids.length > 0) {
         await sql`DELETE FROM departments WHERE id = ANY(${ids})`;
@@ -1681,6 +1866,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'department/users') {
+      const access = await checkUserAccess(authUser, ['department:manage', 'department', '/authorization/department'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const deptId = req.query?.id || urlSearchParams.get('id');
       const rows = await sql`SELECT * FROM workers WHERE department_id = ${deptId} OR "departmentId" = ${deptId}`;
       const userList = rows.map(w => ({
@@ -1696,6 +1883,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'department/user/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['department:manage', 'department', '/authorization/department'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, departmentId, department_id, name, account, email, phone, role } = req.body || {};
       const deptId = departmentId || department_id || 'DEPT-HQ';
       if (id) {
@@ -2008,6 +2197,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'department/user/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['department:manage', 'department', '/authorization/department'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       let ids = req.body?.ids;
       if (!ids && req.body?.id) ids = [req.body.id];
       if (Array.isArray(ids) && ids.length > 0) {
@@ -2019,6 +2210,8 @@ export default async function handler(req, res) {
 
     // 12. GET /api/salary/list
     if (path === 'salary/list') {
+      const access = await checkUserAccess(authUser, ['salary:view', 'salary', '/hr/salary', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const pageIndex = parseInt(req.query?.pageIndex || urlSearchParams.get('pageIndex') || 1, 10);
       const pageSize = parseInt(req.query?.pageSize || urlSearchParams.get('pageSize') || 500, 10);
       const offset = (pageIndex - 1) * pageSize;
@@ -2037,6 +2230,8 @@ export default async function handler(req, res) {
 
     // POST /api/salary/delete
     if (path === 'salary/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['salary:view', 'salary', '/hr/salary', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { ids } = req.body || {};
       if (Array.isArray(ids) && ids.length > 0) {
         await sql`DELETE FROM salaries WHERE id = ANY(${ids})`;
@@ -2048,12 +2243,16 @@ export default async function handler(req, res) {
 
     // POST /api/salary/clear
     if (path === 'salary/clear' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['salary:view', 'salary', '/hr/salary', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       await sql`DELETE FROM salaries`;
       return res.status(200).json({ code: 0, message: "Barcha maoshlar tozalandi" });
     }
 
     // POST /api/salary/save
     if (path === 'salary/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['salary:view', 'salary', '/hr/salary', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, workerId, baseSalary, allowance, deduction, netSalary, payDate, status, remark } = req.body || {};
       const calculatedNet = parseFloat(netSalary) || ((parseFloat(baseSalary) || 0) + (parseFloat(allowance) || 0) - (parseFloat(deduction) || 0));
       if (id) {
@@ -2194,6 +2393,8 @@ export default async function handler(req, res) {
 
     // GET /api/sales/debtors
     if (path === 'sales/debtors') {
+      const access = await checkUserAccess(authUser, ['pos:nasiya', 'debtors', 'debtors:view', '/sales/debtors'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       try {
         const search = (req.query?.search || urlSearchParams.get('search') || '').toLowerCase().trim();
         const statusFilter = req.query?.status || urlSearchParams.get('status');
@@ -2362,6 +2563,8 @@ export default async function handler(req, res) {
 
     // POST /api/sales/repay-debt
     if (path === 'sales/repay-debt' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['pos:nasiya', 'debtors', 'debtors:repay', '/sales/debtors'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       try {
         const { customer_name, customer_phone, amount, payment_method, cashier_name, remark } = req.body || {};
         const numAmount = parseFloat(amount) || 0;
@@ -2593,6 +2796,12 @@ export default async function handler(req, res) {
           }))
         }
       });
+    }
+
+    // Protected Analysis Endpoints
+    if (path.startsWith('analysis/')) {
+      const access = await checkUserAccess(authUser, ['dashboard:view', 'analysis:view', 'analysis'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
     }
 
     // GET /api/analysis/bundle or /api/analysis/financial-overview
@@ -3387,11 +3596,15 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/timesheet/list') {
+      const access = await checkUserAccess(authUser, ['timesheet:view', 'timesheets', '/hr/timesheets', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const rows = await sql`SELECT * FROM staff_timesheets ORDER BY id DESC`;
       return res.status(200).json({ code: 0, data: { total: rows.length, list: rows } });
     }
 
     if (path === 'hr/timesheet/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['timesheet:view', 'timesheets', '/hr/timesheets', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, date, status, records } = req.body || {};
       const recordsJson = typeof records === 'string' ? records : JSON.stringify(records || []);
       if (id) {
@@ -3411,6 +3624,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/timesheet/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['timesheet:view', 'timesheets', '/hr/timesheets', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { ids } = req.body || {};
       if (Array.isArray(ids) && ids.length > 0) {
         await sql`DELETE FROM staff_timesheets WHERE id = ANY(${ids})`;
@@ -3419,6 +3634,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/output/list') {
+      const access = await checkUserAccess(authUser, ['output:view', 'outputs', '/hr/outputs', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const rows = await sql`
         SELECT o.*, COALESCE(o."workerName", w.name, o."workerId") as "workerName" 
         FROM staff_outputs o 
@@ -3429,6 +3646,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/output/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['output:view', 'outputs', '/hr/outputs', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, workerId, workerName, name, amount, period_month, comment } = req.body || {};
       if (id) {
         await sql`
@@ -3447,6 +3666,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/output/delete' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['output:view', 'outputs', '/hr/outputs', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { ids } = req.body || {};
       if (Array.isArray(ids) && ids.length > 0) {
         await sql`DELETE FROM staff_outputs WHERE id = ANY(${ids})`;
@@ -3455,6 +3676,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/adjustment/list') {
+      const access = await checkUserAccess(authUser, ['adjustment:view', 'adjustments', '/hr/adjustments', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const rows = await sql`
         SELECT a.*, COALESCE(w.name, a."workerId") as "workerName" 
         FROM staff_adjustments a 
@@ -3465,6 +3688,8 @@ export default async function handler(req, res) {
     }
 
     if (path === 'hr/adjustment/save' && req.method === 'POST') {
+      const access = await checkUserAccess(authUser, ['adjustment:view', 'adjustments', '/hr/adjustments', 'hr'], sql);
+      if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       const { id, workerId, document_type, amount, period_month, description } = req.body || {};
       if (id) {
         await sql`
