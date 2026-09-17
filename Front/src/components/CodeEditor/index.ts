@@ -1,3 +1,5 @@
-import CodeEditor from './src/CodeEditor.vue'
+import { defineAsyncComponent } from 'vue'
+
+const CodeEditor = defineAsyncComponent(() => import('./src/CodeEditor.vue'))
 
 export { CodeEditor }

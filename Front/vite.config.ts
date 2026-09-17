@@ -15,6 +15,7 @@ import { createSvgIconsPlugin } from 'vite-plugin-svg-icons'
 import { createStyleImportPlugin, ElementPlusResolve } from 'vite-plugin-style-import'
 import UnoCSS from 'unocss/vite'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { compression } from 'vite-plugin-compression2'
 
 // https://vitejs.dev/config/
 const root = process.cwd()
@@ -99,8 +100,21 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       ViteEjsPlugin({
         title: env.VITE_APP_TITLE
       }),
-      UnoCSS()
-    ],
+      UnoCSS(),
+      ...(isBuild
+        ? [
+            compression({
+              threshold: 1024,
+              deleteOriginalAssets: false
+            }),
+            compression({
+              threshold: 1024,
+              algorithm: 'brotliCompress',
+              deleteOriginalAssets: false
+            })
+          ]
+        : [])
+    ].filter(Boolean) as any,
 
     css: {
       preprocessorOptions: {
@@ -128,36 +142,67 @@ export default ({ command, mode }: ConfigEnv): UserConfig => {
       ]
     },
     esbuild: {
-      pure: env.VITE_DROP_CONSOLE === 'true' ? ['console.log'] : undefined,
-      drop: env.VITE_DROP_DEBUGGER === 'true' ? ['debugger'] : undefined
+      pure: env.VITE_DROP_CONSOLE === 'true' ? ['console.log', 'console.debug'] : undefined,
+      drop: env.VITE_DROP_DEBUGGER === 'true' ? ['debugger'] : undefined,
+      legalComments: 'none'
     },
     build: {
-      target: 'es2015',
+      target: 'es2020',
       outDir: env.VITE_OUT_DIR || 'dist',
       sourcemap: env.VITE_SOURCEMAP === 'true',
-      // brotliSize: false,
+      minify: 'esbuild',
+      reportCompressedSize: false,
       rollupOptions: {
         plugins: env.VITE_USE_BUNDLE_ANALYZER === 'true' ? [visualizer()] : undefined,
-        // 拆包
+        // Detailed manual chunking for optimal caching and fast loads
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('element-plus')) return 'vendor-element'
-              if (id.includes('echarts')) return 'vendor-echarts'
+              if (id.includes('monaco-editor')) return 'vendor-monaco'
+              if (
+                id.includes('@zxing') ||
+                id.includes('quagga') ||
+                id.includes('barcode-detector') ||
+                id.includes('qrcode') ||
+                id.includes('html5-qrcode')
+              ) {
+                return 'vendor-barcode'
+              }
+              if (id.includes('echarts') || id.includes('zrender')) return 'vendor-echarts'
               if (id.includes('wangeditor')) return 'vendor-editor'
+              if (id.includes('@iconify/vue') || id.includes('@iconify/iconify')) return 'vendor-icons'
+              if (id.includes('xgplayer') || id.includes('cropperjs')) return 'vendor-media'
+              if (id.includes('element-plus') || id.includes('@element-plus')) return 'vendor-element'
               if (id.includes('lodash-es')) return 'vendor-lodash'
               if (id.includes('dayjs')) return 'vendor-dayjs'
-              if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router') || id.includes('vue-i18n')) return 'vendor-vue'
+              if (
+                id.includes('vue') ||
+                id.includes('pinia') ||
+                id.includes('vue-router') ||
+                id.includes('vue-i18n') ||
+                id.includes('@vueuse')
+              ) {
+                return 'vendor-vue'
+              }
+              if (
+                id.includes('axios') ||
+                id.includes('qs') ||
+                id.includes('mitt') ||
+                id.includes('nprogress') ||
+                id.includes('driver.js')
+              ) {
+                return 'vendor-utils'
+              }
             }
-          }
-        },
-        chunkFileNames: 'assets/js/[name]-[hash].js',
-        entryFileNames: 'assets/js/[name]-[hash].js',
-        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]'
+          },
+          chunkFileNames: 'assets/[name]-[hash].js',
+          entryFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]'
+        }
       },
-      chunkSizeWarningLimit: 1500,
+      chunkSizeWarningLimit: 2000,
       cssCodeSplit: true,
-      cssTarget: ['chrome31']
+      cssTarget: ['chrome80', 'safari13.1', 'firefox78']
     },
     server: {
       port: 4000,
