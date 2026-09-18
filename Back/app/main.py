@@ -3,10 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import IntegrityError
-from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, cutting, qr, staff_hr, ai, classifier, sales, device, ws, company
-
-import datetime
+from .routers import auth, role, department, branch, product, worker, salary, analytics, activity, staff_hr, ai, classifier, sales, device, ws, company
 import os
 
 from .database import is_sqlite, SessionLocal
@@ -152,8 +149,6 @@ all_routers = [
     (salary.router, ["Salary & Payroll"]),
     (analytics.router, ["Analytics & Dashboard"]),
     (activity.router, ["Activity Log"]),
-    (cutting.router, ["Cutting Management"]),
-    (qr.router, ["QR Code Management"]),
     (staff_hr.router, ["Staff HR Extensions"]),
     (ai.router, ["AI Voice Assistant"]),
     (classifier.router, ["Classifier Management"]),

@@ -65,27 +65,6 @@ PERMISSION_MAP = {
     "list_branches": {"resource": "products.spisok_tovarov", "action": "view", "legacy": ["branch:view", "branch:list"]},
     "create_branch": {"resource": "products.spisok_tovarov", "action": "create", "legacy": ["branch:create"]},
 
-    # Cutting Orders & Production
-    "create_cutting_order": {"resource": "cutting.raskroi", "action": "create", "legacy": ["cutting:create"]},
-    "delete_cutting_order": {"resource": "cutting.raskroi", "action": "delete", "legacy": ["cutting:delete"]},
-    "list_cutting_orders": {"resource": "cutting.raskroi", "action": "view", "legacy": ["cutting:view"]},
-    "start_production": {"resource": "cutting.raskroi", "action": "update", "legacy": ["cutting:edit"]},
-    "create_cutting_stage": {"resource": "cutting.raskroi", "action": "create", "legacy": ["cutting:create"]},
-    "delete_cutting_stage": {"resource": "cutting.raskroi", "action": "delete", "legacy": ["cutting:delete"]},
-    "list_cutting_stages": {"resource": "cutting.raskroi", "action": "view", "legacy": ["cutting:view"]},
-    "create_cutting_process": {"resource": "cutting.raskroi", "action": "create", "legacy": ["cutting:create"]},
-    "delete_cutting_process": {"resource": "cutting.raskroi", "action": "delete", "legacy": ["cutting:delete"]},
-    "list_cutting_processes": {"resource": "cutting.raskroi", "action": "view", "legacy": ["cutting:view"]},
-    "list_cutting_tasks": {"resource": "cutting.raskroi", "action": "view", "legacy": ["cutting:view"]},
-    "update_task_status": {"resource": "cutting.raskroi", "action": "update", "legacy": ["cutting:edit"]},
-    "create_cutting_execution": {"resource": "cutting.raskroi", "action": "create", "legacy": ["cutting:create"]},
-    "list_cutting_executions": {"resource": "cutting.raskroi", "action": "view", "legacy": ["cutting:view"]},
-
-    # QR Codes
-    "generate_qr_code": {"resource": "qr_codes.print", "action": "create", "legacy": ["qr:create"]},
-    "list_qr_codes": {"resource": "qr_codes.print", "action": "view", "legacy": ["qr:view"]},
-    "delete_qr_code": {"resource": "qr_codes.print", "action": "delete", "legacy": ["qr:delete"]},
-
     # Users & Roles
     "list_users": {"resource": "staff.users", "action": "view", "legacy": ["user:view", "staff:view"]},
     "create_role": {"resource": "staff.roles", "action": "create", "legacy": ["role:create", "staff:create"]},
@@ -192,9 +171,7 @@ def ai_config(username: str = Query(None), db: Session = Depends(get_db)):
         {"resource": "hr.korrektirovki", "title": "Korrektirovkalar", "actions": ["view", "create", "update", "delete"]},
         {"resource": "hr.vedomost", "title": "Ish haqi vedomosti", "actions": ["view", "create", "print"]},
         {"resource": "staff.users", "title": "Foydalanuvchilar", "actions": ["view", "create", "update", "delete"]},
-        {"resource": "staff.roles", "title": "Rollar", "actions": ["view", "create", "update", "delete"]},
-        {"resource": "cutting.raskroi", "title": "Raskroy / Kesish", "actions": ["view", "create", "update", "delete", "print"]},
-        {"resource": "qr_codes.print", "title": "QR kodlar", "actions": ["view", "create"]}
+        {"resource": "staff.roles", "title": "Rollar", "actions": ["view", "create", "update", "delete"]}
     ]
 
     accessible_ui = []
@@ -577,142 +554,6 @@ def ai_execute(body: dict = Body(...), db: Session = Depends(get_db)):
                     ))
                     count += 1
             return {"code": 0, "message": f"{count} ta xodimga ish haqi to'landi."}
-
-        elif action == "list_cutting_orders":
-            orders = crud.get_cutting_orders(db)
-            return {
-                "code": 0,
-                "data": [{"id": o.id, "order_number": o.order_number, "project": o.project, "status": o.status, "total_quantity": o.total_quantity} for o in orders]
-            }
-
-        elif action == "create_cutting_order":
-            from app.schemas import CuttingOrderCreate
-            order_in = CuttingOrderCreate(
-                order_number=params.get("order_number", "ORD-" + str(uuid.uuid4().int)[:6]),
-                project=params.get("project", ""),
-                order_name=params.get("order_name", ""),
-                document_date=params.get("document_date") or datetime.date.today().strftime("%Y-%m-%d"),
-                responsible_user_ids=params.get("responsible_user_ids", []),
-                items=params.get("items", [])
-            )
-            o = crud.create_cutting_order(db, order_in)
-            return {"code": 0, "message": f"Cutting order '{o.order_number}' created.", "data": {"id": o.id, "order_number": o.order_number}}
-
-        elif action == "delete_cutting_order":
-            ids = params.get("ids", [params.get("id")])
-            if isinstance(ids, str): ids = [ids]
-            for i in ids:
-                crud.delete_cutting_order(db, str(i))
-            return {"code": 0, "message": "Cutting order deleted successfully."}
-
-        elif action == "start_production":
-            order_id = params.get("order_id")
-            if not order_id:
-                return {"code": 500, "message": "order_id is required."}
-            o = crud.start_production_for_order(db, str(order_id))
-            if o:
-                return {"code": 0, "message": f"Production started for order {order_id}."}
-            return {"code": 500, "message": "Order not found."}
-
-        elif action == "list_cutting_stages":
-            stages = crud.get_cutting_stages(db)
-            return {"code": 0, "data": [{"id": s.id, "name": s.name, "price": s.price} for s in stages]}
-
-        elif action == "create_cutting_stage":
-            from app.schemas import CuttingStageCreate
-            s_in = CuttingStageCreate(
-                name=params.get("name", "New Stage"),
-                is_system=params.get("is_system", False),
-                price=params.get("price", 0.0),
-                duration=params.get("duration", 0.0)
-            )
-            s = crud.create_cutting_stage(db, s_in)
-            return {"code": 0, "message": f"Cutting stage '{s.name}' created.", "data": {"id": s.id}}
-
-        elif action == "delete_cutting_stage":
-            ids = params.get("ids", [params.get("id")])
-            if isinstance(ids, str): ids = [ids]
-            for i in ids:
-                crud.delete_cutting_stage(db, str(i))
-            return {"code": 0, "message": "Cutting stage deleted."}
-
-        elif action == "list_cutting_processes":
-            processes = crud.get_cutting_processes(db)
-            return {"code": 0, "data": [{"id": p.id, "name": p.name, "remark": p.remark} for p in processes]}
-
-        elif action == "create_cutting_process":
-            from app.schemas import CuttingProcessCreate
-            p_in = CuttingProcessCreate(
-                name=params.get("name", "New Process"),
-                remark=params.get("remark"),
-                stages=params.get("stages", [])
-            )
-            p = crud.create_cutting_process(db, p_in)
-            return {"code": 0, "message": f"Cutting process '{p.name}' created.", "data": {"id": p.id}}
-
-        elif action == "delete_cutting_process":
-            ids = params.get("ids", [params.get("id")])
-            if isinstance(ids, str): ids = [ids]
-            for i in ids:
-                crud.delete_cutting_process(db, str(i))
-            return {"code": 0, "message": "Cutting process deleted."}
-
-        elif action == "list_cutting_tasks":
-            tasks = crud.get_cutting_tasks(db)
-            return {
-                "code": 0,
-                "data": [{"id": t.id, "orderId": t.orderId, "stageId": t.stageId, "quantity": t.quantity, "status": t.status, "order_number": t.order_number_snapshot, "stage_name": t.stage_name_snapshot} for t in tasks]
-            }
-
-        elif action == "update_task_status":
-            task_id = params.get("task_id")
-            status = params.get("status")
-            if not task_id or not status:
-                return {"code": 500, "message": "task_id and status are required."}
-            t = crud.update_cutting_task_status(db, str(task_id), status)
-            if t:
-                return {"code": 0, "message": f"Task status updated to '{status}'."}
-            return {"code": 500, "message": "Task not found."}
-
-        elif action == "list_cutting_executions":
-            exes = crud.get_cutting_task_executions(db)
-            workers = {w.id: w.name for w in db.query(models.Worker).all()}
-            return {
-                "code": 0,
-                "data": [{"id": e.id, "taskId": e.taskId, "workerId": e.workerId, "workerName": workers.get(e.workerId, "?"), "quantity": e.quantity} for e in exes]
-            }
-
-        elif action == "create_cutting_execution":
-            from app.schemas import CuttingTaskExecutionCreate
-            exe_in = CuttingTaskExecutionCreate(
-                taskId=str(params.get("task_id")),
-                workerId=str(params.get("worker_id")),
-                quantity=params.get("quantity", 0),
-                period_month=params.get("period_month"),
-                comment=params.get("comment")
-            )
-            e = crud.create_cutting_task_execution(db, exe_in)
-            return {"code": 0, "message": "Cutting execution recorded.", "data": {"id": e.id}}
-
-        elif action == "list_qr_codes":
-            codes = crud.get_qr_codes(db)
-            return {"code": 0, "data": [{"id": q.id, "code": q.code, "taskId": q.taskId, "quantity": q.quantity} for q in codes]}
-
-        elif action == "generate_qr_code":
-            from app.schemas import QrCodeCreate
-            qr_in = QrCodeCreate(
-                taskId=str(params.get("task_id")),
-                quantity=params.get("quantity", 1)
-            )
-            q = crud.generate_qr_code_for_task(db, qr_in)
-            return {"code": 0, "message": f"QR code generated: {q.code}", "data": {"id": q.id, "code": q.code}}
-
-        elif action == "delete_qr_code":
-            ids = params.get("ids", [params.get("id")])
-            if isinstance(ids, str): ids = [ids]
-            for i in ids:
-                crud.delete_qr_code(db, str(i))
-            return {"code": 0, "message": "QR code deleted."}
 
         elif action == "create_role":
             role_in = schemas.RoleCreate(

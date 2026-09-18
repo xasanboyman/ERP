@@ -64,18 +64,7 @@ const PERMISSION_MAP: Record<string, { resource: string; action: string }> = {
   delete_role: { resource: 'staff.roles', action: 'delete' },
 
   list_branches: { resource: 'products.spisok_tovarov', action: 'view' },
-  create_branch: { resource: 'products.spisok_tovarov', action: 'create' },
-
-  create_cutting_order: { resource: 'cutting.raskroi', action: 'create' },
-  delete_cutting_order: { resource: 'cutting.raskroi', action: 'delete' },
-  list_cutting_orders: { resource: 'cutting.raskroi', action: 'view' },
-  start_production: { resource: 'cutting.raskroi', action: 'update' },
-  list_cutting_tasks: { resource: 'cutting.raskroi', action: 'view' },
-  update_task_status: { resource: 'cutting.raskroi', action: 'update' },
-
-  generate_qr_code: { resource: 'qr_codes.print', action: 'create' },
-  list_qr_codes: { resource: 'qr_codes.print', action: 'view' },
-  delete_qr_code: { resource: 'qr_codes.print', action: 'delete' }
+  create_branch: { resource: 'products.spisok_tovarov', action: 'create' }
 }
 
 class AudioQueue {
@@ -207,7 +196,7 @@ export class AIVoiceClient {
     let roleSection = ''
     if (isSuperAdmin) {
       roleSection = `Siz to'liq administratorlik huquqiga egasiz (Super Admin).
-Siz Model Context Protocol (MCP) orqali ERP tizimidagi barcha modullarni: omborxona, mahsulotlar, savdolar, nasiyalar, HR/xodimlar, oyliklar, ishlab chiqarish (raskroy), QR kodlar va tahlillarni to'liq boshqara olasiz.`
+Siz Model Context Protocol (MCP) orqali ERP tizimidagi barcha modullarni: omborxona, mahsulotlar, savdolar, nasiyalar, HR/xodimlar, oyliklar va tahlillarni to'liq boshqara olasiz.`
     } else {
       const toolsListStr = allowed.join(', ')
       roleSection = `FOYDALANUVCHI VAKOLATI VA HUQUQI (MCP RBAC):
@@ -249,9 +238,6 @@ MODEL CONTEXT PROTOCOL (MCP) ISHLASH PRINSIPLARI:
      * Bo'limlar va lavozimlar: 'list_departments', 'create_department', 'list_positions', 'create_position'.
      * Oylik maoshlar & Vedomost: 'list_salaries', 'create_salary'.
      * Ishbay hajm & Qo'shimchalar: 'create_staff_output', 'create_staff_adjustment'.
-   - ISHLAB CHIQARISH (RASKROY):
-     * Kesish buyurtmalari: 'list_cutting_orders', 'create_cutting_order', 'start_production'.
-     * Jarayonlar va vazifalar: 'get_task_list', 'update_task_status'.
 
 3. MULOQOT STANDARTI:
    - Foydalanuvchi bilan FAQAT o'zbek tilida muloqot qiling.

@@ -287,70 +287,6 @@ async function ensureSchema(sql) {
       );
     `;
     await sql`
-      CREATE TABLE IF NOT EXISTS qr_codes (
-        id VARCHAR PRIMARY KEY,
-        task_id VARCHAR,
-        code VARCHAR,
-        quantity INTEGER DEFAULT 1,
-        status VARCHAR DEFAULT 'active',
-        "createTime" VARCHAR
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS cutting_stages (
-        id VARCHAR PRIMARY KEY,
-        name VARCHAR NOT NULL,
-        code VARCHAR,
-        sequence INTEGER DEFAULT 1,
-        description TEXT,
-        status INTEGER DEFAULT 1,
-        "createTime" VARCHAR
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS cutting_processes (
-        id VARCHAR PRIMARY KEY,
-        name VARCHAR NOT NULL,
-        stage_id VARCHAR,
-        description TEXT,
-        status INTEGER DEFAULT 1,
-        "createTime" VARCHAR
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS cutting_orders (
-        id VARCHAR PRIMARY KEY,
-        order_no VARCHAR,
-        product_name VARCHAR,
-        quantity INTEGER DEFAULT 1,
-        status VARCHAR DEFAULT 'pending',
-        remark TEXT,
-        "createTime" VARCHAR
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS cutting_tasks (
-        id VARCHAR PRIMARY KEY,
-        order_id VARCHAR,
-        task_name VARCHAR,
-        status VARCHAR DEFAULT 'pending',
-        assigned_to VARCHAR,
-        "createTime" VARCHAR
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS cutting_task_executions (
-        id VARCHAR PRIMARY KEY,
-        task_id VARCHAR,
-        worker_id VARCHAR,
-        worker_name VARCHAR,
-        quantity INTEGER DEFAULT 1,
-        status VARCHAR DEFAULT 'completed',
-        remark TEXT,
-        "createTime" VARCHAR
-      );
-    `;
-    await sql`
       CREATE TABLE IF NOT EXISTS debt_payments (
         id VARCHAR(64) PRIMARY KEY,
         receipt_number VARCHAR(64),
@@ -406,7 +342,7 @@ async function ensureSchema(sql) {
         subscription_expires_at TIMESTAMP,
         status VARCHAR(20) DEFAULT 'active',
         max_users INTEGER DEFAULT 10,
-        features JSONB DEFAULT '{"ai_assistant": true, "advanced_analytics": true, "multi_branch": true, "cutting_module": true, "upcoming_features": true}'::jsonb,
+        features JSONB DEFAULT '{"ai_assistant": true, "advanced_analytics": true, "multi_branch": true, "upcoming_features": true}'::jsonb,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
@@ -1593,8 +1529,8 @@ export default async function handler(req, res) {
       }
       const p = (plan || 'basic').toLowerCase();
       const defaultFeatures = p === 'pro'
-        ? { ai_assistant: true, advanced_analytics: true, multi_branch: true, cutting_module: true, upcoming_features: true }
-        : { ai_assistant: false, advanced_analytics: false, multi_branch: false, cutting_module: false, upcoming_features: false };
+        ? { ai_assistant: true, advanced_analytics: true, multi_branch: true, upcoming_features: true }
+        : { ai_assistant: false, advanced_analytics: false, multi_branch: false, upcoming_features: false };
       const feats = features ? JSON.stringify(features) : JSON.stringify(defaultFeatures);
 
       let saved;
@@ -1639,8 +1575,8 @@ export default async function handler(req, res) {
       const pFeatures = features
         ? JSON.stringify(features)
         : (p === 'pro'
-          ? JSON.stringify({ ai_assistant: true, advanced_analytics: true, multi_branch: true, cutting_module: true, upcoming_features: true })
-          : JSON.stringify({ ai_assistant: false, advanced_analytics: false, multi_branch: false, cutting_module: false, upcoming_features: false })
+          ? JSON.stringify({ ai_assistant: true, advanced_analytics: true, multi_branch: true, upcoming_features: true })
+          : JSON.stringify({ ai_assistant: false, advanced_analytics: false, multi_branch: false, upcoming_features: false })
         );
 
       const rows = await sql`
@@ -3469,61 +3405,6 @@ export default async function handler(req, res) {
           ]
         },
         {
-          id: 15,
-          path: '/cutting',
-          name: 'CuttingRoot',
-          title: 'Ishlab Chiqarish & Raskroy',
-          meta: { title: 'Raskroy', icon: 'vi-ep:scissors' },
-          children: [
-            {
-              id: 16,
-              parentId: 15,
-              path: 'order',
-              name: 'CuttingOrder',
-              title: 'Raskroy Buyurtmalari',
-              meta: { title: 'Buyurtmalar', permission: ['cutting:view', 'cutting:create', 'cutting:delete'] },
-              permissionList: [
-                { id: 1, label: 'Ko‘rish', value: 'cutting:view' },
-                { id: 2, label: 'Yaratish', value: 'cutting:create' },
-                { id: 3, label: 'O‘chirish', value: 'cutting:delete' }
-              ]
-            },
-            {
-              id: 17,
-              parentId: 15,
-              path: 'task',
-              name: 'CuttingTask',
-              title: 'Ishlab Chiqarish Vazifalari',
-              meta: { title: 'Vazifalar', permission: ['cutting_task:view', 'cutting_task:update'] },
-              permissionList: [
-                { id: 1, label: 'Ko‘rish', value: 'cutting_task:view' },
-                { id: 2, label: 'Statusni yangilash', value: 'cutting_task:update' }
-              ]
-            }
-          ]
-        },
-        {
-          id: 18,
-          path: '/qr_codes',
-          name: 'QRCodesRoot',
-          title: 'QR Kodlar',
-          meta: { title: 'QR Kodlar', icon: 'vi-ep:camera' },
-          children: [
-            {
-              id: 19,
-              parentId: 18,
-              path: 'print',
-              name: 'QRPrint',
-              title: 'QR Kod Chop Etish',
-              meta: { title: 'Chop Etish', permission: ['qr:view', 'qr:print'] },
-              permissionList: [
-                { id: 1, label: 'Ko‘rish', value: 'qr:view' },
-                { id: 2, label: 'Chop etish', value: 'qr:print' }
-              ]
-            }
-          ]
-        },
-        {
           id: 20,
           path: '/authorization',
           name: 'AuthorizationRoot',
@@ -4338,164 +4219,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // QR Codes CRUD
-    if (path === 'qr/list') {
-      const rows = await sql`SELECT * FROM qr_codes ORDER BY id DESC`;
-      return res.status(200).json({ code: 0, data: rows });
-    }
-    if (path === 'qr/save' && req.method === 'POST') {
-      const { taskId, quantity } = req.body || {};
-      const id = 'QR-' + Date.now().toString().slice(-6);
-      const code = 'KNT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-      await sql`
-        INSERT INTO qr_codes (id, task_id, code, quantity, status, "createTime")
-        VALUES (${id}, ${taskId || 'TASK-01'}, ${code}, ${quantity || 1}, 'active', to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
-      `;
-      return res.status(200).json({ code: 0, data: { id, code }, message: 'QR kod yaratildi' });
-    }
-    if (path === 'qr/delete' && req.method === 'POST') {
-      const { ids } = req.body || {};
-      if (Array.isArray(ids) && ids.length > 0) {
-        await sql`DELETE FROM qr_codes WHERE id = ANY(${ids})`;
-      }
-      return res.status(200).json({ code: 0, message: 'QR kod o\'chirildi' });
-    }
-
-    // Cutting Production Management Endpoints
-    if (path === 'cutting/stage/list') {
-      const rows = await sql`SELECT * FROM cutting_stages ORDER BY sequence ASC, id ASC`;
-      return res.status(200).json({ code: 0, data: rows });
-    }
-    if (path === 'cutting/stage/save' && req.method === 'POST') {
-      const { id, name, code, sequence, description, status } = req.body || {};
-      if (id) {
-        await sql`
-          UPDATE cutting_stages 
-          SET name = ${name}, code = ${code || null}, sequence = ${sequence || 1}, description = ${description || null}, status = ${status !== undefined ? status : 1}
-          WHERE id = ${id}
-        `;
-      } else {
-        const newId = 'STG-' + Date.now().toString().slice(-5);
-        await sql`
-          INSERT INTO cutting_stages (id, name, code, sequence, description, status, "createTime")
-          VALUES (${newId}, ${name}, ${code || null}, ${sequence || 1}, ${description || null}, ${status !== undefined ? status : 1}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
-        `;
-      }
-      return res.status(200).json({ code: 0, message: 'Bosqich saqlandi' });
-    }
-    if (path === 'cutting/stage/delete' && req.method === 'POST') {
-      const { ids } = req.body || {};
-      if (Array.isArray(ids) && ids.length > 0) {
-        await sql`DELETE FROM cutting_stages WHERE id = ANY(${ids})`;
-      }
-      return res.status(200).json({ code: 0, message: 'Bosqich o\'chirildi' });
-    }
-
-    if (path === 'cutting/process/list') {
-      const rows = await sql`SELECT * FROM cutting_processes ORDER BY id ASC`;
-      return res.status(200).json({ code: 0, data: rows });
-    }
-    if (path === 'cutting/process/save' && req.method === 'POST') {
-      const { id, name, stage_id, description, status } = req.body || {};
-      if (id) {
-        await sql`
-          UPDATE cutting_processes 
-          SET name = ${name}, stage_id = ${stage_id || null}, description = ${description || null}, status = ${status !== undefined ? status : 1}
-          WHERE id = ${id}
-        `;
-      } else {
-        const newId = 'PRC-' + Date.now().toString().slice(-5);
-        await sql`
-          INSERT INTO cutting_processes (id, name, stage_id, description, status, "createTime")
-          VALUES (${newId}, ${name}, ${stage_id || null}, ${description || null}, ${status !== undefined ? status : 1}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
-        `;
-      }
-      return res.status(200).json({ code: 0, message: 'Jarayon saqlandi' });
-    }
-    if (path === 'cutting/process/delete' && req.method === 'POST') {
-      const { ids } = req.body || {};
-      if (Array.isArray(ids) && ids.length > 0) {
-        await sql`DELETE FROM cutting_processes WHERE id = ANY(${ids})`;
-      }
-      return res.status(200).json({ code: 0, message: 'Jarayon o\'chirildi' });
-    }
-
-    if (path === 'cutting/order/list') {
-      const rows = await sql`SELECT * FROM cutting_orders ORDER BY id DESC`;
-      return res.status(200).json({ code: 0, data: rows });
-    }
-    if (path === 'cutting/order/save' && req.method === 'POST') {
-      const { id, order_no, product_name, quantity, status, remark } = req.body || {};
-      if (id) {
-        await sql`
-          UPDATE cutting_orders 
-          SET order_no = ${order_no}, product_name = ${product_name}, quantity = ${quantity || 1}, status = ${status || 'pending'}, remark = ${remark || null}
-          WHERE id = ${id}
-        `;
-      } else {
-        const newId = 'ORD-' + Date.now().toString().slice(-6);
-        await sql`
-          INSERT INTO cutting_orders (id, order_no, product_name, quantity, status, remark, "createTime")
-          VALUES (${newId}, ${order_no || ('BUY-' + Date.now().toString().slice(-4))}, ${product_name}, ${quantity || 1}, ${status || 'pending'}, ${remark || null}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
-        `;
-      }
-      return res.status(200).json({ code: 0, message: 'Buyurtma saqlandi' });
-    }
-    if (path === 'cutting/order/delete' && req.method === 'POST') {
-      const { ids } = req.body || {};
-      if (Array.isArray(ids) && ids.length > 0) {
-        await sql`DELETE FROM cutting_orders WHERE id = ANY(${ids})`;
-      }
-      return res.status(200).json({ code: 0, message: 'Buyurtma o\'chirildi' });
-    }
-    if (path === 'cutting/order/start-production' && req.method === 'POST') {
-      const { orderId } = req.body || {};
-      if (orderId) {
-        await sql`UPDATE cutting_orders SET status = 'in_production' WHERE id = ${orderId}`;
-      }
-      return res.status(200).json({ code: 0, message: 'Ishlab chiqarish boshlandi' });
-    }
-
-    if (path === 'cutting/task/list') {
-      const rows = await sql`SELECT * FROM cutting_tasks ORDER BY id DESC`;
-      return res.status(200).json({ code: 0, data: rows });
-    }
-    if (path === 'cutting/task/update-status' && req.method === 'POST') {
-      const { taskId, status } = req.body || {};
-      if (taskId) {
-        await sql`UPDATE cutting_tasks SET status = ${status} WHERE id = ${taskId}`;
-      }
-      return res.status(200).json({ code: 0, message: 'Vazifa holati yangilandi' });
-    }
-    if (path === 'cutting/task/execution/list') {
-      const rows = await sql`SELECT * FROM cutting_task_executions ORDER BY id DESC`;
-      return res.status(200).json({ code: 0, data: rows });
-    }
-    if (path === 'cutting/task/execution/save' && req.method === 'POST') {
-      const { id, task_id, worker_id, worker_name, quantity, status, remark } = req.body || {};
-      if (id) {
-        await sql`
-          UPDATE cutting_task_executions 
-          SET task_id = ${task_id}, worker_id = ${worker_id}, worker_name = ${worker_name}, quantity = ${quantity || 1}, status = ${status || 'completed'}, remark = ${remark || null}
-          WHERE id = ${id}
-        `;
-      } else {
-        const newId = 'EXEC-' + Date.now().toString().slice(-6);
-        await sql`
-          INSERT INTO cutting_task_executions (id, task_id, worker_id, worker_name, quantity, status, remark, "createTime")
-          VALUES (${newId}, ${task_id}, ${worker_id}, ${worker_name}, ${quantity || 1}, ${status || 'completed'}, ${remark || null}, to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'))
-        `;
-      }
-      return res.status(200).json({ code: 0, message: 'Bajarish yozuvi saqlandi' });
-    }
-    if (path === 'cutting/task/execution/delete' && req.method === 'POST') {
-      const { ids } = req.body || {};
-      if (Array.isArray(ids) && ids.length > 0) {
-        await sql`DELETE FROM cutting_task_executions WHERE id = ANY(${ids})`;
-      }
-      return res.status(200).json({ code: 0, message: 'Bajarish yozuvi o\'chirildi' });
-    }
-
     // 22. GET /api/ai/config
     if (path === 'ai/config') {
       const username = req.query?.username || urlSearchParams.get('username') || authUser?.username || authUser?.sub || 'admin';
@@ -4548,8 +4271,6 @@ export default async function handler(req, res) {
           'list_salaries', 'create_salary', 'salary_payout',
           'list_roles', 'create_role', 'delete_role',
           'list_branches', 'create_branch',
-          'create_cutting_order', 'delete_cutting_order', 'list_cutting_orders', 'start_production', 'list_cutting_tasks', 'update_task_status',
-          'generate_qr_code', 'list_qr_codes', 'delete_qr_code',
           'get_top_selling_products', 'get_sales_analytics', 'get_debt_report'
         ];
       } else {

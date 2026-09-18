@@ -8,15 +8,6 @@ import {
 import { getDepartmentApi, saveDepartmentApi, deleteDepartmentApi } from '@/api/department'
 import { getSalesListApi, getDebtorsApi, repayDebtApi, getSaleReceiptApi } from '@/api/sales'
 import { getPendingSalesPushApi, respondSalesPushApi } from '@/api/device'
-import {
-  getOrderListApi,
-  saveOrderApi,
-  deleteOrderApi,
-  startProductionApi,
-  getTaskListApi,
-  updateTaskStatusApi
-} from '@/api/cutting'
-import { getQrListApi, saveQrApi, deleteQrApi } from '@/api/qr'
 import { getSalaryListApi, saveSalaryApi, bulkSalaryPayoutApi } from '@/api/salary'
 import { getRoleListApi, saveRoleApi, deleteRoleApi } from '@/api/role'
 import { getBranchListApi, saveBranchApi } from '@/api/branch'
@@ -54,16 +45,6 @@ export const notifyDataUpdated = (action: string, params?: any) => {
     }
     if (['create_branch'].includes(action)) {
       bus.emit('refresh-branches')
-    }
-    if (
-      [
-        'create_cutting_order',
-        'delete_cutting_order',
-        'start_production',
-        'update_task_status'
-      ].includes(action)
-    ) {
-      bus.emit('refresh-cutting')
     }
     if (['create_timesheet', 'create_staff_output', 'create_staff_adjustment'].includes(action)) {
       bus.emit('refresh-hr')
@@ -447,26 +428,7 @@ const PERMISSION_MAP: Record<string, { resource: string; action: string; legacy?
     resource: 'products.spisok_tovarov',
     action: 'create',
     legacy: ['branch:create']
-  },
-
-  create_cutting_order: {
-    resource: 'cutting.raskroi',
-    action: 'create',
-    legacy: ['cutting:create']
-  },
-  delete_cutting_order: {
-    resource: 'cutting.raskroi',
-    action: 'delete',
-    legacy: ['cutting:delete']
-  },
-  list_cutting_orders: { resource: 'cutting.raskroi', action: 'view', legacy: ['cutting:view'] },
-  start_production: { resource: 'cutting.raskroi', action: 'update', legacy: ['cutting:edit'] },
-  list_cutting_tasks: { resource: 'cutting.raskroi', action: 'view', legacy: ['cutting:view'] },
-  update_task_status: { resource: 'cutting.raskroi', action: 'update', legacy: ['cutting:edit'] },
-
-  generate_qr_code: { resource: 'qr_codes.print', action: 'create', legacy: ['qr:create'] },
-  list_qr_codes: { resource: 'qr_codes.print', action: 'view', legacy: ['qr:view'] },
-  delete_qr_code: { resource: 'qr_codes.print', action: 'delete', legacy: ['qr:delete'] }
+  }
 }
 
 async function _dispatchAIFunctionInternal(action: string, params: any): Promise<AIDispatchResult> {
@@ -983,76 +945,6 @@ async function _dispatchAIFunctionInternal(action: string, params: any): Promise
       }
 
       // ═══════════════════════════════════════════════════════
-      // CUTTING / PRODUCTION  →  /cutting/*
-      // ═══════════════════════════════════════════════════════
-      case 'list_cutting_orders': {
-        const res = await getOrderListApi()
-        return {
-          code: 0,
-          message: 'Buyurtmalar olindi.',
-          data: res.data,
-          requests: ['GET /cutting/order/list']
-        }
-      }
-
-      case 'create_cutting_order': {
-        const res = await saveOrderApi({
-          order_number: params.order_number || `ORD-${Math.floor(Math.random() * 899999 + 100000)}`,
-          project: params.project || '',
-          order_name: params.order_name || '',
-          items: params.items || []
-        })
-        return {
-          code: 0,
-          message: `Buyurtma yaratildi.`,
-          data: res.data,
-          requests: ['POST /cutting/order/save']
-        }
-      }
-
-      case 'delete_cutting_order': {
-        await deleteOrderApi({ ids: [String(params.order_id)] })
-        return {
-          code: 0,
-          message: `Raskroy buyurtmasi o'chirildi.`,
-          requests: [`POST /cutting/order/delete [ID: ${params.order_id}]`]
-        }
-      }
-
-      case 'start_production': {
-        const res = await startProductionApi({ orderId: String(params.order_id) })
-        return {
-          code: 0,
-          message: `Ishlab chiqarish boshlandi.`,
-          data: res.data,
-          requests: [`POST /cutting/order/start-production [ID: ${params.order_id}]`]
-        }
-      }
-
-      case 'list_cutting_tasks': {
-        const res = await getTaskListApi()
-        return {
-          code: 0,
-          message: 'Topshiriqlar olindi.',
-          data: res.data,
-          requests: ['GET /cutting/task/list']
-        }
-      }
-
-      case 'update_task_status': {
-        const res = await updateTaskStatusApi({
-          taskId: String(params.task_id),
-          status: params.status
-        })
-        return {
-          code: 0,
-          message: `Topshiriq holati yangilandi.`,
-          data: res.data,
-          requests: [`POST /cutting/task/update-status`]
-        }
-      }
-
-      // ═══════════════════════════════════════════════════════
       // DEVICE PUSH  →  /sales/pending-pushes
       // ═══════════════════════════════════════════════════════
       case 'list_pending_pushes': {
@@ -1072,36 +964,6 @@ async function _dispatchAIFunctionInternal(action: string, params: any): Promise
           message: `Push habari ${params.action === 'accept' ? 'qabul qilindi' : 'rad etildi'}.`,
           data: res.data,
           requests: [`POST /sales/respond-push [PushID: ${params.push_id}]`]
-        }
-      }
-
-      // ═══════════════════════════════════════════════════════
-      // QR CODES  →  /qr/*
-      // ═══════════════════════════════════════════════════════
-      case 'generate_qr_code': {
-        const res = await saveQrApi({
-          taskId: String(params.task_id),
-          quantity: Number(params.quantity || 1)
-        })
-        return {
-          code: 0,
-          message: `QR kod generatsiya qilindi.`,
-          data: res.data,
-          requests: ['POST /qr/save']
-        }
-      }
-
-      case 'list_qr_codes': {
-        const res = await getQrListApi()
-        return { code: 0, message: 'QR kodlar olindi.', data: res.data, requests: ['GET /qr/list'] }
-      }
-
-      case 'delete_qr_code': {
-        await deleteQrApi({ ids: [String(params.qr_id)] })
-        return {
-          code: 0,
-          message: `QR kod o'chirildi.`,
-          requests: [`POST /qr/delete [ID: ${params.qr_id}]`]
         }
       }
 

@@ -663,6 +663,7 @@ def get_roles_table(
     }
 
 @router.get("/menu/list")
+@router.get("/mock/menu/list")
 def get_menu_list():
     return {
         "code": 0,

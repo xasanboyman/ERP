@@ -36,7 +36,6 @@ class RealtimeService {
     if (lower.startsWith('product')) return 'product'
     if (lower.startsWith('sale') && !lower.includes('push')) return 'sale'
     if (lower.includes('push')) return 'sales_push'
-    if (lower.startsWith('cutting')) return 'cutting'
     if (lower.startsWith('worker')) return 'worker'
     if (lower.startsWith('salary')) return 'salary'
     if (
