@@ -110,6 +110,24 @@ def check_user_access(
 
     user_perms_lower = set(str(p).lower().strip() for p in user_perms)
 
+    # Cashier restriction: cashiers cannot perform admin-only actions
+    is_cashier = "cashier" in role_str or "kassir" in role_str
+    if is_cashier:
+        admin_only_perms = {
+            "debtors:repay", "debtors:manage",
+            "dashboard:view", "analysis:view", "analysis",
+            "worker:view", "worker:create", "worker:edit", "worker:delete", "workers",
+            "department:manage", "role:manage",
+            "salary:view", "timesheet:view", "output:view", "adjustment:view",
+            "product:delete"
+        }
+        has_allowed_option = any(p.lower().strip() not in admin_only_perms for p in required_permissions)
+        if not has_allowed_option:
+            raise HTTPException(
+                status_code=403,
+                detail="Kassir hisobiga bu amalni bajarish ruxsat etilmagan!"
+            )
+
     if "*.*.*" in user_perms_lower or "*" in user_perms_lower:
         return True
 

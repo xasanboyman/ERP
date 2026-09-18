@@ -733,15 +733,23 @@ async function checkUserAccess(authUser, requiredPermissions, sql) {
   if (isSuper) return { ok: true };
   if (roleStr.includes('admin') || roleStr.includes('administrator')) return { ok: true };
 
-  // Explicit protection: cashiers must never access sensitive administrative or debtor ledger endpoints
+  // Explicit cashier restriction: Cashiers can NEVER access administrative or debt repayment endpoints
   const isCashier = roleStr.includes('cashier') || roleStr.includes('kassir');
   if (isCashier) {
-    const forbiddenForCashier = ['debtors', 'debtors:view', 'debtors:manage', 'debtors:repay', 'dashboard:view', 'analysis:view', 'worker:view', 'worker:create', 'department:manage', 'role:manage', 'salary:view'];
-    if (requiredPermissions.some(p => forbiddenForCashier.includes(p.toLowerCase().trim()))) {
+    const adminOnlyPerms = new Set([
+      'debtors:repay', 'debtors:manage',
+      'dashboard:view', 'analysis:view', 'analysis',
+      'worker:view', 'worker:create', 'worker:edit', 'worker:delete', 'workers',
+      'department:manage', 'role:manage',
+      'salary:view', 'timesheet:view', 'output:view', 'adjustment:view',
+      'product:delete'
+    ]);
+    const hasAllowedOption = requiredPermissions.some(p => !adminOnlyPerms.has(p.toLowerCase().trim()));
+    if (!hasAllowedOption) {
       return {
         ok: false,
         status: 403,
-        message: "Kassir hisobiga bu ma'lumotlarni ko'rish ruxsat etilmagan!"
+        message: "Kassir hisobiga bu ma'lumotlarni ko'rish yoki amalni bajarish ruxsat etilmagan!"
       };
     }
   }
@@ -2427,7 +2435,7 @@ export default async function handler(req, res) {
 
     // GET /api/sales/debtors
     if (path === 'sales/debtors') {
-      const access = await checkUserAccess(authUser, ['debtors:view', 'debtors:manage', 'debtors', '/sales/debtors'], sql);
+      const access = await checkUserAccess(authUser, ['debtors:view', 'debtors:manage', 'debtors', 'pos:nasiya', 'sales:pos:checkout', 'sales:pos:view', '/sales/debtors'], sql);
       if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       try {
         const search = (req.query?.search || urlSearchParams.get('search') || '').toLowerCase().trim();
