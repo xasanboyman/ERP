@@ -7,6 +7,7 @@ import { usePermissionStoreWithOut } from '@/store/modules/permission'
 import { usePageLoading } from '@/hooks/web/usePageLoading'
 import { NO_REDIRECT_WHITE_LIST } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'
+import { useTagsViewStoreWithOut } from '@/store/modules/tagsView'
 import { preloadAllViewsAndData } from '@/utils/routerHelper'
 import { getAdminRoleApi } from '@/api/login'
 
@@ -92,6 +93,7 @@ router.beforeEach(async (to, from, next) => {
       role === 'super administrator' ||
       role === 'superadmin' ||
       user?.username === 'admin'
+    const isCashier = role.includes('cashier') || role.includes('kassir')
 
     // If not super admin, strictly block access to company management under all conditions
     if (!isSuper && to.path.toLowerCase().startsWith('/company')) {
@@ -99,22 +101,69 @@ router.beforeEach(async (to, from, next) => {
       return
     }
 
+    // Strict cashier boundary: cashiers can ONLY access POS and Products
+    if (isCashier) {
+      const targetLower = to.path.toLowerCase()
+      if (
+        targetLower.startsWith('/dashboard') ||
+        targetLower.startsWith('/sales/debtors') ||
+        targetLower.startsWith('/hr') ||
+        targetLower.startsWith('/authorization') ||
+        targetLower.startsWith('/company')
+      ) {
+        next({ path: '/sales/pos', replace: true })
+        return
+      }
+      if (to.path === '/' || to.path === '') {
+        next({ path: '/sales/pos', replace: true })
+        return
+      }
+    }
+
     if (permissionStore.getIsAddRouters) {
+      const tagsViewStore = useTagsViewStoreWithOut()
+      const allowedPaths = extractAllRoutePaths(permissionStore.getRouters)
+      tagsViewStore.pruneUnauthorizedViews(allowedPaths)
+
       // If not super admin, check if path is authorized
       if (!isSuper) {
-        const allowedPaths = extractAllRoutePaths(permissionStore.getRouters)
         const targetPath = to.path.toLowerCase().replace(/\/$/, '')
-        const isAllowed =
+        let isAllowed =
           targetPath === '' ||
           targetPath === '/' ||
           targetPath === '/404' ||
           targetPath === '/login' ||
           targetPath === '/redirect' ||
-          allowedPaths.includes(targetPath) ||
-          allowedPaths.some((p) => p !== '' && p !== '/' && targetPath.startsWith(p + '/'))
+          allowedPaths.includes(targetPath)
 
         if (!isAllowed) {
-          const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
+          isAllowed = allowedPaths.some(
+            (p) =>
+              p !== '' &&
+              p !== '/' &&
+              p !== '/sales' &&
+              p !== '/product' &&
+              p !== '/dashboard' &&
+              p !== '/hr' &&
+              p !== '/authorization' &&
+              targetPath.startsWith(p + '/')
+          )
+        }
+
+        if (isCashier) {
+          if (
+            targetPath.startsWith('/dashboard') ||
+            targetPath.startsWith('/sales/debtors') ||
+            targetPath.startsWith('/hr') ||
+            targetPath.startsWith('/authorization') ||
+            targetPath.startsWith('/company')
+          ) {
+            isAllowed = false
+          }
+        }
+
+        if (!isAllowed) {
+          const firstPath = isCashier ? '/sales/pos' : getFirstRoutePath(permissionStore.getAddRouters)
           if (firstPath && firstPath !== to.path && firstPath !== '/login') {
             next({ path: firstPath, replace: true })
             return
@@ -130,7 +179,7 @@ router.beforeEach(async (to, from, next) => {
         matched.length === 0 ||
         matched.some((m) => m.name === 'NoFind')
       ) {
-        const firstPath = getFirstRoutePath(permissionStore.getAddRouters)
+        const firstPath = isCashier ? '/sales/pos' : getFirstRoutePath(permissionStore.getAddRouters)
         if (firstPath && firstPath !== to.path && firstPath !== '/login') {
           next({ path: firstPath, replace: true })
           return
@@ -161,6 +210,30 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
+    // Strictly restrict cashier routes on the client side
+    if (isCashier) {
+      if (Array.isArray(roleRouters) && roleRouters.length > 0) {
+        roleRouters = roleRouters
+          .filter((r: any) => {
+            const path = (r.path || '').toLowerCase()
+            return path === '/sales' || path === '/product'
+          })
+          .map((r: any) => {
+            const rCopy = JSON.parse(JSON.stringify(r))
+            if (rCopy.children) {
+              rCopy.children = rCopy.children.filter((c: any) => {
+                const cPath = (c.path || '').toLowerCase()
+                return (
+                  (rCopy.path === '/sales' && cPath === 'pos') ||
+                  (rCopy.path === '/product' && cPath === 'list')
+                )
+              })
+            }
+            return rCopy
+          })
+      }
+    }
+
     if (appStore.getDynamicRouter && roleRouters.length > 0) {
       appStore.serverDynamicRouter
         ? await permissionStore.generateRoutes('server', roleRouters as AppCustomRouteRecordRaw[])
@@ -176,27 +249,42 @@ router.beforeEach(async (to, from, next) => {
       ])
     }
 
-      permissionStore.getAddRouters.forEach((route) => {
-        router.addRoute(route as unknown as RouteRecordRaw)
-      })
-      permissionStore.setIsAddRouters(true)
+    permissionStore.getAddRouters.forEach((route) => {
+      router.addRoute(route as unknown as RouteRecordRaw)
+    })
+    permissionStore.setIsAddRouters(true)
 
-      const rawRedirect = from.query.redirect || to.path
-      let decodedRedirect = decodeURIComponent(rawRedirect as string)
-      if (!isSuper && decodedRedirect.toLowerCase().startsWith('/company')) {
-        decodedRedirect = '/404'
-      }
-      const matched = router.resolve(decodedRedirect).matched
-      const isValidRedirect =
-        matched &&
-        matched.length > 0 &&
-        !matched.some((m) => m.name === 'NoFind') &&
-        decodedRedirect !== '/'
+    const tagsViewStore = useTagsViewStoreWithOut()
+    const allowedPaths = extractAllRoutePaths(permissionStore.getRouters)
+    tagsViewStore.pruneUnauthorizedViews(allowedPaths)
 
-      const targetPath = isValidRedirect
-        ? decodedRedirect
-        : getFirstRoutePath(permissionStore.getAddRouters)
-      next({ path: targetPath, replace: true })
+    const rawRedirect = from.query.redirect || to.path
+    let decodedRedirect = decodeURIComponent(rawRedirect as string)
+    if (!isSuper && decodedRedirect.toLowerCase().startsWith('/company')) {
+      decodedRedirect = '/404'
+    }
+    if (
+      isCashier &&
+      (decodedRedirect.toLowerCase().startsWith('/dashboard') ||
+        decodedRedirect.toLowerCase().startsWith('/sales/debtors') ||
+        decodedRedirect.toLowerCase().startsWith('/hr') ||
+        decodedRedirect.toLowerCase().startsWith('/authorization') ||
+        decodedRedirect === '/' ||
+        decodedRedirect === '/login')
+    ) {
+      decodedRedirect = '/sales/pos'
+    }
+    const matched = router.resolve(decodedRedirect).matched
+    const isValidRedirect =
+      matched &&
+      matched.length > 0 &&
+      !matched.some((m) => m.name === 'NoFind') &&
+      decodedRedirect !== '/'
+
+    const targetPath = isValidRedirect
+      ? decodedRedirect
+      : (isCashier ? '/sales/pos' : getFirstRoutePath(permissionStore.getAddRouters))
+    next({ path: targetPath, replace: true })
   } else {
     if (NO_REDIRECT_WHITE_LIST.indexOf(to.path) !== -1 || to.path.startsWith('/mobile')) {
       next()

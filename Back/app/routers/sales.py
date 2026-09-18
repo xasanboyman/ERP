@@ -345,7 +345,7 @@ def get_debtors(
     current_user = get_current_user_from_header(authorization, db)
     if not current_user:
         raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
-    check_user_access(current_user, ["pos:nasiya", "debtors", "debtors:view", "/sales/debtors"], db)
+    check_user_access(current_user, ["debtors:view", "debtors:manage", "debtors", "/sales/debtors"], db)
 
     from app.routers.product import get_user_company_id
     target_company = get_user_company_id(authorization, db, company_id)
@@ -519,7 +519,7 @@ def repay_debt(
     current_user = get_current_user_from_header(authorization, db)
     if not current_user:
         raise HTTPException(status_code=401, detail="Tizimga kirilmagan yoki sessiya yaroqsiz")
-    check_user_access(current_user, ["pos:nasiya", "debtors", "debtors:view", "/sales/debtors"], db)
+    check_user_access(current_user, ["debtors:repay", "debtors:manage", "debtors", "/sales/debtors"], db)
 
     from app.routers.product import get_user_company_id
     target_company = get_user_company_id(authorization, db, getattr(payment_in, "company_id", None))

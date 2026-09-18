@@ -635,18 +635,18 @@ const COMPANY_MANAGEMENT_ROUTE = {
 const COMPANY_USER_ROUTES = JSON.parse(JSON.stringify(DEFAULT_ADMIN_ROUTES));
 
 const ROUTE_PERMISSION_MAP = {
-  '/dashboard/analysis': ['dashboard:view', 'analysis:view', 'analysis', '/dashboard', '/dashboard/analysis'],
-  '/dashboard/workplace': ['workplace:view', 'workplace', '/dashboard', '/dashboard/workplace'],
-  '/product/list': ['product:view', 'product:create', 'product:edit', 'product:delete', 'product', 'list', '/product', '/product/list'],
-  '/sales/pos': ['sales:pos:view', 'sales:pos:checkout', 'pos:sell', 'pos:discount', 'pos:nasiya', 'pos:history', 'pos', 'sales', '/sales', '/sales/pos'],
-  '/sales/debtors': ['debtors', 'debtors:view', 'pos:nasiya', '/sales/debtors'],
-  '/hr/workers': ['worker:view', 'worker:create', 'worker:edit', 'worker:delete', 'worker', 'workers', 'hr:workers', '/hr/workers', '/hr'],
+  '/dashboard/analysis': ['analysis:view', 'dashboard:analysis', 'dashboard:view'],
+  '/dashboard/workplace': ['workplace:view', 'dashboard:workplace'],
+  '/product/list': ['product:view', 'product:create', 'product:edit', 'product:delete', 'product', 'list', '/product/list'],
+  '/sales/pos': ['sales:pos:view', 'sales:pos:checkout', 'sales:pos', 'pos:sell', 'pos:view', 'pos:discount', 'pos:nasiya', 'pos:history', 'pos', '/sales/pos'],
+  '/sales/debtors': ['debtors:view', 'debtors:manage', 'debtors:repay', 'debtors:history', 'debtors:export', 'debtors', '/sales/debtors'],
+  '/hr/workers': ['worker:view', 'worker:create', 'worker:edit', 'worker:delete', 'workers', 'worker', 'hr:workers', '/hr/workers'],
   '/hr/timesheets': ['timesheet:view', 'timesheets', '/hr/timesheets'],
   '/hr/outputs': ['output:view', 'outputs', '/hr/outputs'],
   '/hr/adjustments': ['adjustment:view', 'adjustments', '/hr/adjustments'],
   '/hr/salary': ['salary:view', 'salary', '/hr/salary'],
-  '/authorization/department': ['department:manage', 'department', '/authorization/department', '/authorization'],
-  '/authorization/role': ['role:manage', 'role', '/authorization/role', '/authorization']
+  '/authorization/department': ['department:manage', 'department', '/authorization/department'],
+  '/authorization/role': ['role:manage', 'role', '/authorization/role']
 };
 
 function filterRoutesForUser(user, permissions) {
@@ -661,10 +661,36 @@ function filterRoutesForUser(user, permissions) {
   }
 
   const isAdmin = roleStr.includes('admin') || roleStr.includes('administrator');
+  if (isAdmin) {
+    return JSON.parse(JSON.stringify(COMPANY_USER_ROUTES));
+  }
+
+  // CASHIER ROLE ENFORCEMENT:
+  // Cashiers must ONLY have access to POS (/sales/pos) and optionally Products (/product/list).
+  // Under NO circumstances should a Cashier ever have Dashboard, Debtors, HR, or Authorization!
+  const isCashier = roleStr.includes('cashier') || roleStr.includes('kassir');
+  if (isCashier) {
+    const cashierRoutes = [];
+    for (const parent of COMPANY_USER_ROUTES) {
+      if (parent.path === '/sales') {
+        const parentCopy = JSON.parse(JSON.stringify(parent));
+        parentCopy.children = (parent.children || []).filter(c => c.path === 'pos');
+        parentCopy.redirect = '/sales/pos';
+        cashierRoutes.push(parentCopy);
+      } else if (parent.path === '/product') {
+        const parentCopy = JSON.parse(JSON.stringify(parent));
+        parentCopy.children = (parent.children || []).filter(c => c.path === 'list');
+        parentCopy.redirect = '/product/list';
+        cashierRoutes.push(parentCopy);
+      }
+    }
+    return cashierRoutes;
+  }
+
   const userPerms = Array.isArray(permissions) ? permissions : [];
   const userPermsLower = new Set(userPerms.map(p => String(p).toLowerCase().trim()));
 
-  if (userPermsLower.has('*.*.*') || userPermsLower.has('*') || isAdmin) {
+  if (userPermsLower.has('*.*.*') || userPermsLower.has('*')) {
     return JSON.parse(JSON.stringify(COMPANY_USER_ROUTES));
   }
 
@@ -672,11 +698,6 @@ function filterRoutesForUser(user, permissions) {
   for (const parent of COMPANY_USER_ROUTES) {
     const parentPath = parent.path.toLowerCase();
     const children = parent.children || [];
-
-    if (userPermsLower.has(parentPath)) {
-      allowedRoutes.push(JSON.parse(JSON.stringify(parent)));
-      continue;
-    }
 
     const allowedChildren = [];
     for (const child of children) {
@@ -711,6 +732,19 @@ async function checkUserAccess(authUser, requiredPermissions, sql) {
 
   if (isSuper) return { ok: true };
   if (roleStr.includes('admin') || roleStr.includes('administrator')) return { ok: true };
+
+  // Explicit protection: cashiers must never access sensitive administrative or debtor ledger endpoints
+  const isCashier = roleStr.includes('cashier') || roleStr.includes('kassir');
+  if (isCashier) {
+    const forbiddenForCashier = ['debtors', 'debtors:view', 'debtors:manage', 'debtors:repay', 'dashboard:view', 'analysis:view', 'worker:view', 'worker:create', 'department:manage', 'role:manage', 'salary:view'];
+    if (requiredPermissions.some(p => forbiddenForCashier.includes(p.toLowerCase().trim()))) {
+      return {
+        ok: false,
+        status: 403,
+        message: "Kassir hisobiga bu ma'lumotlarni ko'rish ruxsat etilmagan!"
+      };
+    }
+  }
 
   let userPerms = authUser.permissions || [];
   if (typeof userPerms === 'string') {
@@ -2393,7 +2427,7 @@ export default async function handler(req, res) {
 
     // GET /api/sales/debtors
     if (path === 'sales/debtors') {
-      const access = await checkUserAccess(authUser, ['pos:nasiya', 'debtors', 'debtors:view', '/sales/debtors'], sql);
+      const access = await checkUserAccess(authUser, ['debtors:view', 'debtors:manage', 'debtors', '/sales/debtors'], sql);
       if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       try {
         const search = (req.query?.search || urlSearchParams.get('search') || '').toLowerCase().trim();
@@ -2563,7 +2597,7 @@ export default async function handler(req, res) {
 
     // POST /api/sales/repay-debt
     if (path === 'sales/repay-debt' && req.method === 'POST') {
-      const access = await checkUserAccess(authUser, ['pos:nasiya', 'debtors', 'debtors:repay', '/sales/debtors'], sql);
+      const access = await checkUserAccess(authUser, ['debtors:repay', 'debtors:manage', 'debtors', '/sales/debtors'], sql);
       if (!access.ok) return res.status(access.status).json({ code: access.status, message: access.message });
       try {
         const { customer_name, customer_phone, amount, payment_method, cashier_name, remark } = req.body || {};

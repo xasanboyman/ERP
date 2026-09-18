@@ -13,6 +13,7 @@ import { UserType } from '@/api/login/types'
 import { useValidator } from '@/hooks/web/useValidator'
 import { Icon } from '@/components/Icon'
 import { useUserStore } from '@/store/modules/user'
+import { useTagsViewStore } from '@/store/modules/tagsView'
 import { BaseButton } from '@/components/Button'
 import { SUCCESS_CODE } from '@/constants'
 
@@ -21,6 +22,8 @@ const { required } = useValidator()
 const appStore = useAppStore()
 
 const userStore = useUserStore()
+
+const tagsViewStore = useTagsViewStore()
 
 const permissionStore = usePermissionStore()
 
@@ -218,6 +221,8 @@ const signIn = async () => {
           userStore.setRememberMe(unref(remember))
           userStore.setToken((res.data as any).token)
           userStore.setUserInfo(res.data)
+          // Wipe all visited tagsView tabs from any previous session!
+          tagsViewStore.clearAll()
           // 是否使用动态路由
           if (appStore.getDynamicRouter) {
             getRole()
@@ -229,7 +234,7 @@ const signIn = async () => {
             const targetPath =
               redirect.value && redirect.value !== '/404' && redirect.value !== '/login'
                 ? redirect.value
-                : permissionStore.addRouters[0]?.path || '/dashboard/workplace'
+                : permissionStore.addRouters[0]?.path || '/sales/pos'
             push({ path: targetPath })
           }
         } else {
@@ -246,6 +251,21 @@ const signIn = async () => {
       }
     }
   })
+}
+
+const extractAllRoutePaths = (routes: any[], parent = ''): string[] => {
+  let result: string[] = []
+  for (const r of routes) {
+    if (!r.path || r.meta?.hidden) continue
+    const full = r.path.startsWith('/')
+      ? r.path
+      : `${parent}/${r.path}`.replace(/\/+/g, '/')
+    result.push(full.toLowerCase().replace(/\/$/, ''))
+    if (r.children && r.children.length > 0) {
+      result = result.concat(extractAllRoutePaths(r.children, full))
+    }
+  }
+  return result
 }
 
 const getFirstRoutePath = (routes: any[]): string => {
@@ -288,14 +308,47 @@ const getRole = async () => {
     })
     permissionStore.setIsAddRouters(true)
 
+    const allowedPaths = extractAllRoutePaths(permissionStore.getRouters)
+    tagsViewStore.pruneUnauthorizedViews(allowedPaths)
+
     const firstAllowed = getFirstRoutePath(permissionStore.getAddRouters)
-    const targetPath =
+    const userInfo = userStore.getUserInfo
+    const roleStr = String(userInfo?.role || '').toLowerCase()
+    const isCashier = roleStr.includes('cashier') || roleStr.includes('kassir')
+
+    let targetPath = firstAllowed
+    if (
       redirect.value &&
       redirect.value !== '/404' &&
       redirect.value !== '/login' &&
       redirect.value !== '/'
-        ? redirect.value
-        : firstAllowed
+    ) {
+      const cleanRedirect = redirect.value.toLowerCase().replace(/\/$/, '')
+      const isRedirectAllowed =
+        allowedPaths.includes(cleanRedirect) &&
+        (!isCashier ||
+          (!cleanRedirect.startsWith('/dashboard') &&
+            !cleanRedirect.startsWith('/sales/debtors') &&
+            !cleanRedirect.startsWith('/hr') &&
+            !cleanRedirect.startsWith('/authorization') &&
+            !cleanRedirect.startsWith('/company')))
+
+      if (isRedirectAllowed) {
+        targetPath = redirect.value
+      }
+    }
+
+    if (
+      isCashier &&
+      (!targetPath ||
+        targetPath.startsWith('/dashboard') ||
+        targetPath.startsWith('/sales/debtors') ||
+        targetPath === '/login' ||
+        targetPath === '/')
+    ) {
+      targetPath = '/sales/pos'
+    }
+
     push({ path: targetPath })
   }
 }

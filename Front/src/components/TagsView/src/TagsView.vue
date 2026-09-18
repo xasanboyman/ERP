@@ -31,7 +31,32 @@ const routers = computed(() => permissionStore.getRouters)
 
 const tagsViewStore = useTagsViewStore()
 
-const visitedViews = computed(() => tagsViewStore.getVisitedViews)
+function extractAllRoutePaths(routes: any[], parent = ''): string[] {
+  let result: string[] = []
+  for (const r of routes) {
+    if (!r.path || r.meta?.hidden) continue
+    const full = r.path.startsWith('/')
+      ? r.path
+      : `${parent}/${r.path}`.replace(/\/+/g, '/')
+    result.push(full.toLowerCase().replace(/\/$/, ''))
+    if (r.children && r.children.length > 0) {
+      result = result.concat(extractAllRoutePaths(r.children, full))
+    }
+  }
+  return result
+}
+
+const visitedViews = computed(() => {
+  const allowedList = extractAllRoutePaths(unref(routers))
+  if (!allowedList || allowedList.length === 0) {
+    return tagsViewStore.getVisitedViews
+  }
+  const allowed = new Set(allowedList)
+  return tagsViewStore.getVisitedViews.filter((item) => {
+    const itemPath = (item.path || '').toLowerCase().replace(/\/$/, '')
+    return allowed.has(itemPath) || allowed.has('/' + itemPath.replace(/^\//, ''))
+  })
+})
 
 const affixTagArr = ref<RouteLocationNormalizedLoaded[]>([])
 
@@ -58,8 +83,16 @@ const initTags = () => {
 
 // 新增tag
 const addTags = () => {
-  const { name } = unref(currentRoute)
+  const { name, path } = unref(currentRoute)
   if (name) {
+    const allowedList = extractAllRoutePaths(unref(routers))
+    if (allowedList && allowedList.length > 0) {
+      const allowed = new Set(allowedList)
+      const cleanPath = (path || '').toLowerCase().replace(/\/$/, '')
+      if (!allowed.has(cleanPath) && !allowed.has('/' + cleanPath.replace(/^\//, ''))) {
+        return
+      }
+    }
     setSelectTag(unref(currentRoute))
     tagsViewStore.addView(unref(currentRoute))
   }

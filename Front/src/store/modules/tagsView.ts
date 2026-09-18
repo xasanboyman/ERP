@@ -88,6 +88,21 @@ export const useTagsViewStore = defineStore('tagsView', {
       this.delAllVisitedViews()
       this.addCachedView()
     },
+    // 强制彻底清空所有tag和缓存
+    clearAll() {
+      this.visitedViews = []
+      this.cachedViews = new Set()
+      this.selectedTag = undefined
+    },
+    // 清理未授权路由标签
+    pruneUnauthorizedViews(allowedPaths: string[]) {
+      const allowedSet = new Set(allowedPaths.map((p) => p.toLowerCase().replace(/\/$/, '')))
+      this.visitedViews = this.visitedViews.filter((v) => {
+        const p = (v.path || '').toLowerCase().replace(/\/$/, '')
+        return allowedSet.has(p) || allowedSet.has('/' + p.replace(/^\//, ''))
+      })
+      this.addCachedView()
+    },
     // 删除所有tag
     delAllVisitedViews() {
       const userStore = useUserStoreWithOut()

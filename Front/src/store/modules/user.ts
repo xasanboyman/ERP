@@ -82,7 +82,7 @@ export const useUserStore = defineStore('user', {
     },
     reset() {
       const tagsViewStore = useTagsViewStore()
-      tagsViewStore.delAllViews()
+      tagsViewStore.clearAll()
       this.setToken('')
       this.setUserInfo(undefined)
       this.setRoleRouters([])

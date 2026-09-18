@@ -540,30 +540,43 @@ def get_role_menu_list(
     if "*.*.*" in user_perms_lower or "*" in user_perms_lower or is_admin:
         return {"code": 0, "data": COMPANY_USER_ROUTES}
 
+    # Strict Cashier restriction: cashiers must ONLY see POS (/sales/pos) and Products (/product/list)
+    is_cashier = "cashier" in role_str or "kassir" in role_str
+    if is_cashier:
+        cashier_routes = []
+        for parent in COMPANY_USER_ROUTES:
+            if parent.get("path") == "/sales":
+                parent_copy = copy.deepcopy(parent)
+                parent_copy["children"] = [c for c in parent.get("children", []) if c.get("path") == "pos"]
+                parent_copy["redirect"] = "/sales/pos"
+                cashier_routes.append(parent_copy)
+            elif parent.get("path") == "/product":
+                parent_copy = copy.deepcopy(parent)
+                parent_copy["children"] = [c for c in parent.get("children", []) if c.get("path") == "list"]
+                parent_copy["redirect"] = "/product/list"
+                cashier_routes.append(parent_copy)
+        return {"code": 0, "data": cashier_routes}
+
     # Filter COMPANY_USER_ROUTES strictly based on user's specific permissions:
     ROUTE_PERMISSION_MAP = {
-        "/dashboard/analysis": ["dashboard:view", "analysis:view", "analysis", "/dashboard", "/dashboard/analysis"],
-        "/dashboard/workplace": ["workplace:view", "workplace", "/dashboard", "/dashboard/workplace"],
-        "/product/list": ["product:view", "product:create", "product:edit", "product:delete", "product", "list", "/product", "/product/list"],
-        "/sales/pos": ["sales:pos:view", "sales:pos:checkout", "pos:sell", "pos:discount", "pos:nasiya", "pos:history", "pos", "sales", "/sales", "/sales/pos"],
-        "/sales/debtors": ["debtors", "debtors:view", "pos:nasiya", "/sales/debtors"],
-        "/hr/workers": ["worker:view", "worker:create", "worker:edit", "worker:delete", "worker", "workers", "hr:workers", "/hr/workers", "/hr"],
+        "/dashboard/analysis": ["analysis:view", "dashboard:analysis", "dashboard:view"],
+        "/dashboard/workplace": ["workplace:view", "dashboard:workplace"],
+        "/product/list": ["product:view", "product:create", "product:edit", "product:delete", "product", "list", "/product/list"],
+        "/sales/pos": ["sales:pos:view", "sales:pos:checkout", "sales:pos", "pos:sell", "pos:view", "pos:discount", "pos:nasiya", "pos:history", "pos", "/sales/pos"],
+        "/sales/debtors": ["debtors:view", "debtors:manage", "debtors:repay", "debtors:history", "debtors:export", "debtors", "/sales/debtors"],
+        "/hr/workers": ["worker:view", "worker:create", "worker:edit", "worker:delete", "worker", "workers", "hr:workers", "/hr/workers"],
         "/hr/timesheets": ["timesheet:view", "timesheets", "/hr/timesheets"],
         "/hr/outputs": ["output:view", "outputs", "/hr/outputs"],
         "/hr/adjustments": ["adjustment:view", "adjustments", "/hr/adjustments"],
         "/hr/salary": ["salary:view", "salary", "/hr/salary"],
-        "/authorization/department": ["department:manage", "department", "/authorization/department", "/authorization"],
-        "/authorization/role": ["role:manage", "role", "/authorization/role", "/authorization"]
+        "/authorization/department": ["department:manage", "department", "/authorization/department"],
+        "/authorization/role": ["role:manage", "role", "/authorization/role"]
     }
 
     allowed_routes = []
     for parent in COMPANY_USER_ROUTES:
         parent_path = parent.get("path", "")
         children = parent.get("children", [])
-
-        if parent_path.lower() in user_perms_lower:
-            allowed_routes.append(copy.deepcopy(parent))
-            continue
 
         allowed_children = []
         for child in children:
